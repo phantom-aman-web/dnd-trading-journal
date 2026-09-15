@@ -35,7 +35,27 @@ function getSupabase() {
 }
 
 export async function ensureStorage(): Promise<void> {
-  // Supabase bucket should be created by user.
+  const supabase = getSupabase();
+  const { data: buckets, error: listError } = await supabase.storage.listBuckets();
+  if (listError) {
+    console.error("Failed to list buckets:", listError);
+    return;
+  }
+  
+  const mediaBucketExists = buckets.some(b => b.name === BUCKET_NAME);
+  
+  if (!mediaBucketExists) {
+    console.log(`Bucket '${BUCKET_NAME}' not found. Creating it programmatically...`);
+    const { error: createError } = await supabase.storage.createBucket(BUCKET_NAME, {
+      public: false,
+      allowedMimeTypes: [...ALLOWED_IMAGE_MIMES, ...ALLOWED_VIDEO_MIMES]
+    });
+    if (createError) {
+      console.error("Failed to create bucket programmatically:", createError);
+    } else {
+      console.log(`Bucket '${BUCKET_NAME}' created successfully.`);
+    }
+  }
 }
 
 export async function saveUpload(
