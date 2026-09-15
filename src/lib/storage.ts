@@ -43,13 +43,14 @@ export async function saveUpload(
   filename: string,
   data: Buffer,
   subdir = "media",
+  contentType = "application/octet-stream"
 ): Promise<string> {
   const safeName = filename.replace(/[^a-zA-Z0-9._-]/g, "_");
   const id = crypto.randomUUID();
   const stored = `${userId}/${subdir}/${id}-${safeName}`;
   
   const { error } = await getSupabase().storage.from(BUCKET_NAME).upload(stored, data, {
-    contentType: 'auto',
+    contentType,
     upsert: false
   });
   

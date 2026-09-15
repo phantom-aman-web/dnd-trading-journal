@@ -64,7 +64,7 @@ export async function POST(req: NextRequest) {
     return bad(`File too large. Max ${isImage ? "20 MB" : "500 MB"}.`);
   }
   const buffer = Buffer.from(await file.arrayBuffer());
-  const storedPath = await saveUpload(user.id, file.name, buffer, isImage ? "images" : "videos");
+  const storedPath = await saveUpload(user.id, file.name, buffer, isImage ? "images" : "videos", file.type);
 
   const media = await db.tradeMedia.create({
     data: {
