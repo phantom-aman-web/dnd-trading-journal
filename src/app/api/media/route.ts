@@ -23,7 +23,7 @@ export async function GET(req: NextRequest) {
   // N+1 follow-up GET /api/media/[id] requests just to render thumbnails.
   // The signed token is short-lived (15 min) but matches the typical view
   // session length; re-fetching the list refreshes them as needed.
-  const withUrls = items.map((m) => ({ ...m, url: buildSignedUrl(m.storedPath) }));
+  const withUrls = await Promise.all(items.map(async (m) => ({ ...m, url: await buildSignedUrl(m.storedPath) })));
   return ok({ items: withUrls });
 }
 

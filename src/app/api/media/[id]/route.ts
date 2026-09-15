@@ -16,7 +16,7 @@ export async function GET(_req: NextRequest, ctx: { params: Promise<{ id: string
   // Note: the returned signed URL can be opened with `&download=1` to force
   // a Content-Disposition: attachment response (handled by /api/media/file).
   // Clients that want a download link should append `&download=1` to `url`.
-  return ok({ ...media, url: buildSignedUrl(media.storedPath) });
+  return ok({ ...media, url: await buildSignedUrl(media.storedPath) });
 }
 
 export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: string }> }) {

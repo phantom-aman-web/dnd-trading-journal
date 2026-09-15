@@ -49,7 +49,7 @@ export async function GET(_req: NextRequest, ctx: { params: Promise<{ id: string
   // evidence thumbnails (Fix 3 — media N+1 query).
   const tradeWithUrls = {
     ...trade,
-    media: trade.media.map((m) => ({ ...m, url: buildSignedUrl(m.storedPath) })),
+    media: await Promise.all(trade.media.map(async (m) => ({ ...m, url: await buildSignedUrl(m.storedPath) }))),
   };
   return ok(tradeWithUrls);
 }
