@@ -1,0 +1,818 @@
+     1→     1→"use client";
+     2→     2→
+     3→     3→/**
+     4→     4→ * DnD — Dashboard view (rebuild)
+     5→     5→ *
+     6→     6→ * Reference design: ae-tradingjournal.vercel.app aesthetic — light
+     7→     7→ * `bg-background` background, white `rounded-xl border border-border`
+     8→     8→ * cards with `shadow-sm`, navy accent (`#1e2330` ≈ theme `--primary`),
+     9→     9→ * slate-900 headings, slate-500 muted text, slate-600 body, profit
+    10→    10→ * green / loss red, `tabular-nums` for numbers.
+    11→    11→ *
+    12→    12→ * The dashboard surfaces two focused sections:
+    13→    13→ *   1. PROCESS & ADHERENCE BREAKDOWN — setup adherence metrics
+    14→    14→ *      (total trades, adherence rate, rule violations, top violated rules)
+    15→    15→ *   2. RECENT TRADES ACTIVITY — a compact list of recent trades
+    16→    16→ *      (date, symbol, direction, setup, P&L, adherence)
+    17→    17→ *
+    18→    18→ * The GettingStartedCard was intentionally removed in a prior task
+    19→    19→ * (ref-site-alignment) and is NOT rendered here.
+    20→    20→ */
+    21→    21→
+    22→    22→import { useQuery } from "@tanstack/react-query";
+    23→    23→import { useState, useMemo } from "react";
+    24→    24→import { Button } from "@/components/ui/button";
+    25→    25→import { Card } from "@/components/ui/card";
+    26→    26→import { Badge } from "@/components/ui/badge";
+    27→    27→import { Skeleton } from "@/components/ui/skeleton";
+    28→    28→import { MetricCard } from "@/components/common/metric-card";
+    29→    29→import { EquityCurveChart } from "@/components/charts/equity-curve-chart";
+    30→    30→import { DailyPnlChart } from "@/components/charts/daily-pnl-chart";
+    31→    31→import { RDistributionChart } from "@/components/charts/r-distribution-chart";
+    32→    32→import { useNav } from "@/lib/nav-store";
+    33→    33→import { formatSignedCents, formatR, formatPct } from "@/lib/money";
+    34→    34→import { cn } from "@/lib/utils";
+    35→    35→import {
+    36→    36→  Activity,
+    37→    37→  AlertTriangle,
+    38→    38→  ArrowUpRight,
+    39→    39→  CheckCircle2,
+    40→    40→  ClipboardList,
+    41→    41→  Plus,
+    42→    42→  ShieldCheck,
+    43→    43→  Target,
+    44→    44→  TrendingUp,
+    45→    45→} from "lucide-react";
+    46→    46→
+    47→    47→// ---------------------------------------------------------------------------
+    48→    48→// Presets
+    49→    49→// ---------------------------------------------------------------------------
+    50→    50→
+    51→    51→const PRESETS = [
+    52→    52→  { key: "today", label: "Today" },
+    53→    53→  { key: "thisWeek", label: "This Week" },
+    54→    54→  { key: "thisMonth", label: "This Month" },
+    55→    55→  { key: "thisQuarter", label: "This Quarter" },
+    56→    56→  { key: "thisYear", label: "This Year" },
+    57→    57→  { key: "all", label: "All Time" },
+    58→    58→] as const;
+    59→    59→
+    60→    60→// ---------------------------------------------------------------------------
+    61→    61→// API helpers
+    62→    62→// ---------------------------------------------------------------------------
+    63→    63→
+    64→    64→interface DashboardResponse {
+    65→    65→  aggregate: {
+    66→    66→    totalTrades: number;
+    67→    67→    closedTrades: number;
+    68→    68→    wins: number;
+    69→    69→    losses: number;
+    70→    70→    breakevens: number;
+    71→    71→    totalPnlCents: number;
+    72→    72→    avgR?: string | null;
+    73→    73→    winRate?: string | null;
+    74→    74→    profitFactor?: string | null;
+    75→    75→    expectancyR?: string | null;
+    76→    76→    avgWinCents?: number | null;
+    77→    77→    avgLossCents?: number | null;
+    78→    78→  };
+    79→    79→  byBehavior: Array<{
+    80→    80→    key: string;
+    81→    81→    label: string;
+    82→    82→    trades: number;
+    83→    83→    avgR: string | null;
+    84→    84→    pnlCents: number;
+    85→    85→    winRate: number | null;
+    86→    86→  }>;
+    87→    87→  equityCurve?: Array<{ date: string; label: string; cumulativeCents: number; pnlCents: number }>;
+    88→    88→  dailyPnl?: Array<{ date: string; label: string; pnlCents: number; tradeCount: number }>;
+    89→    89→  rDistribution?: Array<{ bucket: string; count: number }>;
+    90→    90→  startingBalanceCents?: number;
+    91→    91→  range: { from: string; to: string } | null;
+    92→    92→  totalTrades: number;
+    93→    93→}
+    94→    94→
+    95→    95→interface TradeRow {
+    96→    96→  id: string;
+    97→    97→  instrumentSymbol: string;
+    98→    98→  direction: "long" | "short";
+    99→    99→  status: string;
+   100→   100→  setupGrade: string | null;
+   101→   101→  netPnlCents: number;
+   102→   102→  actualR: string | null;
+   103→   103→  entryTime: string | null;
+   104→   104→  behaviorFlagsJson: string | null;
+   105→   105→  strategy: { id: string; name: string } | null;
+   106→   106→}
+   107→   107→
+   108→   108→interface TradesResponse {
+   109→   109→  items: TradeRow[];
+   110→   110→}
+   111→   111→
+   112→   112→async function fetchDashboard(preset: string, accountId?: string): Promise<DashboardResponse> {
+   113→   113→  const params = new URLSearchParams({ preset });
+   114→   114→  if (accountId) params.set("accountId", accountId);
+   115→   115→  const res = await fetch(`/api/dashboard?${params.toString()}`, { cache: "no-store" });
+   116→   116→  if (!res.ok) throw new Error("Failed to load dashboard");
+   117→   117→  return res.json();
+   118→   118→}
+   119→   119→
+   120→   120→async function fetchRecentTrades(accountId?: string): Promise<TradesResponse> {
+   121→   121→  const params = new URLSearchParams({ limit: "10", sortBy: "entryTime", sortDir: "desc" });
+   122→   122→  if (accountId) params.set("accountId", accountId);
+   123→   123→  const res = await fetch(`/api/trades?${params.toString()}`, { cache: "no-store" });
+   124→   124→  if (!res.ok) throw new Error("Failed to load trades");
+   125→   125→  return res.json();
+   126→   126→}
+   127→   127→
+   128→   128→// ---------------------------------------------------------------------------
+   129→   129→// Pure helpers
+   130→   130→// ---------------------------------------------------------------------------
+   131→   131→
+   132→   132→function safeParseArr(json: string | null | undefined): string[] {
+   133→   133→  if (!json) return [];
+   134→   134→  try {
+   135→   135→    const v = JSON.parse(json);
+   136→   136→    return Array.isArray(v) ? v : [];
+   137→   137→  } catch {
+   138→   138→    return [];
+   139→   139→  }
+   140→   140→}
+   141→   141→
+   142→   142→/** Per-trade adherence: 100% when no behavior flags are recorded, else 0%. */
+   143→   143→function tradeAdherencePct(trade: TradeRow): number {
+   144→   144→  return safeParseArr(trade.behaviorFlagsJson).length === 0 ? 100 : 0;
+   145→   145→}
+   146→   146→
+   147→   147→function formatDate(iso: string | null): string {
+   148→   148→  if (!iso) return "—";
+   149→   149→  const d = new Date(iso);
+   150→   150→  if (Number.isNaN(d.getTime())) return "—";
+   151→   151→  return d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "2-digit" });
+   152→   152→}
+   153→   153→
+   154→   154→// ---------------------------------------------------------------------------
+   155→   155→// Component
+   156→   156→// ---------------------------------------------------------------------------
+   157→   157→
+   158→   158→export function DashboardView() {
+   159→   159→  const [preset, setPreset] = useState<string>("thisMonth");
+   160→   160→  const { navigate, params } = useNav();
+   161→   161→  const accountId = params.accountId || undefined;
+   162→   162→
+   163→   163→  const { data: dash, isLoading: dashLoading } = useQuery({
+   164→   164→    queryKey: ["dashboard", preset, accountId],
+   165→   165→    queryFn: () => fetchDashboard(preset, accountId),
+   166→   166→  });
+   167→   167→
+   168→   168→  const { data: tradesData, isLoading: tradesLoading } = useQuery({
+   169→   169→    queryKey: ["dashboard-recent-trades", accountId],
+   170→   170→    queryFn: () => fetchRecentTrades(accountId),
+   171→   171→  });
+   172→   172→
+   173→   173→  const recentTrades: TradeRow[] = Array.isArray(tradesData) ? tradesData : (tradesData?.items ?? []);
+   174→   174→
+   175→   175→  // Adherence breakdown derived from BOTH the dashboard's period-correct
+   176→   176→  // aggregate + byBehavior (rule violations + top violated rules) AND the
+   177→   177→  // recent-trades snapshot (recent adherence rate).
+   178→   178→  const breakdown = useMemo(() => {
+   179→   179→    const totalTrades = dash?.aggregate.totalTrades ?? 0;
+   180→   180→    const byBehavior = dash?.byBehavior ?? [];
+   181→   181→
+   182→   182→    // Total violation instances (a trade with 2 flags counts as 2).
+   183→   183→    const totalViolations = byBehavior.reduce((s, b) => s + (b.trades ?? 0), 0);
+   184→   184→
+   185→   185→    // Top 3 violated rules sorted by trade count, then P&L impact.
+   186→   186→    const topViolated = [...byBehavior]
+   187→   187→      .sort((a, b) => b.trades - a.trades || Math.abs(b.pnlCents) - Math.abs(a.pnlCents))
+   188→   188→      .slice(0, 3);
+   189→   189→
+   190→   190→    // Recent-trades adherence snapshot — fraction of the recent 10 trades
+   191→   191→    // that have zero behavior flags. Reported as a percentage.
+   192→   192→    const recentCount = recentTrades.length;
+   193→   193→    const recentCompliant = recentTrades.filter(
+   194→   194→      (t) => safeParseArr(t.behaviorFlagsJson).length === 0,
+   195→   195→    ).length;
+   196→   196→    const recentAdherenceRate =
+   197→   197→      recentCount > 0 ? Math.round((recentCompliant / recentCount) * 100) : null;
+   198→   198→
+   199→   199→    return { totalTrades, totalViolations, topViolated, recentAdherenceRate, recentCount };
+   200→   200→  }, [dash, recentTrades]);
+   201→   201→
+   202→   202→  const isLoading = dashLoading || tradesLoading;
+   203→   203→  const hasNoData = !isLoading && breakdown.totalTrades === 0 && recentTrades.length === 0;
+   204→   204→
+   205→   205→  if (isLoading) {
+   206→   206→    return <DashboardSkeleton />;
+   207→   207→  }
+   208→   208→
+   209→   209→  if (hasNoData) {
+   210→   210→    return (
+   211→   211→      <div className="p-4 md:p-6 space-y-6">
+   212→   212→        <DashboardHeader preset={preset} setPreset={setPreset} />
+   213→   213→        <EmptyDashboard onLogTrade={() => navigate("tradeNew")} />
+   214→   214→      </div>
+   215→   215→    );
+   216→   216→  }
+   217→   217→
+   218→   218→  return (
+   219→   219→    <div className="p-4 md:p-6 space-y-6">
+   220→   220→      <DashboardHeader preset={preset} setPreset={setPreset} />
+   221→   221→
+   222→   222→      {/* Section 1 — Process & Adherence Breakdown */}
+   223→   223→      <section className="space-y-3">
+   224→   224→        <SectionTitle
+   225→   225→          icon={ShieldCheck}
+   226→   226→          title="PROCESS & ADHERENCE BREAKDOWN"
+   227→   227→          subtitle="How well are you following your trading checklist?"
+   228→   228→        />
+   229→   229→        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+   230→   230→          <MetricTile
+   231→   231→            label="Total Trades"
+   232→   232→            value={String(breakdown.totalTrades)}
+   233→   233→            sub={dash?.aggregate ? `${dash.aggregate.wins}W · ${dash.aggregate.losses}L` : undefined}
+   234→   234→            icon={ClipboardList}
+   235→   235→          />
+   236→   236→          <MetricTile
+   237→   237→            label="Adherence Rate"
+   238→   238→            value={
+   239→   239→              breakdown.recentAdherenceRate != null
+   240→   240→                ? `${breakdown.recentAdherenceRate}%`
+   241→   241→                : "—"
+   242→   242→            }
+   243→   243→            sub={
+   244→   244→              breakdown.recentCount > 0
+   245→   245→                ? `last ${breakdown.recentCount} trades`
+   246→   246→                : undefined
+   247→   247→            }
+   248→   248→            icon={CheckCircle2}
+   249→   249→            tone={
+   250→   250→              breakdown.recentAdherenceRate == null
+   251→   251→                ? "neutral"
+   252→   252→                : breakdown.recentAdherenceRate >= 80
+   253→   253→                  ? "profit"
+   254→   254→                  : breakdown.recentAdherenceRate < 50
+   255→   255→                    ? "loss"
+   256→   256→                    : "neutral"
+   257→   257→            }
+   258→   258→          />
+   259→   259→          <MetricTile
+   260→   260→            label="Rule Violations"
+   261→   261→            value={String(breakdown.totalViolations)}
+   262→   262→            sub={
+   263→   263→              breakdown.totalViolations > 0
+   264→   264→                ? `${dash?.byBehavior?.length ?? 0} distinct rule${(dash?.byBehavior?.length ?? 0) === 1 ? "" : "s"}`
+   265→   265→                : "no violations"
+   266→   266→            }
+   267→   267→            icon={AlertTriangle}
+   268→   268→            tone={breakdown.totalViolations > 0 ? "loss" : "profit"}
+   269→   269→          />
+   270→   270→          <MetricTile
+   271→   271→            label="Net P&L"
+   272→   272→            value={formatSignedCents(dash?.aggregate.totalPnlCents ?? 0).text}
+   273→   273→            sub={dash?.aggregate ? `${dash.aggregate.closedTrades} closed` : undefined}
+   274→   274→            icon={Activity}
+   275→   275→            tone={
+   276→   276→              (dash?.aggregate.totalPnlCents ?? 0) > 0
+   277→   277→                ? "profit"
+   278→   278→                : (dash?.aggregate.totalPnlCents ?? 0) < 0
+   279→   279→                  ? "loss"
+   280→   280→                  : "neutral"
+   281→   281→            }
+   282→   282→          />
+   283→   283→        </div>
+   284→   284→
+   285→   285→        {/* Top violated rules */}
+   286→   286→        <Card className="bg-card border border-border rounded-xl shadow-sm p-4">
+   287→   287→          <div className="flex items-center justify-between mb-3">
+   288→   288→            <h3 className="text-sm font-semibold text-foreground">Top Violated Rules</h3>
+   289→   289→            <Badge
+   290→   290→              variant="outline"
+   291→   291→              className="bg-muted/50 text-muted-foreground border-border text-[10px] uppercase tracking-wide"
+   292→   292→            >
+   293→   293→              {breakdown.topViolated.length} rule{breakdown.topViolated.length === 1 ? "" : "s"}
+   294→   294→            </Badge>
+   295→   295→          </div>
+   296→   296→          {breakdown.topViolated.length === 0 ? (
+   297→   297→            <div className="flex items-center gap-2 py-6 text-sm text-muted-foreground">
+   298→   298→              <CheckCircle2 className="h-4 w-4 text-profit" />
+   299→   299→              No rule violations in this period — clean execution.
+   300→   300→            </div>
+   301→   301→          ) : (
+   302→   302→            <ul className="divide-y divide-border">
+   303→   303→              {breakdown.topViolated.map((rule) => {
+   304→   304→                const pnl = formatSignedCents(rule.pnlCents);
+   305→   305→                return (
+   306→   306→                  <li
+   307→   307→                    key={rule.key}
+   308→   308→                    className="flex items-center gap-3 py-2.5 first:pt-0 last:pb-0"
+   309→   309→                  >
+   310→   310→                    <div className="flex-1 min-w-0">
+   311→   311→                      <div className="text-sm font-medium text-foreground truncate">
+   312→   312→                        {rule.label}
+   313→   313→                      </div>
+   314→   314→                      <div className="text-xs text-muted-foreground mt-0.5 tnum">
+   315→   315→                        {rule.trades} trade{rule.trades === 1 ? "" : "s"} affected
+   316→   316→                        {rule.winRate != null
+   317→   317→                          ? ` · ${Math.round(rule.winRate * 100)}% win rate`
+   318→   318→                          : ""}
+   319→   319→                      </div>
+   320→   320→                    </div>
+   321→   321→                    <div
+   322→   322→                      className={cn(
+   323→   323→                        "text-sm font-semibold tnum shrink-0",
+   324→   324→                        pnl.sign > 0 ? "text-profit" : pnl.sign < 0 ? "text-loss" : "text-muted-foreground",
+   325→   325→                      )}
+   326→   326→                    >
+   327→   327→                      {pnl.text}
+   328→   328→                    </div>
+   329→   329→                  </li>
+   330→   330→                );
+   331→   331→              })}
+   332→   332→            </ul>
+   333→   333→          )}
+   334→   334→        </Card>
+   335→   335→      </section>
+   336→   336→
+   337→   337→      {/* Section 2 — Performance Overview */}
+   338→   338→      {dash?.aggregate && (
+   339→   339→        <PerformanceOverview
+   340→   340→          aggregate={dash.aggregate}
+   341→   341→          equityCurve={dash.equityCurve ?? []}
+   342→   342→          dailyPnl={dash.dailyPnl ?? []}
+   343→   343→          rDistribution={dash.rDistribution ?? []}
+   344→   344→          startingBalanceCents={dash.startingBalanceCents ?? 0}
+   345→   345→        />
+   346→   346→      )}
+   347→   347→
+   348→   348→      {/* Section 3 — Recent Trades Activity */}
+   349→   349→      <section className="space-y-3">
+   350→   350→        <div className="flex items-end justify-between gap-3">
+   351→   351→          <SectionTitle
+   352→   352→            icon={Activity}
+   353→   353→            title="RECENT TRADES ACTIVITY"
+   354→   354→            subtitle="Your latest 10 logged trades."
+   355→   355→            as="div"
+   356→   356→          />
+   357→   357→          <Button
+   358→   358→            variant="outline"
+   359→   359→            size="sm"
+   360→   360→            className="bg-card border-border text-foreground hover:bg-muted/50 h-8"
+   361→   361→            onClick={() => navigate("tradesLog")}
+   362→   362→          >
+   363→   363→            View all
+   364→   364→            <ArrowUpRight className="h-3.5 w-3.5" />
+   365→   365→          </Button>
+   366→   366→        </div>
+   367→   367→
+   368→   368→        <Card className="bg-card border border-border rounded-xl shadow-sm overflow-hidden p-0">
+   369→   369→          {recentTrades.length === 0 ? (
+   370→   370→            <div className="p-8 text-center">
+   371→   371→              <p className="text-sm text-muted-foreground mb-3">No trades logged yet.</p>
+   372→   372→              <Button
+   373→   373→                size="sm"
+   374→   374→                className="bg-primary hover:bg-primary/90 text-primary-foreground"
+   375→   375→                onClick={() => navigate("tradeNew")}
+   376→   376→              >
+   377→   377→                <Plus className="h-3.5 w-3.5" />
+   378→   378→                Log Trade
+   379→   379→              </Button>
+   380→   380→            </div>
+   381→   381→          ) : (
+   382→   382→            <>
+   383→   383→              {/* Desktop / tablet table */}
+   384→   384→              <div className="hidden sm:block">
+   385→   385→                <table className="w-full text-sm">
+   386→   386→                  <thead>
+   387→   387→                    <tr className="bg-muted/50 border-b border-border">
+   388→   388→                      <Th className="text-left">Date</Th>
+   389→   389→                      <Th className="text-left">Symbol</Th>
+   390→   390→                      <Th className="text-left">Dir</Th>
+   391→   391→                      <Th className="text-left">Setup</Th>
+   392→   392→                      <Th className="text-right">P&amp;L</Th>
+   393→   393→                      <Th className="text-right">Adherence</Th>
+   394→   394→                    </tr>
+   395→   395→                  </thead>
+   396→   396→                  <tbody>
+   397→   397→                    {recentTrades.map((t) => (
+   398→   398→                      <TradeRowDesktop key={t.id} trade={t} onOpen={() => navigate("tradeDetail", { id: t.id })} />
+   399→   399→                    ))}
+   400→   400→                  </tbody>
+   401→   401→                </table>
+   402→   402→              </div>
+   403→   403→
+   404→   404→              {/* Mobile card list */}
+   405→   405→              <ul className="sm:hidden divide-y divide-border">
+   406→   406→                {recentTrades.map((t) => (
+   407→   407→                  <TradeRowMobile key={t.id} trade={t} onOpen={() => navigate("tradeDetail", { id: t.id })} />
+   408→   408→                ))}
+   409→   409→              </ul>
+   410→   410→            </>
+   411→   411→          )}
+   412→   412→        </Card>
+   413→   413→      </section>
+   414→   414→    </div>
+   415→   415→  );
+   416→   416→}
+   417→   417→
+   418→   418→// ---------------------------------------------------------------------------
+   419→   419→// Sub-components
+   420→   420→// ---------------------------------------------------------------------------
+   421→   421→
+   422→   422→function DashboardHeader({
+   423→   423→  preset,
+   424→   424→  setPreset,
+   425→   425→}: {
+   426→   426→  preset: string;
+   427→   427→  setPreset: (p: string) => void;
+   428→   428→}) {
+   429→   429→  return (
+   430→   430→    <div className="flex flex-col sm:flex-row sm:items-center gap-3">
+   431→   431→      <div>
+   432→   432→        <h1 className="text-2xl font-semibold tracking-tight text-foreground">Dashboard</h1>
+   433→   433→        <p className="text-sm text-muted-foreground">Track your adherence and recent activity.</p>
+   434→   434→      </div>
+   435→   435→      <div className="sm:ml-auto flex flex-wrap gap-1.5">
+   436→   436→        {PRESETS.map((p) => {
+   437→   437→          const active = preset === p.key;
+   438→   438→          return (
+   439→   439→            <button
+   440→   440→              key={p.key}
+   441→   441→              type="button"
+   442→   442→              onClick={() => setPreset(p.key)}
+   443→   443→              className={cn(
+   444→   444→                "h-8 px-3 rounded-md text-xs font-medium border transition-colors",
+   445→   445→                active
+   446→   446→                  ? "bg-slate-900 text-primary-foreground border-primary"
+   447→   447→                  : "bg-card text-muted-foreground border-border hover:bg-muted/50 hover:text-foreground",
+   448→   448→              )}
+   449→   449→            >
+   450→   450→              {p.label}
+   451→   451→            </button>
+   452→   452→          );
+   453→   453→        })}
+   454→   454→      </div>
+   455→   455→    </div>
+   456→   456→  );
+   457→   457→}
+   458→   458→
+   459→   459→function SectionTitle({
+   460→   460→  icon: Icon,
+   461→   461→  title,
+   462→   462→  subtitle,
+   463→   463→  as: Tag = "div",
+   464→   464→}: {
+   465→   465→  icon: React.ComponentType<{ className?: string }>;
+   466→   466→  title: string;
+   467→   467→  subtitle?: string;
+   468→   468→  as?: "h2" | "div";
+   469→   469→}) {
+   470→   470→  return (
+   471→   471→    <Tag className="flex items-center gap-2">
+   472→   472→      <Icon className="h-4 w-4 text-muted-foreground/70" />
+   473→   473→      <div>
+   474→   474→        <div className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+   475→   475→          {title}
+   476→   476→        </div>
+   477→   477→        {subtitle && <div className="text-xs text-muted-foreground/70">{subtitle}</div>}
+   478→   478→      </div>
+   479→   479→    </Tag>
+   480→   480→  );
+   481→   481→}
+   482→   482→
+   483→   483→function MetricTile({
+   484→   484→  label,
+   485→   485→  value,
+   486→   486→  sub,
+   487→   487→  icon: Icon,
+   488→   488→  tone = "neutral",
+   489→   489→}: {
+   490→   490→  label: string;
+   491→   491→  value: string;
+   492→   492→  sub?: string;
+   493→   493→  icon?: React.ComponentType<{ className?: string }>;
+   494→   494→  tone?: "profit" | "loss" | "neutral";
+   495→   495→}) {
+   496→   496→  return (
+   497→   497→    <Card className="bg-card border border-border rounded-xl shadow-sm p-4">
+   498→   498→      <div className="flex items-center justify-between">
+   499→   499→        <span className="text-[10px] uppercase tracking-wide text-muted-foreground font-medium">
+   500→   500→          {label}
+   501→   501→        </span>
+   502→   502→        {Icon && (
+   503→   503→          <Icon
+   504→   504→            className={cn(
+   505→   505→              "h-3.5 w-3.5",
+   506→   506→              tone === "profit" ? "text-profit" : tone === "loss" ? "text-loss" : "text-muted-foreground/70",
+   507→   507→            )}
+   508→   508→          />
+   509→   509→        )}
+   510→   510→      </div>
+   511→   511→      <div
+   512→   512→        className={cn(
+   513→   513→          "mt-1.5 text-xl font-semibold tnum",
+   514→   514→          tone === "profit" ? "text-profit" : tone === "loss" ? "text-loss" : "text-foreground",
+   515→   515→        )}
+   516→   516→      >
+   517→   517→        {value}
+   518→   518→      </div>
+   519→   519→      {sub && <div className="text-[11px] text-muted-foreground tnum mt-0.5">{sub}</div>}
+   520→   520→    </Card>
+   521→   521→  );
+   522→   522→}
+   523→   523→
+   524→   524→function Th({ children, className }: { children: React.ReactNode; className?: string }) {
+   525→   525→  return (
+   526→   526→    <th
+   527→   527→      className={cn(
+   528→   528→        "px-4 py-2.5 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground",
+   529→   529→        className,
+   530→   530→      )}
+   531→   531→    >
+   532→   532→      {children}
+   533→   533→    </th>
+   534→   534→  );
+   535→   535→}
+   536→   536→
+   537→   537→function TradeRowDesktop({ trade, onOpen }: { trade: TradeRow; onOpen: () => void }) {
+   538→   538→  const pnl = formatSignedCents(trade.netPnlCents);
+   539→   539→  const adherence = tradeAdherencePct(trade);
+   540→   540→  const setupName = trade.strategy?.name ?? "—";
+   541→   541→  const isLong = trade.direction === "long";
+   542→   542→
+   543→   543→  return (
+   544→   544→    <tr
+   545→   545→      onClick={onOpen}
+   546→   546→      className="border-b border-border last:border-b-0 hover:bg-muted/50 transition-colors cursor-pointer"
+   547→   547→    >
+   548→   548→      <td className="px-4 py-2.5 text-muted-foreground tnum whitespace-nowrap">
+   549→   549→        {formatDate(trade.entryTime)}
+   550→   550→      </td>
+   551→   551→      <td className="px-4 py-2.5 font-medium text-foreground whitespace-nowrap">
+   552→   552→        {trade.instrumentSymbol}
+   553→   553→      </td>
+   554→   554→      <td className="px-4 py-2.5">
+   555→   555→        <Badge
+   556→   556→          variant="outline"
+   557→   557→          className={cn(
+   558→   558→            "text-[10px] px-1.5 py-0 font-semibold uppercase tracking-wide",
+   559→   559→            isLong
+   560→   560→              ? "bg-emerald-50 text-profit border-emerald-200"
+   561→   561→              : "bg-red-50 text-loss border-red-200",
+   562→   562→          )}
+   563→   563→        >
+   564→   564→          {isLong ? "Long" : "Short"}
+   565→   565→        </Badge>
+   566→   566→      </td>
+   567→   567→      <td className="px-4 py-2.5 text-muted-foreground max-w-[180px] truncate">
+   568→   568→        {trade.setupGrade && (
+   569→   569→          <Badge
+   570→   570→            variant="outline"
+   571→   571→            className="mr-2 text-[10px] px-1.5 py-0 bg-muted/50 text-muted-foreground border-border"
+   572→   572→          >
+   573→   573→            {trade.setupGrade}
+   574→   574→          </Badge>
+   575→   575→        )}
+   576→   576→        {setupName}
+   577→   577→      </td>
+   578→   578→      <td
+   579→   579→        className={cn(
+   580→   580→          "px-4 py-2.5 text-right font-semibold tnum whitespace-nowrap",
+   581→   581→          pnl.sign > 0 ? "text-profit" : pnl.sign < 0 ? "text-loss" : "text-muted-foreground",
+   582→   582→        )}
+   583→   583→      >
+   584→   584→        {pnl.text}
+   585→   585→      </td>
+   586→   586→      <td className="px-4 py-2.5 text-right tnum">
+   587→   587→        <span
+   588→   588→          className={cn(
+   589→   589→            "text-xs font-semibold",
+   590→   590→            adherence >= 100 ? "text-profit" : "text-loss",
+   591→   591→          )}
+   592→   592→        >
+   593→   593→          {adherence}%
+   594→   594→        </span>
+   595→   595→      </td>
+   596→   596→    </tr>
+   597→   597→  );
+   598→   598→}
+   599→   599→
+   600→   600→function TradeRowMobile({ trade, onOpen }: { trade: TradeRow; onOpen: () => void }) {
+   601→   601→  const pnl = formatSignedCents(trade.netPnlCents);
+   602→   602→  const adherence = tradeAdherencePct(trade);
+   603→   603→  const isLong = trade.direction === "long";
+   604→   604→  const setupName = trade.strategy?.name ?? "—";
+   605→   605→
+   606→   606→  return (
+   607→   607→    <li onClick={onOpen} className="p-3 hover:bg-muted/50 active:bg-background cursor-pointer">
+   608→   608→      <div className="flex items-center justify-between gap-3">
+   609→   609→        <div className="flex items-center gap-2 min-w-0">
+   610→   610→          <Badge
+   611→   611→            variant="outline"
+   612→   612→            className={cn(
+   613→   613→              "text-[10px] px-1.5 py-0 font-semibold uppercase tracking-wide shrink-0",
+   614→   614→              isLong
+   615→   615→                ? "bg-emerald-50 text-profit border-emerald-200"
+   616→   616→                : "bg-red-50 text-loss border-red-200",
+   617→   617→            )}
+   618→   618→          >
+   619→   619→            {isLong ? "L" : "S"}
+   620→   620→          </Badge>
+   621→   621→          <div className="min-w-0">
+   622→   622→            <div className="font-medium text-foreground text-sm truncate">{trade.instrumentSymbol}</div>
+   623→   623→            <div className="text-[11px] text-muted-foreground truncate">
+   624→   624→              {formatDate(trade.entryTime)} · {setupName}
+   625→   625→            </div>
+   626→   626→          </div>
+   627→   627→        </div>
+   628→   628→        <div className="text-right shrink-0">
+   629→   629→          <div
+   630→   630→            className={cn(
+   631→   631→              "text-sm font-semibold tnum",
+   632→   632→              pnl.sign > 0 ? "text-profit" : pnl.sign < 0 ? "text-loss" : "text-muted-foreground",
+   633→   633→            )}
+   634→   634→          >
+   635→   635→            {pnl.text}
+   636→   636→          </div>
+   637→   637→          <div
+   638→   638→            className={cn(
+   639→   639→              "text-[10px] font-semibold tnum",
+   640→   640→              adherence >= 100 ? "text-profit" : "text-loss",
+   641→   641→            )}
+   642→   642→          >
+   643→   643→            {adherence}% adherent
+   644→   644→          </div>
+   645→   645→        </div>
+   646→   646→      </div>
+   647→   647→    </li>
+   648→   648→  );
+   649→   649→}
+   650→   650→
+   651→   651→function EmptyDashboard({ onLogTrade }: { onLogTrade: () => void }) {
+   652→   652→  return (
+   653→   653→    <Card className="bg-card border border-border rounded-xl shadow-sm">
+   654→   654→      <div className="p-8 md:p-12 text-center">
+   655→   655→        <div className="mx-auto h-12 w-12 rounded-full bg-background flex items-center justify-center mb-4">
+   656→   656→          <ClipboardList className="h-6 w-6 text-muted-foreground/70" />
+   657→   657→        </div>
+   658→   658→        <h3 className="text-lg font-semibold text-foreground">Your trading dashboard starts here.</h3>
+   659→   659→        <p className="mt-1.5 text-sm text-muted-foreground max-w-md mx-auto">
+   660→   660→          Log your first trade to begin building your journal. Once you have data, your adherence
+   661→   661→          metrics and recent activity will appear here.
+   662→   662→        </p>
+   663→   663→        <Button
+   664→   664→          className="mt-5 bg-primary hover:bg-primary/90 text-primary-foreground"
+   665→   665→          onClick={onLogTrade}
+   666→   666→        >
+   667→   667→          <Plus className="h-4 w-4" />
+   668→   668→          Log Trade
+   669→   669→        </Button>
+   670→   670→      </div>
+   671→   671→    </Card>
+   672→   672→  );
+   673→   673→}
+   674→   674→
+   675→   675→/**
+   676→   676→ * PERFORMANCE OVERVIEW — 8 MetricCards + 3 charts (Equity Curve, Daily P&L,
+   677→   677→ * R Distribution). Renders only when aggregate data exists and the relevant
+   678→   678→ * chart data arrays have length > 0; otherwise the whole section is skipped
+   679→   679→ * to avoid empty chart placeholders.
+   680→   680→ */
+   681→   681→function PerformanceOverview({
+   682→   682→  aggregate,
+   683→   683→  equityCurve,
+   684→   684→  dailyPnl,
+   685→   685→  rDistribution,
+   686→   686→  startingBalanceCents,
+   687→   687→}: {
+   688→   688→  aggregate: NonNullable<DashboardResponse["aggregate"]>;
+   689→   689→  equityCurve: NonNullable<DashboardResponse["equityCurve"]>;
+   690→   690→  dailyPnl: NonNullable<DashboardResponse["dailyPnl"]>;
+   691→   691→  rDistribution: NonNullable<DashboardResponse["rDistribution"]>;
+   692→   692→  startingBalanceCents: number;
+   693→   693→}) {
+   694→   694→  const pnl = aggregate.totalPnlCents ?? 0;
+   695→   695→  const pf = aggregate.profitFactor ? Number(aggregate.profitFactor) : null;
+   696→   696→  const expectancy = aggregate.expectancyR ? Number(aggregate.expectancyR) : null;
+   697→   697→
+   698→   698→  const hasEquity = (equityCurve?.length ?? 0) > 0;
+   699→   699→  const hasDaily = (dailyPnl?.length ?? 0) > 0;
+   700→   700→  const hasRDist = (rDistribution?.length ?? 0) > 0;
+   701→   701→  if (!hasEquity && !hasDaily && !hasRDist) return null;
+   702→   702→
+   703→   703→  return (
+   704→   704→    <section className="space-y-3">
+   705→   705→      <SectionTitle
+   706→   706→        icon={TrendingUp}
+   707→   707→        title="PERFORMANCE OVERVIEW"
+   708→   708→        subtitle="Aggregate performance and key metrics for this period."
+   709→   709→      />
+   710→   710→
+   711→   711→      <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-4 gap-3">
+   712→   712→        <MetricCard
+   713→   713→          label="Net P&L"
+   714→   714→          value={formatSignedCents(pnl).text}
+   715→   715→          tone={pnl > 0 ? "profit" : pnl < 0 ? "loss" : "neutral"}
+   716→   716→          icon={Activity}
+   717→   717→        />
+   718→   718→        <MetricCard
+   719→   719→          label="Win Rate"
+   720→   720→          value={aggregate.winRate ? formatPct(aggregate.winRate) : "N/A"}
+   721→   721→          tone="neutral"
+   722→   722→          icon={Target}
+   723→   723→        />
+   724→   724→        <MetricCard
+   725→   725→          label="Avg R"
+   726→   726→          value={formatR(aggregate.avgR)}
+   727→   727→          tone={aggregate.avgR && Number(aggregate.avgR) > 0 ? "profit" : aggregate.avgR && Number(aggregate.avgR) < 0 ? "loss" : "neutral"}
+   728→   728→          icon={TrendingUp}
+   729→   729→        />
+   730→   730→        <MetricCard
+   731→   731→          label="Trade Count"
+   732→   732→          value={String(aggregate.totalTrades ?? 0)}
+   733→   733→          tone="neutral"
+   734→   734→          icon={ClipboardList}
+   735→   735→        />
+   736→   736→        <MetricCard
+   737→   737→          label="Profit Factor"
+   738→   738→          value={pf != null ? pf.toFixed(2) : "N/A"}
+   739→   739→          tone={pf != null && pf >= 1 ? "profit" : pf != null ? "loss" : "neutral"}
+   740→   740→          icon={Activity}
+   741→   741→        />
+   742→   742→        <MetricCard
+   743→   743→          label="Expectancy"
+   744→   744→          value={formatR(aggregate.expectancyR)}
+   745→   745→          tone={expectancy != null && expectancy > 0 ? "profit" : expectancy != null && expectancy < 0 ? "loss" : "neutral"}
+   746→   746→          icon={TrendingUp}
+   747→   747→        />
+   748→   748→        <MetricCard
+   749→   749→          label="Avg Win"
+   750→   750→          value={aggregate.avgWinCents != null ? formatSignedCents(aggregate.avgWinCents).text : "N/A"}
+   751→   751→          tone="profit"
+   752→   752→          icon={TrendingUp}
+   753→   753→        />
+   754→   754→        <MetricCard
+   755→   755→          label="Avg Loss"
+   756→   756→          value={aggregate.avgLossCents != null ? formatSignedCents(aggregate.avgLossCents).text : "N/A"}
+   757→   757→          tone="loss"
+   758→   758→          icon={AlertTriangle}
+   759→   759→        />
+   760→   760→      </div>
+   761→   761→
+   762→   762→      <div className="grid grid-cols-1 lg:grid-cols-3 gap-3">
+   763→   763→        {hasEquity && (
+   764→   764→          <Card className="bg-card border border-border rounded-xl shadow-sm p-4">
+   765→   765→            <h3 className="text-sm font-semibold text-foreground mb-3">Equity Curve</h3>
+   766→   766→            <EquityCurveChart data={equityCurve} startingBalanceCents={startingBalanceCents} />
+   767→   767→          </Card>
+   768→   768→        )}
+   769→   769→        {hasDaily && (
+   770→   770→          <Card className="bg-card border border-border rounded-xl shadow-sm p-4">
+   771→   771→            <h3 className="text-sm font-semibold text-foreground mb-3">Daily P&L</h3>
+   772→   772→            <DailyPnlChart data={dailyPnl} />
+   773→   773→          </Card>
+   774→   774→        )}
+   775→   775→        {hasRDist && (
+   776→   776→          <Card className="bg-card border border-border rounded-xl shadow-sm p-4">
+   777→   777→            <h3 className="text-sm font-semibold text-foreground mb-3">R Distribution</h3>
+   778→   778→            <RDistributionChart data={rDistribution} />
+   779→   779→          </Card>
+   780→   780→        )}
+   781→   781→      </div>
+   782→   782→    </section>
+   783→   783→  );
+   784→   784→}
+   785→   785→
+   786→   786→function DashboardSkeleton() {
+   787→   787→  return (
+   788→   788→    <div className="p-4 md:p-6 space-y-6">
+   789→   789→      <div className="flex flex-col sm:flex-row sm:items-center gap-3">
+   790→   790→        <div className="space-y-2">
+   791→   791→          <Skeleton className="h-7 w-40 bg-border" />
+   792→   792→          <Skeleton className="h-4 w-56 bg-border" />
+   793→   793→        </div>
+   794→   794→        <div className="sm:ml-auto flex flex-wrap gap-1.5">
+   795→   795→          {PRESETS.map((p) => (
+   796→   796→            <Skeleton key={p.key} className="h-8 w-20 bg-border rounded-md" />
+   797→   797→          ))}
+   798→   798→        </div>
+   799→   799→      </div>
+   800→   800→
+   801→   801→      <div className="space-y-3">
+   802→   802→        <Skeleton className="h-4 w-64 bg-border" />
+   803→   803→        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+   804→   804→          {Array.from({ length: 4 }).map((_, i) => (
+   805→   805→            <Skeleton key={i} className="h-24 bg-border rounded-xl" />
+   806→   806→          ))}
+   807→   807→        </div>
+   808→   808→        <Skeleton className="h-48 bg-border rounded-xl" />
+   809→   809→      </div>
+   810→   810→
+   811→   811→      <div className="space-y-3">
+   812→   812→        <Skeleton className="h-4 w-56 bg-border" />
+   813→   813→        <Skeleton className="h-72 bg-border rounded-xl" />
+   814→   814→      </div>
+   815→   815→    </div>
+   816→   816→  );
+   817→   817→}
+   818→   818→

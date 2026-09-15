@@ -1,0 +1,1036 @@
+     1→     1→"use client";
+     2→     2→
+     3→     3→import { useQuery, useQueryClient } from "@tanstack/react-query";
+     4→     4→import { useState, useEffect } from "react";
+     5→     5→import { Card } from "@/components/ui/card";
+     6→     6→import { Button } from "@/components/ui/button";
+     7→     7→import { Input } from "@/components/ui/input";
+     8→     8→import { Label } from "@/components/ui/label";
+     9→     9→import { Switch } from "@/components/ui/switch";
+    10→    10→import { Badge } from "@/components/ui/badge";
+    11→    11→import { Separator } from "@/components/ui/separator";
+    12→    12→import { Skeleton } from "@/components/ui/skeleton";
+    13→    13→import {
+    14→    14→  Select,
+    15→    15→  SelectContent,
+    16→    16→  SelectItem,
+    17→    17→  SelectTrigger,
+    18→    18→  SelectValue,
+    19→    19→} from "@/components/ui/select";
+    20→    20→import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+    21→    21→import {
+    22→    22→  Dialog,
+    23→    23→  DialogContent,
+    24→    24→  DialogDescription,
+    25→    25→  DialogHeader,
+    26→    26→  DialogTitle,
+    27→    27→  DialogTrigger,
+    28→    28→} from "@/components/ui/dialog";
+    29→    29→import { setTheme, setDensity, setLargerText, setReducedMotion, useTheme } from "@/components/theme-provider";
+    30→    30→import { useConsent } from "@/lib/consent-store";
+    31→    31→import { TimezoneSelect } from "@/components/common/timezone-select";
+    32→    32→import { toast } from "sonner";
+    33→    33→import { Upload, Download, Database, Shield, Plus, Trash2, PencilLine } from "lucide-react";
+    34→    34→import { cn } from "@/lib/utils";
+    35→    35→import { FieldLabel } from "@/components/common/field-label";
+    36→    36→
+    37→    37→async function fetchSettings() {
+    38→    38→  const res = await fetch("/api/settings", { cache: "no-store" });
+    39→    39→  return res.json();
+    40→    40→}
+    41→    41→async function fetchAccounts() {
+    42→    42→  const res = await fetch("/api/accounts", { cache: "no-store" });
+    43→    43→  return res.json();
+    44→    44→}
+    45→    45→async function fetchInstruments() {
+    46→    46→  const res = await fetch("/api/instruments", { cache: "no-store" });
+    47→    47→  return res.json();
+    48→    48→}
+    49→    49→async function fetchBackups() {
+    50→    50→  const res = await fetch("/api/backups", { cache: "no-store" });
+    51→    51→  return res.json();
+    52→    52→}
+    53→    53→
+    54→    54→export function SettingsView() {
+    55→    55→  const qc = useQueryClient();
+    56→    56→  const { data, isLoading } = useQuery({ queryKey: ["settings"], queryFn: fetchSettings });
+    57→    57→  const { data: accountsData } = useQuery({ queryKey: ["accounts"], queryFn: fetchAccounts });
+    58→    58→  const { data: instrumentsData } = useQuery({ queryKey: ["instruments"], queryFn: fetchInstruments });
+    59→    59→  const { data: backupsData } = useQuery({ queryKey: ["backups"], queryFn: fetchBackups });
+    60→    60→
+    61→    61→  const [density, setDensityState] = useState("comfortable");
+    62→    62→  const [largerText, setLargerTextState] = useState(false);
+    63→    63→  const [reducedMotion, setReducedMotionState] = useState(false);
+    64→    64→  const [privacyMode, setPrivacyMode] = useState(false);
+    65→    65→  const [defaultRiskPct, setDefaultRiskPct] = useState("0.005");
+    66→    66→  const [defaultSession, setDefaultSession] = useState("ny_am");
+    67→    67→  const [timezone, setTimezone] = useState("UTC");
+    68→    68→  const [dailyLossLimitPct, setDailyLossLimitPct] = useState("");
+    69→    69→  const [dailyTradeLimit, setDailyTradeLimit] = useState<number | "">("");
+    70→    70→  // Risk threshold banners (percentages). Defaults match the schema.
+    71→    71→  const [normalRiskMaxPct, setNormalRiskMaxPct] = useState("1.5");
+    72→    72→  const [warningRiskMaxPct, setWarningRiskMaxPct] = useState("3");
+    73→    73→  const [criticalRiskMaxPct, setCriticalRiskMaxPct] = useState("5");
+    74→    74→  const [name, setName] = useState("");
+    75→    75→
+    76→    76→  // Reactive theme from the theme provider (tracks the actual current theme)
+    77→    77→  const { theme, setTheme: applyTheme } = useTheme();
+    78→    78→
+    79→    79→  useEffect(() => {
+    80→    80→    if (data?.settings) {
+    81→    81→      setDensityState(data.settings.density || "comfortable");
+    82→    82→      setLargerTextState(data.settings.largerText ?? false);
+    83→    83→      setReducedMotionState(data.settings.reducedMotion ?? false);
+    84→    84→      setPrivacyMode(data.settings.privacyModeEnabled ?? false);
+    85→    85→      setDefaultRiskPct(data.settings.defaultRiskPct ?? "0.005");
+    86→    86→      setDefaultSession(data.settings.defaultSession ?? "ny_am");
+    87→    87→      setTimezone(data.settings.timezone ?? "UTC");
+    88→    88→      setDailyLossLimitPct(data.settings.dailyLossLimitPct ?? "");
+    89→    89→      setDailyTradeLimit(data.settings.dailyTradeLimit ?? "");
+    90→    90→      setNormalRiskMaxPct(String(data.settings.normalRiskMaxPct ?? 1.5));
+    91→    91→      setWarningRiskMaxPct(String(data.settings.warningRiskMaxPct ?? 3));
+    92→    92→      setCriticalRiskMaxPct(String(data.settings.criticalRiskMaxPct ?? 5));
+    93→    93→    }
+    94→    94→    if (data?.user) {
+    95→    95→      // Initialize the editable display name from the settings GET response
+    96→    96→      // (which now includes `user.name`). `data.user.name` is null when the
+    97→    97→      // user has never set a name.
+    98→    98→      setName(data.user.name ?? "");
+    99→    99→    }
+   100→   100→  }, [data]);
+   101→   101→
+   102→   102→  async function saveSettings() {
+   103→   103→    const res = await fetch("/api/settings", {
+   104→   104→      method: "PATCH",
+   105→   105→      headers: { "Content-Type": "application/json" },
+   106→   106→      body: JSON.stringify({
+   107→   107→        name, // persisted to User.name (see PATCH handler)
+   108→   108→        theme, density,
+   109→   109→        largerText: largerText,
+   110→   110→        reducedMotion: reducedMotion,
+   111→   111→        privacyModeEnabled: privacyMode,
+   112→   112→        defaultRiskPct, defaultSession, timezone,
+   113→   113→        dailyLossLimitPct,
+   114→   114→        dailyTradeLimit: dailyTradeLimit === "" ? null : dailyTradeLimit,
+   115→   115→        normalRiskMaxPct: Number(normalRiskMaxPct),
+   116→   116→        warningRiskMaxPct: Number(warningRiskMaxPct),
+   117→   117→        criticalRiskMaxPct: Number(criticalRiskMaxPct),
+   118→   118→      }),
+   119→   119→    });
+   120→   120→    if (res.ok) {
+   121→   121→      toast.success("Settings saved.");
+   122→   122→      setTheme(theme as any);
+   123→   123→      setDensity(density as any);
+   124→   124→      setLargerText(largerText);
+   125→   125→      setReducedMotion(reducedMotion);
+   126→   126→      qc.invalidateQueries({ queryKey: ["settings"] });
+   127→   127→    } else {
+   128→   128→      toast.error("Failed to save settings.");
+   129→   129→    }
+   130→   130→  }
+   131→   131→
+   132→   132→  if (isLoading) return <div className="p-4 md:p-6"><Skeleton className="h-96" /></div>;
+   133→   133→
+   134→   134→  return (
+   135→   135→    <div className="p-4 md:p-6 max-w-4xl space-y-4">
+   136→   136→      <h1 className="text-2xl font-semibold tracking-tight">Settings</h1>
+   137→   137→
+   138→   138→      <Tabs defaultValue="profile">
+   139→   139→        <TabsList className="w-full justify-start overflow-x-auto">
+   140→   140→          <TabsTrigger value="profile">Profile</TabsTrigger>
+   141→   141→          <TabsTrigger value="accounts">Accounts</TabsTrigger>
+   142→   142→          <TabsTrigger value="instruments">Instruments</TabsTrigger>
+   143→   143→          <TabsTrigger value="trading">Trading</TabsTrigger>
+   144→   144→          <TabsTrigger value="appearance">Appearance</TabsTrigger>
+   145→   145→          <TabsTrigger value="privacy">Privacy</TabsTrigger>
+   146→   146→          <TabsTrigger value="data">Data</TabsTrigger>
+   147→   147→          <TabsTrigger value="legal">Legal</TabsTrigger>
+   148→   148→        </TabsList>
+   149→   149→
+   150→   150→        {/* Profile */}
+   151→   151→        <TabsContent value="profile">
+   152→   152→          <Card className="p-4 space-y-4">
+   153→   153→            <div className="grid sm:grid-cols-2 gap-3">
+   154→   154→              <div className="space-y-2">
+   155→   155→                <FieldLabel hint="Your display name">Name</FieldLabel>
+   156→   156→                <Input value={name} onChange={(e) => setName(e.target.value)} />
+   157→   157→              </div>
+   158→   158→              <div className="space-y-2">
+   159→   159→                <FieldLabel required>Timezone</FieldLabel>
+   160→   160→                <TimezoneSelect value={timezone} onChange={setTimezone} />
+   161→   161→                <p className="text-[11px] text-muted-foreground">
+   162→   162→                  IANA timezone. Used for calendar day bucketing and analytics.
+   163→   163→                </p>
+   164→   164→              </div>
+   165→   165→            </div>
+   166→   166→            <Button onClick={saveSettings}>Save</Button>
+   167→   167→          </Card>
+   168→   168→        </TabsContent>
+   169→   169→
+   170→   170→        {/* Accounts */}
+   171→   171→        <TabsContent value="accounts">
+   172→   172→          <Card className="p-4 space-y-3">
+   173→   173→            <div className="flex items-center justify-between">
+   174→   174→              <h2 className="font-medium">Trading Accounts</h2>
+   175→   175→              <AccountDialog onSaved={() => qc.invalidateQueries({ queryKey: ["accounts"] })} />
+   176→   176→            </div>
+   177→   177→            <div className="space-y-2">
+   178→   178→              {(accountsData?.items ?? []).map((a: any) => (
+   179→   179→                <div
+   180→   180→                  key={a.id}
+   181→   181→                  className="flex flex-col gap-2 p-3 rounded-md border border-border sm:flex-row sm:items-center"
+   182→   182→                >
+   183→   183→                  <div className="flex-1 min-w-0">
+   184→   184→                    <div className="font-medium text-sm flex items-center gap-2 flex-wrap">
+   185→   185→                      <span className="truncate">{a.name}</span>
+   186→   186→                      {a.isDefault && (
+   187→   187→                        <Badge variant="outline" className="text-xs">Default</Badge>
+   188→   188→                      )}
+   189→   189→                      <AccountTypeBadge type={a.accountType} />
+   190→   190→                    </div>
+   191→   191→                    <div className="text-xs text-muted-foreground flex flex-wrap items-center gap-x-2 gap-y-0.5 mt-0.5">
+   192→   192→                      {a.broker ? <span>{a.broker}</span> : <span className="italic">No broker</span>}
+   193→   193→                      <span>·</span>
+   194→   194→                      <span>{a.currency}</span>
+   195→   195→                      <span>·</span>
+   196→   196→                      <span className="tnum">
+   197→   197→                        Balance ${(a.currentBalanceCents / 100).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+   198→   198→                      </span>
+   199→   199→                    </div>
+   200→   200→                    {(a.consistencyRate != null || a.dailyLossLimitPct != null || a.maxDrawdownPct != null) && (
+   201→   201→                      <div className="text-[11px] text-muted-foreground flex flex-wrap items-center gap-x-3 gap-y-0.5 mt-1">
+   202→   202→                        {a.consistencyRate != null && (
+   203→   203→                          <span>Consistency: <span className="tnum text-foreground">{a.consistencyRate}%</span></span>
+   204→   204→                        )}
+   205→   205→                        {a.dailyLossLimitPct != null && (
+   206→   206→                          <span>Daily loss limit: <span className="tnum text-loss">{a.dailyLossLimitPct}%</span></span>
+   207→   207→                        )}
+   208→   208→                        {a.maxDrawdownPct != null && (
+   209→   209→                          <span>Max DD: <span className="tnum text-loss">{a.maxDrawdownPct}%</span></span>
+   210→   210→                        )}
+   211→   211→                      </div>
+   212→   212→                    )}
+   213→   213→                  </div>
+   214→   214→                  <div className="flex items-center gap-1 shrink-0">
+   215→   215→                    <AccountDialog
+   216→   216→                      account={a}
+   217→   217→                      onSaved={() => qc.invalidateQueries({ queryKey: ["accounts"] })}
+   218→   218→                    />
+   219→   219→                    <Button
+   220→   220→                      variant="ghost"
+   221→   221→                      size="icon"
+   222→   222→                      className="h-7 w-7 text-muted-foreground hover:text-loss"
+   223→   223→                      onClick={async () => {
+   224→   224→                        if (!confirm("Delete this account?")) return;
+   225→   225→                        const res = await fetch(`/api/accounts/${a.id}`, { method: "DELETE" });
+   226→   226→                        if (res.ok) { toast.success("Deleted."); qc.invalidateQueries({ queryKey: ["accounts"] }); }
+   227→   227→                        else { const d = await res.json(); toast.error(d.error ?? "Failed."); }
+   228→   228→                      }}
+   229→   229→                    >
+   230→   230→                      <Trash2 className="h-3 w-3" />
+   231→   231→                    </Button>
+   232→   232→                  </div>
+   233→   233→                </div>
+   234→   234→              ))}
+   235→   235→              {(accountsData?.items ?? []).length === 0 && (
+   236→   236→                <p className="text-sm text-muted-foreground">No accounts yet.</p>
+   237→   237→              )}
+   238→   238→            </div>
+   239→   239→          </Card>
+   240→   240→        </TabsContent>
+   241→   241→
+   242→   242→        {/* Instruments */}
+   243→   243→        <TabsContent value="instruments">
+   244→   244→          <Card className="p-4 space-y-3">
+   245→   245→            <div className="flex items-center justify-between">
+   246→   246→              <h2 className="font-medium">Instruments</h2>
+   247→   247→              <InstrumentCreateDialog onCreated={() => qc.invalidateQueries({ queryKey: ["instruments"] })} />
+   248→   248→            </div>
+   249→   249→            <div className="space-y-2 max-h-96 overflow-y-auto">
+   250→   250→              {(instrumentsData?.items ?? []).map((i: any) => (
+   251→   251→                <div key={i.id} className="flex items-center gap-3 p-2 rounded-md border border-border">
+   252→   252→                  <Badge variant="outline">{i.market}</Badge>
+   253→   253→                  <span className="font-medium text-sm">{i.symbol}</span>
+   254→   254→                  <span className="text-xs text-muted-foreground ml-auto tnum">
+   255→   255→                    pip {i.pipSize} · contract {i.contractSize}
+   256→   256→                  </span>
+   257→   257→                </div>
+   258→   258→              ))}
+   259→   259→            </div>
+   260→   260→          </Card>
+   261→   261→        </TabsContent>
+   262→   262→
+   263→   263→        {/* Trading */}
+   264→   264→        <TabsContent value="trading" className="space-y-4">
+   265→   265→          <Card className="p-4 space-y-4">
+   266→   266→            <div>
+   267→   267→              <h2 className="font-medium">General Preferences</h2>
+   268→   268→              <p className="text-xs text-muted-foreground mt-0.5">
+   269→   269→                Defaults applied when creating a new trade.
+   270→   270→              </p>
+   271→   271→            </div>
+   272→   272→            <div className="grid sm:grid-cols-2 gap-3">
+   273→   273→              <div className="space-y-2">
+   274→   274→                <FieldLabel hint="Default risk per trade (0.005 = 0.5%)">Default Risk %</FieldLabel>
+   275→   275→                <Input value={defaultRiskPct} onChange={(e) => setDefaultRiskPct(e.target.value)} />
+   276→   276→              </div>
+   277→   277→              <div className="space-y-2">
+   278→   278→                <FieldLabel hint="Default session for new trades">Default Session</FieldLabel>
+   279→   279→                <Select value={defaultSession} onValueChange={setDefaultSession}>
+   280→   280→                  <SelectTrigger><SelectValue /></SelectTrigger>
+   281→   281→                  <SelectContent>
+   282→   282→                    <SelectItem value="asia">Asia</SelectItem>
+   283→   283→                    <SelectItem value="london">London</SelectItem>
+   284→   284→                    <SelectItem value="ny_am">New York AM</SelectItem>
+   285→   285→                    <SelectItem value="ny_pm">New York PM</SelectItem>
+   286→   286→                  </SelectContent>
+   287→   287→                </Select>
+   288→   288→              </div>
+   289→   289→              <div className="space-y-2">
+   290→   290→                <FieldLabel hint="Max trades per day">Daily Trade Limit</FieldLabel>
+   291→   291→                <Input type="number" value={dailyTradeLimit} onChange={(e) => setDailyTradeLimit(e.target.value === "" ? "" : Number(e.target.value))} />
+   292→   292→              </div>
+   293→   293→              <div className="space-y-2">
+   294→   294→                <FieldLabel hint="Max daily loss (0.02 = 2%)">Daily Loss Limit %</FieldLabel>
+   295→   295→                <Input value={dailyLossLimitPct} onChange={(e) => setDailyLossLimitPct(e.target.value)} />
+   296→   296→              </div>
+   297→   297→            </div>
+   298→   298→            <Button onClick={saveSettings}>Save</Button>
+   299→   299→          </Card>
+   300→   300→
+   301→   301→          <Card className="p-4 space-y-4">
+   302→   302→            <div>
+   303→   303→              <h2 className="font-medium">Risk Threshold Banners</h2>
+   304→   304→              <p className="text-xs text-muted-foreground mt-0.5">
+   305→   305→                DnD flags a trade's planned risk against these percentage thresholds.
+   306→   306→                Use them to keep your sizing honest at a glance.
+   307→   307→              </p>
+   308→   308→            </div>
+   309→   309→            <div className="grid sm:grid-cols-3 gap-3">
+   310→   310→              <div className="space-y-2">
+   311→   311→                <FieldLabel hint="Up to this % is normal">Normal Risk Max %</FieldLabel>
+   312→   312→                <Input type="number" min="0" step="0.1" value={normalRiskMaxPct} onChange={(e) => setNormalRiskMaxPct(e.target.value)} />
+   313→   313→              </div>
+   314→   314→              <div className="space-y-2">
+   315→   315→                <FieldLabel hint="Above normal — caution">Warning Risk Max %</FieldLabel>
+   316→   316→                <Input type="number" min="0" step="0.1" value={warningRiskMaxPct} onChange={(e) => setWarningRiskMaxPct(e.target.value)} />
+   317→   317→              </div>
+   318→   318→              <div className="space-y-2">
+   319→   319→                <FieldLabel hint="Above warning — stop">Critical Risk Max %</FieldLabel>
+   320→   320→                <Input type="number" min="0" step="0.1" value={criticalRiskMaxPct} onChange={(e) => setCriticalRiskMaxPct(e.target.value)} />
+   321→   321→              </div>
+   322→   322→            </div>
+   323→   323→            <div className="flex flex-wrap items-center gap-2 text-[11px]">
+   324→   324→              <span className="rounded border border-border px-2 py-0.5 text-profit">Normal ≤ {normalRiskMaxPct}%</span>
+   325→   325→              <span className="rounded border border-border px-2 py-0.5 text-warning">Warning ≤ {warningRiskMaxPct}%</span>
+   326→   326→              <span className="rounded border border-border px-2 py-0.5 text-loss">Critical &gt; {criticalRiskMaxPct}%</span>
+   327→   327→            </div>
+   328→   328→            <Button onClick={saveSettings}>Save</Button>
+   329→   329→          </Card>
+   330→   330→        </TabsContent>
+   331→   331→
+   332→   332→        {/* Appearance */}
+   333→   333→        <TabsContent value="appearance">
+   334→   334→          <Card className="p-4 space-y-4">
+   335→   335→            <div className="space-y-2">
+   336→   336→              <FieldLabel required>Theme</FieldLabel>
+   337→   337→              <div className="grid grid-cols-3 gap-2">
+   338→   338→                {[
+   339→   339→                  { key: "nordic", label: "Nordic Clean", desc: "Light, quiet, precise" },
+   340→   340→                  { key: "terminal", label: "Sleek Terminal", desc: "Dark, technical" },
+   341→   341→                  { key: "institutional", label: "Institutional", desc: "Premium, analytical" },
+   342→   342→                ].map((t) => (
+   343→   343→                  <button
+   344→   344→                    key={t.key}
+   345→   345→                    onClick={() => {
+   346→   346→                      applyTheme(t.key as any);
+   347→   347→                    }}
+   348→   348→                    className={cn(
+   349→   349→                      "p-3 rounded-md border text-left transition-colors",
+   350→   350→                      theme === t.key ? "border-primary ring-2 ring-primary/30" : "border-border hover:bg-muted",
+   351→   351→                    )}
+   352→   352→                  >
+   353→   353→                    <div className="font-medium text-sm">{t.label}</div>
+   354→   354→                    <div className="text-xs text-muted-foreground mt-1">{t.desc}</div>
+   355→   355→                  </button>
+   356→   356→                ))}
+   357→   357→              </div>
+   358→   358→            </div>
+   359→   359→            <Separator />
+   360→   360→            <div className="grid sm:grid-cols-2 gap-3">
+   361→   361→              <div className="space-y-2">
+   362→   362→                <FieldLabel required>Density</FieldLabel>
+   363→   363→                <Select value={density} onValueChange={(v) => { setDensityState(v); setDensity(v as any); }}>
+   364→   364→                  <SelectTrigger><SelectValue /></SelectTrigger>
+   365→   365→                  <SelectContent>
+   366→   366→                    <SelectItem value="comfortable">Comfortable</SelectItem>
+   367→   367→                    <SelectItem value="compact">Compact</SelectItem>
+   368→   368→                  </SelectContent>
+   369→   369→                </Select>
+   370→   370→              </div>
+   371→   371→            </div>
+   372→   372→            <div className="flex items-center justify-between">
+   373→   373→              <div>
+   374→   374→                <div className="font-medium text-sm">Larger Text</div>
+   375→   375→                <div className="text-xs text-muted-foreground">Increase base font size.</div>
+   376→   376→              </div>
+   377→   377→              <Switch checked={largerText} onCheckedChange={(v) => { setLargerTextState(v); setLargerText(v); }} />
+   378→   378→            </div>
+   379→   379→            <div className="flex items-center justify-between">
+   380→   380→              <div>
+   381→   381→                <div className="font-medium text-sm">Reduced Motion</div>
+   382→   382→                <div className="text-xs text-muted-foreground">Minimize animations.</div>
+   383→   383→              </div>
+   384→   384→              <Switch checked={reducedMotion} onCheckedChange={(v) => { setReducedMotionState(v); setReducedMotion(v); }} />
+   385→   385→            </div>
+   386→   386→            <Button onClick={saveSettings}>Save Settings</Button>
+   387→   387→          </Card>
+   388→   388→        </TabsContent>
+   389→   389→
+   390→   390→        {/* Privacy */}
+   391→   391→        <TabsContent value="privacy">
+   392→   392→          <Card className="p-4 space-y-4">
+   393→   393→            <div className="flex items-start gap-3">
+   394→   394→              <Shield className="h-5 w-5 text-muted-foreground shrink-0 mt-0.5" />
+   395→   395→              <div>
+   396→   396→                <h2 className="font-medium">Local Privacy Mode</h2>
+   397→   397→                <p className="text-sm text-muted-foreground mt-1">
+   398→   398→                  When enabled, sensitive fields (private journal notes, psychology notes, strategy notes, review notes)
+   399→   399→                  are encrypted client-side using AES-GCM with a passphrase-derived key before persistence.
+   400→   400→                  Metadata remains available server-side for analytics and search.
+   401→   401→                </p>
+   402→   402→              </div>
+   403→   403→            </div>
+   404→   404→            <Separator />
+   405→   405→            <div className="flex items-center justify-between">
+   406→   406→              <div>
+   407→   407→                <div className="font-medium text-sm">Enable Privacy Mode</div>
+   408→   408→                <div className="text-xs text-muted-foreground">Encrypt sensitive fields before they leave your device.</div>
+   409→   409→              </div>
+   410→   410→              <Switch checked={privacyMode} onCheckedChange={setPrivacyMode} />
+   411→   411→            </div>
+   412→   412→            <p className="text-xs text-muted-foreground">
+   413→   413→              If you lose your passphrase, encrypted data cannot be recovered. We do not store the passphrase on the server.
+   414→   414→            </p>
+   415→   415→            <Button onClick={saveSettings}>Save</Button>
+   416→   416→          </Card>
+   417→   417→        </TabsContent>
+   418→   418→
+   419→   419→        {/* Data */}
+   420→   420→        <TabsContent value="data" className="space-y-4">
+   421→   421→          <Card className="p-4 space-y-3">
+   422→   422→            <h2 className="font-medium flex items-center gap-2"><Database className="h-4 w-4" /> Backup & Restore</h2>
+   423→   423→            <p className="text-sm text-muted-foreground">Backups include all structured data and a media manifest.</p>
+   424→   424→            <div className="flex flex-wrap gap-2">
+   425→   425→              <Button onClick={async () => {
+   426→   426→                const res = await fetch("/api/backups", { method: "POST" });
+   427→   427→                if (res.ok) { toast.success("Backup created."); qc.invalidateQueries({ queryKey: ["backups"] }); }
+   428→   428→                else toast.error("Failed to create backup.");
+   429→   429→              }}>
+   430→   430→                Create Backup
+   431→   431→              </Button>
+   432→   432→            </div>
+   433→   433→            <Separator />
+   434→   434→            <div className="space-y-2 max-h-64 overflow-y-auto">
+   435→   435→              {(backupsData?.items ?? []).map((b: any) => (
+   436→   436→                <div key={b.id} className="flex items-center gap-3 p-2 rounded-md border border-border">
+   437→   437→                  <div className="flex-1 min-w-0">
+   438→   438→                    <div className="text-sm font-medium truncate">{b.filename}</div>
+   439→   439→                    <div className="text-xs text-muted-foreground">
+   440→   440→                      {new Date(b.createdAt).toLocaleString()} · {(b.sizeBytes / 1024).toFixed(0)} KB
+   441→   441→                    </div>
+   442→   442→                  </div>
+   443→   443→                  <Button
+   444→   444→                    size="sm"
+   445→   445→                    variant="outline"
+   446→   446→                    onClick={async () => {
+   447→   447→                      const mode = confirm("OK to MERGE into existing data, Cancel to REPLACE (will delete current data)") ? "merge" : "replace";
+   448→   448→                      if (mode === "replace" && !confirm("This will DELETE all your current data and restore from backup. Are you sure?")) return;
+   449→   449→                      const res = await fetch("/api/backups", {
+   450→   450→                        method: "PUT",
+   451→   451→                        headers: { "Content-Type": "application/json" },
+   452→   452→                        body: JSON.stringify({ backupId: b.id, mode }),
+   453→   453→                      });
+   454→   454→                      if (res.ok) { toast.success("Restore complete."); qc.invalidateQueries(); }
+   455→   455→                      else toast.error("Restore failed.");
+   456→   456→                    }}
+   457→   457→                  >
+   458→   458→                    Restore
+   459→   459→                  </Button>
+   460→   460→                </div>
+   461→   461→              ))}
+   462→   462→              {(backupsData?.items ?? []).length === 0 && (
+   463→   463→                <p className="text-sm text-muted-foreground">No backups yet.</p>
+   464→   464→              )}
+   465→   465→            </div>
+   466→   466→          </Card>
+   467→   467→
+   468→   468→          <Card className="p-4 space-y-3">
+   469→   469→            <h2 className="font-medium flex items-center gap-2"><Download className="h-4 w-4" /> Export</h2>
+   470→   470→            <div className="flex flex-wrap gap-2">
+   471→   471→              <Button variant="outline" onClick={async () => {
+   472→   472→                const res = await fetch("/api/exports?format=csv&type=trades");
+   473→   473→                const text = await res.text();
+   474→   474→                const blob = new Blob([text], { type: "text/csv" });
+   475→   475→                const url = URL.createObjectURL(blob);
+   476→   476→                const a = document.createElement("a");
+   477→   477→                a.href = url; a.download = `dnd-trades-${Date.now()}.csv`; a.click();
+   478→   478→                URL.revokeObjectURL(url);
+   479→   479→                toast.success("CSV export ready.");
+   480→   480→              }}>
+   481→   481→                Trades (CSV)
+   482→   482→              </Button>
+   483→   483→              <Button variant="outline" onClick={async () => {
+   484→   484→                const res = await fetch("/api/exports?format=json&type=all");
+   485→   485→                const data = await res.json();
+   486→   486→                const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
+   487→   487→                const url = URL.createObjectURL(blob);
+   488→   488→                const a = document.createElement("a");
+   489→   489→                a.href = url; a.download = `dnd-export-${Date.now()}.json`; a.click();
+   490→   490→                URL.revokeObjectURL(url);
+   491→   491→                toast.success("JSON export ready.");
+   492→   492→              }}>
+   493→   493→                Everything (JSON)
+   494→   494→              </Button>
+   495→   495→            </div>
+   496→   496→          </Card>
+   497→   497→
+   498→   498→          <Card className="p-4 space-y-3">
+   499→   499→            <h2 className="font-medium flex items-center gap-2"><Upload className="h-4 w-4" /> Import (CSV)</h2>
+   500→   500→            <p className="text-sm text-muted-foreground">
+   501→   501→              Import trades from a CSV file. You will be able to map columns, preview, validate and confirm before any records are created.
+   502→   502→            </p>
+   503→   503→            <ImportCsvDialog onImported={() => qc.invalidateQueries({ queryKey: ["trades"] })} />
+   504→   504→          </Card>
+   505→   505→        </TabsContent>
+   506→   506→
+   507→   507→        {/* Legal */}
+   508→   508→        <TabsContent value="legal">
+   509→   509→          <Card className="p-4 space-y-4">
+   510→   510→            <div>
+   511→   511→              <h2 className="font-medium">Legal Documents</h2>
+   512→   512→              <p className="mt-1 text-xs text-muted-foreground">
+   513→   513→                Review the policies that govern your use of DnD. Acceptance is
+   514→   514→                recorded against the version shown.
+   515→   515→              </p>
+   516→   516→            </div>
+   517→   517→            <LegalDoc doc="terms" label="Terms of Service" />
+   518→   518→            <LegalDoc doc="privacy" label="Privacy Policy" />
+   519→   519→            <LegalDoc doc="cookies" label="Cookie Policy" />
+   520→   520→            <Separator />
+   521→   521→            <CookieConsentManagement />
+   522→   522→            <Separator />
+   523→   523→            <p className="text-xs text-muted-foreground">
+   524→   524→              DnD is a trading journaling, analytics and performance-management product. It is not financial advice, not investment advice, and does not guarantee profit.
+   525→   525→            </p>
+   526→   526→          </Card>
+   527→   527→        </TabsContent>
+   528→   528→      </Tabs>
+   529→   529→    </div>
+   530→   530→  );
+   531→   531→}
+   532→   532→
+   533→   533→const ACCOUNT_TYPES = [
+   534→   534→  { value: "personal", label: "Personal" },
+   535→   535→  { value: "prop", label: "Prop Firm" },
+   536→   536→  { value: "funded", label: "Funded" },
+   537→   537→  { value: "demo", label: "Demo" },
+   538→   538→  { value: "backtest", label: "Backtest" },
+   539→   539→  { value: "other", label: "Other" },
+   540→   540→  { value: "live", label: "Live" },
+   541→   541→];
+   542→   542→
+   543→   543→const ACCOUNT_TYPE_LABELS: Record<string, string> = Object.fromEntries(
+   544→   544→  ACCOUNT_TYPES.map((t) => [t.value, t.label]),
+   545→   545→);
+   546→   546→
+   547→   547→function AccountTypeBadge({ type }: { type?: string | null }) {
+   548→   548→  if (!type) return null;
+   549→   549→  const label = ACCOUNT_TYPE_LABELS[type] ?? type;
+   550→   550→  const variant =
+   551→   551→    type === "demo" || type === "backtest"
+   552→   552→      ? "secondary"
+   553→   553→      : type === "prop" || type === "funded"
+   554→   554→        ? "outline"
+   555→   555→        : "outline";
+   556→   556→  return (
+   557→   557→    <Badge variant={variant as any} className="text-[10px] uppercase tracking-wide">
+   558→   558→      {label}
+   559→   559→    </Badge>
+   560→   560→  );
+   561→   561→}
+   562→   562→
+   563→   563→interface AccountDialogProps {
+   564→   564→  /** When provided, the dialog acts as an Edit dialog. */
+   565→   565→  account?: { id: string; name: string; broker?: string | null; accountType: string; currency: string; startingBalanceCents: number; isDefault: boolean; consistencyRate?: number | null; dailyLossLimitPct?: number | null; maxDrawdownPct?: number | null };
+   566→   566→  onSaved: () => void;
+   567→   567→}
+   568→   568→
+   569→   569→function AccountDialog({ account, onSaved }: AccountDialogProps) {
+   570→   570→  const [open, setOpen] = useState(false);
+   571→   571→  const isEdit = !!account;
+   572→   572→
+   573→   573→  // Initialize from account (edit mode) or defaults (create mode).
+   574→   574→  const [name, setName] = useState(account?.name ?? "");
+   575→   575→  const [broker, setBroker] = useState(account?.broker ?? "");
+   576→   576→  const [accountType, setAccountType] = useState(account?.accountType ?? "personal");
+   577→   577→  const [currency, setCurrency] = useState(account?.currency ?? "USD");
+   578→   578→  const [balance, setBalance] = useState(
+   579→   579→    account ? String((account.startingBalanceCents / 100).toFixed(2)) : "10000",
+   580→   580→  );
+   581→   581→  const [consistencyRate, setConsistencyRate] = useState(
+   582→   582→    account?.consistencyRate != null ? String(account.consistencyRate) : "",
+   583→   583→  );
+   584→   584→  const [dailyLossLimitPct, setDailyLossLimitPct] = useState(
+   585→   585→    account?.dailyLossLimitPct != null ? String(account.dailyLossLimitPct) : "",
+   586→   586→  );
+   587→   587→  const [maxDrawdownPct, setMaxDrawdownPct] = useState(
+   588→   588→    account?.maxDrawdownPct != null ? String(account.maxDrawdownPct) : "",
+   589→   589→  );
+   590→   590→  const [isDefault, setIsDefault] = useState(account?.isDefault ?? false);
+   591→   591→  const [loading, setLoading] = useState(false);
+   592→   592→
+   593→   593→  // Re-seed state when the dialog opens (so edits on different rows stay fresh).
+   594→   594→  useEffect(() => {
+   595→   595→    if (!open) return;
+   596→   596→    setName(account?.name ?? "");
+   597→   597→    setBroker(account?.broker ?? "");
+   598→   598→    setAccountType(account?.accountType ?? "personal");
+   599→   599→    setCurrency(account?.currency ?? "USD");
+   600→   600→    setBalance(account ? String((account.startingBalanceCents / 100).toFixed(2)) : "10000");
+   601→   601→    setConsistencyRate(account?.consistencyRate != null ? String(account.consistencyRate) : "");
+   602→   602→    setDailyLossLimitPct(account?.dailyLossLimitPct != null ? String(account.dailyLossLimitPct) : "");
+   603→   603→    setMaxDrawdownPct(account?.maxDrawdownPct != null ? String(account.maxDrawdownPct) : "");
+   604→   604→    setIsDefault(account?.isDefault ?? false);
+   605→   605→  }, [open, account]);
+   606→   606→
+   607→   607→  async function submit() {
+   608→   608→    if (!name.trim()) {
+   609→   609→      toast.error("Account name is required");
+   610→   610→      return;
+   611→   611→    }
+   612→   612→    setLoading(true);
+   613→   613→    const payload: Record<string, unknown> = {
+   614→   614→      name: name.trim(),
+   615→   615→      broker: broker.trim() || null,
+   616→   616→      accountType,
+   617→   617→      currency,
+   618→   618→      consistencyRate: consistencyRate === "" ? null : Number(consistencyRate),
+   619→   619→      dailyLossLimitPct: dailyLossLimitPct === "" ? null : Number(dailyLossLimitPct),
+   620→   620→      maxDrawdownPct: maxDrawdownPct === "" ? null : Number(maxDrawdownPct),
+   621→   621→      isDefault,
+   622→   622→    };
+   623→   623→    if (isEdit) {
+   624→   624→      // PATCH — only send startingBalanceCents if the user actually changed it.
+   625→   625→      payload.startingBalanceCents = Math.round(Number(balance) * 100);
+   626→   626→      const res = await fetch(`/api/accounts/${account!.id}`, {
+   627→   627→        method: "PATCH",
+   628→   628→        headers: { "Content-Type": "application/json" },
+   629→   629→        body: JSON.stringify(payload),
+   630→   630→      });
+   631→   631→      setLoading(false);
+   632→   632→      if (res.ok) { toast.success("Account updated."); setOpen(false); onSaved(); }
+   633→   633→      else { const d = await res.json().catch(() => null); toast.error(d?.error ?? "Failed to update account."); }
+   634→   634→    } else {
+   635→   635→      payload.startingBalanceCents = Math.round(Number(balance) * 100);
+   636→   636→      const res = await fetch("/api/accounts", {
+   637→   637→        method: "POST",
+   638→   638→        headers: { "Content-Type": "application/json" },
+   639→   639→        body: JSON.stringify(payload),
+   640→   640→      });
+   641→   641→      setLoading(false);
+   642→   642→      if (res.ok) { toast.success("Account created."); setOpen(false); onSaved(); setName(""); }
+   643→   643→      else { const d = await res.json().catch(() => null); toast.error(d?.error ?? "Failed to create account."); }
+   644→   644→    }
+   645→   645→  }
+   646→   646→
+   647→   647→  return (
+   648→   648→    <Dialog open={open} onOpenChange={setOpen}>
+   649→   649→      <DialogTrigger asChild>
+   650→   650→        {isEdit ? (
+   651→   651→          <Button size="sm" variant="ghost" className="h-7 px-2 text-muted-foreground">
+   652→   652→            <PencilLine className="h-3.5 w-3.5" />
+   653→   653→          </Button>
+   654→   654→        ) : (
+   655→   655→          <Button size="sm" variant="outline"><Plus className="h-4 w-4" /> Add</Button>
+   656→   656→        )}
+   657→   657→      </DialogTrigger>
+   658→   658→      <DialogContent className="max-h-[90vh] overflow-y-auto scroll-thin">
+   659→   659→        <DialogHeader>
+   660→   660→          <DialogTitle>{isEdit ? "Edit Account" : "New Account"}</DialogTitle>
+   661→   661→        </DialogHeader>
+   662→   662→        <div className="space-y-3">
+   663→   663→          <div className="space-y-2">
+   664→   664→            <FieldLabel required>Account Name</FieldLabel>
+   665→   665→            <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. FTMO 100k, Primary" />
+   666→   666→          </div>
+   667→   667→          <div className="grid grid-cols-2 gap-3">
+   668→   668→            <div className="space-y-2">
+   669→   669→              <FieldLabel hint="e.g. FTMO, OANDA, Interactive Brokers">Broker or Firm</FieldLabel>
+   670→   670→              <Input value={broker} onChange={(e) => setBroker(e.target.value)} placeholder="FTMO" />
+   671→   671→            </div>
+   672→   672→            <div className="space-y-2">
+   673→   673→              <FieldLabel>Account Type</FieldLabel>
+   674→   674→              <Select value={accountType} onValueChange={setAccountType}>
+   675→   675→                <SelectTrigger><SelectValue /></SelectTrigger>
+   676→   676→                <SelectContent>
+   677→   677→                  {ACCOUNT_TYPES.map((t) => (
+   678→   678→                    <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>
+   679→   679→                  ))}
+   680→   680→                </SelectContent>
+   681→   681→              </Select>
+   682→   682→            </div>
+   683→   683→          </div>
+   684→   684→          <div className="grid grid-cols-2 gap-3">
+   685→   685→            <div className="space-y-2">
+   686→   686→              <FieldLabel required>Currency</FieldLabel>
+   687→   687→              <Select value={currency} onValueChange={setCurrency}>
+   688→   688→                <SelectTrigger><SelectValue /></SelectTrigger>
+   689→   689→                <SelectContent>
+   690→   690→                  <SelectItem value="USD">USD</SelectItem>
+   691→   691→                  <SelectItem value="EUR">EUR</SelectItem>
+   692→   692→                  <SelectItem value="GBP">GBP</SelectItem>
+   693→   693→                  <SelectItem value="JPY">JPY</SelectItem>
+   694→   694→                  <SelectItem value="AUD">AUD</SelectItem>
+   695→   695→                  <SelectItem value="CAD">CAD</SelectItem>
+   696→   696→                  <SelectItem value="CHF">CHF</SelectItem>
+   697→   697→                  <SelectItem value="NZD">NZD</SelectItem>
+   698→   698→                </SelectContent>
+   699→   699→              </Select>
+   700→   700→            </div>
+   701→   701→            <div className="space-y-2">
+   702→   702→              <FieldLabel required>Initial Balance</FieldLabel>
+   703→   703→              <Input type="number" min="0" step="0.01" value={balance} onChange={(e) => setBalance(e.target.value)} />
+   704→   704→            </div>
+   705→   705→          </div>
+   706→   706→          <div className="grid grid-cols-3 gap-3">
+   707→   707→            <div className="space-y-2">
+   708→   708→              <FieldLabel hint="Optional, percent">Consistency Rate %</FieldLabel>
+   709→   709→              <Input type="number" min="0" step="0.1" value={consistencyRate} onChange={(e) => setConsistencyRate(e.target.value)} placeholder="—" />
+   710→   710→            </div>
+   711→   711→            <div className="space-y-2">
+   712→   712→              <FieldLabel hint="Optional, percent">Daily Loss Limit %</FieldLabel>
+   713→   713→              <Input type="number" min="0" step="0.1" value={dailyLossLimitPct} onChange={(e) => setDailyLossLimitPct(e.target.value)} placeholder="—" />
+   714→   714→            </div>
+   715→   715→            <div className="space-y-2">
+   716→   716→              <FieldLabel hint="Optional, percent">Max Drawdown %</FieldLabel>
+   717→   717→              <Input type="number" min="0" step="0.1" value={maxDrawdownPct} onChange={(e) => setMaxDrawdownPct(e.target.value)} placeholder="—" />
+   718→   718→            </div>
+   719→   719→          </div>
+   720→   720→          <div className="flex items-center justify-between rounded-md border border-border p-3">
+   721→   721→            <div>
+   722→   722→              <div className="text-sm font-medium">Default account</div>
+   723→   723→              <div className="text-xs text-muted-foreground">Use this account for new trades by default.</div>
+   724→   724→            </div>
+   725→   725→            <Switch checked={isDefault} onCheckedChange={setIsDefault} />
+   726→   726→          </div>
+   727→   727→          <Button onClick={submit} disabled={loading} className="w-full">
+   728→   728→            {loading ? "Saving…" : isEdit ? "Save Changes" : "Create Account"}
+   729→   729→          </Button>
+   730→   730→        </div>
+   731→   731→      </DialogContent>
+   732→   732→    </Dialog>
+   733→   733→  );
+   734→   734→}
+   735→   735→
+   736→   736→function InstrumentCreateDialog({ onCreated }: { onCreated: () => void }) {
+   737→   737→  const [open, setOpen] = useState(false);
+   738→   738→  const [symbol, setSymbol] = useState("");
+   739→   739→  const [market, setMarket] = useState("forex");
+   740→   740→  const [pipSize, setPipSize] = useState("0.0001");
+   741→   741→  const [contractSize, setContractSize] = useState("100000");
+   742→   742→  const [pricePrecision, setPricePrecision] = useState(5);
+   743→   743→
+   744→   744→  async function submit() {
+   745→   745→    const res = await fetch("/api/instruments", {
+   746→   746→      method: "POST",
+   747→   747→      headers: { "Content-Type": "application/json" },
+   748→   748→      body: JSON.stringify({ symbol, market, pipSize, contractSize, pricePrecision }),
+   749→   749→    });
+   750→   750→    if (res.ok) { toast.success("Instrument created."); setOpen(false); onCreated(); setSymbol(""); }
+   751→   751→    else toast.error("Failed to create instrument.");
+   752→   752→  }
+   753→   753→
+   754→   754→  return (
+   755→   755→    <Dialog open={open} onOpenChange={setOpen}>
+   756→   756→      <DialogTrigger asChild><Button size="sm" variant="outline"><Plus className="h-4 w-4" /> Add</Button></DialogTrigger>
+   757→   757→      <DialogContent>
+   758→   758→        <DialogHeader><DialogTitle>New Instrument</DialogTitle></DialogHeader>
+   759→   759→        <div className="space-y-3">
+   760→   760→          <div className="space-y-2">
+   761→   761→            <FieldLabel required>Symbol</FieldLabel>
+   762→   762→            <Input value={symbol} onChange={(e) => setSymbol(e.target.value.toUpperCase())} />
+   763→   763→          </div>
+   764→   764→          <div className="grid grid-cols-2 gap-3">
+   765→   765→            <div className="space-y-2">
+   766→   766→              <FieldLabel required>Market</FieldLabel>
+   767→   767→              <Select value={market} onValueChange={setMarket}>
+   768→   768→                <SelectTrigger><SelectValue /></SelectTrigger>
+   769→   769→                <SelectContent>
+   770→   770→                  <SelectItem value="forex">Forex</SelectItem>
+   771→   771→                  <SelectItem value="gold">Gold</SelectItem>
+   772→   772→                  <SelectItem value="indices">Indices</SelectItem>
+   773→   773→                  <SelectItem value="futures">Futures</SelectItem>
+   774→   774→                  <SelectItem value="crypto">Crypto</SelectItem>
+   775→   775→                  <SelectItem value="stocks">Stocks</SelectItem>
+   776→   776→                  <SelectItem value="custom">Custom</SelectItem>
+   777→   777→                </SelectContent>
+   778→   778→              </Select>
+   779→   779→            </div>
+   780→   780→            <div className="space-y-2">
+   781→   781→              <FieldLabel hint="Smallest price increment">Pip Size</FieldLabel>
+   782→   782→              <Input value={pipSize} onChange={(e) => setPipSize(e.target.value)} />
+   783→   783→            </div>
+   784→   784→            <div className="space-y-2">
+   785→   785→              <FieldLabel hint="Size of one contract">Contract Size</FieldLabel>
+   786→   786→              <Input value={contractSize} onChange={(e) => setContractSize(e.target.value)} />
+   787→   787→            </div>
+   788→   788→            <div className="space-y-2">
+   789→   789→              <FieldLabel hint="Decimal places for price">Price Precision</FieldLabel>
+   790→   790→              <Input type="number" value={pricePrecision} onChange={(e) => setPricePrecision(Number(e.target.value))} />
+   791→   791→            </div>
+   792→   792→          </div>
+   793→   793→          <Button onClick={submit}>Create</Button>
+   794→   794→        </div>
+   795→   795→      </DialogContent>
+   796→   796→    </Dialog>
+   797→   797→  );
+   798→   798→}
+   799→   799→
+   800→   800→function ImportCsvDialog({ onImported }: { onImported: () => void }) {
+   801→   801→  const [open, setOpen] = useState(false);
+   802→   802→  const [step, setStep] = useState(1);
+   803→   803→  const [filename, setFilename] = useState("");
+   804→   804→  const [content, setContent] = useState("");
+   805→   805→  const [importId, setImportId] = useState<string | null>(null);
+   806→   806→  const [headers, setHeaders] = useState<string[]>([]);
+   807→   807→  const [sampleRows, setSampleRows] = useState<Record<string, string>[]>([]);
+   808→   808→  const [mapping, setMapping] = useState<Record<string, string>>({});
+   809→   809→  const [validation, setValidation] = useState<any>(null);
+   810→   810→
+   811→   811→  const FIELDS = ["instrumentSymbol", "direction", "entryPrice", "exitPrice", "stopPrice", "targetPrice", "quantity", "entryTime", "exitTime", "session", "setupGrade", "feesCents", "commissionCents", "swapCents"];
+   812→   812→
+   813→   813→  async function upload() {
+   814→   814→    const res = await fetch("/api/imports", {
+   815→   815→      method: "POST",
+   816→   816→      headers: { "Content-Type": "application/json" },
+   817→   817→      body: JSON.stringify({ filename, source: "csv", content }),
+   818→   818→    });
+   819→   819→    if (!res.ok) { toast.error("Upload failed."); return; }
+   820→   820→    const data = await res.json();
+   821→   821→    setImportId(data.id);
+   822→   822→    const summary = JSON.parse(data.summaryJson ?? "{}");
+   823→   823→    setHeaders(summary.headers ?? []);
+   824→   824→    setSampleRows(summary.sampleRows ?? []);
+   825→   825→    setStep(2);
+   826→   826→  }
+   827→   827→
+   828→   828→  async function validateImport() {
+   829→   829→    const res = await fetch(`/api/imports/${importId}`, {
+   830→   830→      method: "PATCH",
+   831→   831→      headers: { "Content-Type": "application/json" },
+   832→   832→      body: JSON.stringify({ action: "map", mapping }),
+   833→   833→    });
+   834→   834→    if (!res.ok) { toast.error("Validation failed."); return; }
+   835→   835→    const data = await res.json();
+   836→   836→    setValidation(data);
+   837→   837→    setStep(3);
+   838→   838→  }
+   839→   839→
+   840→   840→  async function confirmImport() {
+   841→   841→    const res = await fetch(`/api/imports/${importId}`, {
+   842→   842→      method: "PATCH",
+   843→   843→      headers: { "Content-Type": "application/json" },
+   844→   844→      body: JSON.stringify({ action: "confirm" }),
+   845→   845→    });
+   846→   846→    if (!res.ok) { toast.error("Import failed."); return; }
+   847→   847→    const data = await res.json();
+   848→   848→    toast.success(`Imported ${data.imported} trades.`);
+   849→   849→    setOpen(false);
+   850→   850→    setStep(1);
+   851→   851→    onImported();
+   852→   852→  }
+   853→   853→
+   854→   854→  function onFile(file: File) {
+   855→   855→    setFilename(file.name);
+   856→   856→    const reader = new FileReader();
+   857→   857→    reader.onload = () => setContent(String(reader.result));
+   858→   858→    reader.readAsText(file);
+   859→   859→  }
+   860→   860→
+   861→   861→  return (
+   862→   862→    <Dialog open={open} onOpenChange={(o) => { setOpen(o); if (!o) setStep(1); }}>
+   863→   863→      <DialogTrigger asChild><Button size="sm" variant="outline">Import CSV</Button></DialogTrigger>
+   864→   864→      <DialogContent className="max-w-3xl max-h-[85vh] overflow-y-auto">
+   865→   865→        <DialogHeader><DialogTitle>Import Trades from CSV</DialogTitle></DialogHeader>
+   866→   866→        {step === 1 && (
+   867→   867→          <div className="space-y-3">
+   868→   868→            <div className="space-y-2">
+   869→   869→              <FieldLabel required>CSV File</FieldLabel>
+   870→   870→              <Input type="file" accept=".csv" onChange={(e) => e.target.files?.[0] && onFile(e.target.files[0])} />
+   871→   871→            </div>
+   872→   872→            <div className="rounded-md border border-border p-3 text-xs text-muted-foreground">
+   873→   873→              Expected columns: instrumentSymbol, direction (long/short), entryPrice, exitPrice, stopPrice, targetPrice, quantity, entryTime, exitTime, session, setupGrade, feesCents, commissionCents, swapCents.
+   874→   874→              A header row is required.
+   875→   875→            </div>
+   876→   876→            <Button onClick={upload} disabled={!content}>Upload & Detect</Button>
+   877→   877→          </div>
+   878→   878→        )}
+   879→   879→        {step === 2 && (
+   880→   880→          <div className="space-y-3">
+   881→   881→            <h3 className="font-medium text-sm">Map columns</h3>
+   882→   882→            <div className="space-y-1 max-h-48 overflow-y-auto">
+   883→   883→              {headers.map((h) => (
+   884→   884→                <div key={h} className="flex items-center gap-2">
+   885→   885→                  <span className="text-xs w-32 truncate">{h}</span>
+   886→   886→                  <span className="text-muted-foreground">→</span>
+   887→   887→                  <Select
+   888→   888→                    value={mapping[h] ?? ""}
+   889→   889→                    onValueChange={(v) => setMapping((m) => ({ ...m, [h]: v }))}
+   890→   890→                  >
+   891→   891→                    <SelectTrigger className="h-7 text-xs"><SelectValue /></SelectTrigger>
+   892→   892→                    <SelectContent>
+   893→   893→                      {FIELDS.map((f) => <SelectItem key={f} value={f}>{f}</SelectItem>)}
+   894→   894→                    </SelectContent>
+   895→   895→                  </Select>
+   896→   896→                </div>
+   897→   897→              ))}
+   898→   898→            </div>
+   899→   899→            <Button onClick={validateImport}>Validate</Button>
+   900→   900→          </div>
+   901→   901→        )}
+   902→   902→        {step === 3 && validation && (
+   903→   903→          <div className="space-y-3">
+   904→   904→            <div className="grid grid-cols-3 gap-2 text-center">
+   905→   905→              <div className="rounded-md border border-border p-3">
+   906→   906→                <div className="text-2xl font-semibold text-profit tnum">{validation.valid}</div>
+   907→   907→                <div className="text-xs text-muted-foreground">Valid</div>
+   908→   908→              </div>
+   909→   909→              <div className="rounded-md border border-border p-3">
+   910→   910→                <div className="text-2xl font-semibold text-warning tnum">{validation.duplicates}</div>
+   911→   911→                <div className="text-xs text-muted-foreground">Duplicates (skipped)</div>
+   912→   912→              </div>
+   913→   913→              <div className="rounded-md border border-border p-3">
+   914→   914→                <div className="text-2xl font-semibold text-loss tnum">{validation.invalid}</div>
+   915→   915→                <div className="text-xs text-muted-foreground">Invalid (skipped)</div>
+   916→   916→              </div>
+   917→   917→            </div>
+   918→   918→            {validation.issues.length > 0 && (
+   919→   919→              <div className="rounded-md border border-warning/50 bg-warning/5 p-3 max-h-32 overflow-y-auto">
+   920→   920→                <div className="text-xs font-medium text-warning mb-1">Issues:</div>
+   921→   921→                <ul className="text-xs text-muted-foreground space-y-0.5">
+   922→   922→                  {validation.issues.slice(0, 10).map((iss: string, i: number) => <li key={i}>{iss}</li>)}
+   923→   923→                </ul>
+   924→   924→              </div>
+   925→   925→            )}
+   926→   926→            <Button onClick={confirmImport}>Confirm Import ({validation.valid} trades)</Button>
+   927→   927→          </div>
+   928→   928→        )}
+   929→   929→      </DialogContent>
+   930→   930→    </Dialog>
+   931→   931→  );
+   932→   932→}
+   933→   933→
+   934→   934→function LegalDoc({ doc, label }: { doc: string; label: string }) {
+   935→   935→  const [state, setState] = useState<any>(null);
+   936→   936→  const [open, setOpen] = useState(false);
+   937→   937→
+   938→   938→  useEffect(() => {
+   939→   939→    fetch(`/api/legal/${doc}`).then((r) => r.json()).then(setState);
+   940→   940→  }, [doc]);
+   941→   941→
+   942→   942→  async function accept() {
+   943→   943→    const res = await fetch(`/api/legal/${doc}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({}) });
+   944→   944→    if (res.ok) {
+   945→   945→      toast.success(`${label} accepted.`);
+   946→   946→      const data = await res.json();
+   947→   947→      setState({ ...state, accepted: true, acceptedAt: data.acceptedAt, isCurrent: true, version: data.version });
+   948→   948→    }
+   949→   949→  }
+   950→   950→
+   951→   951→  // Show the Accept button when: not yet accepted, OR accepted an outdated version.
+   952→   952→  const needsAccept = state && (!state.accepted || state.isCurrent === false);
+   953→   953→
+   954→   954→  return (
+   955→   955→    <div className="flex items-center justify-between gap-3 py-2">
+   956→   956→      <div>
+   957→   957→        <div className="font-medium text-sm">{label}</div>
+   958→   958→        <div className="text-xs text-muted-foreground">
+   959→   959→          {state ? (
+   960→   960→            <>
+   961→   961→              Version {state.version}
+   962→   962→              {" · "}
+   963→   963→              {state.accepted
+   964→   964→                ? `Accepted ${new Date(state.acceptedAt).toLocaleDateString()}`
+   965→   965→                : "Not yet accepted"}
+   966→   966→              {state.isCurrent === false && (
+   967→   967→                <span className="text-warning"> · outdated (v{state.acceptedVersion || "?"})</span>
+   968→   968→              )}
+   969→   969→            </>
+   970→   970→          ) : (
+   971→   971→            "Loading…"
+   972→   972→          )}
+   973→   973→        </div>
+   974→   974→      </div>
+   975→   975→      <div className="flex gap-2">
+   976→   976→        <Button size="sm" variant="ghost" onClick={() => setOpen(true)}>View</Button>
+   977→   977→        {needsAccept && <Button size="sm" onClick={accept}>Accept</Button>}
+   978→   978→      </div>
+   979→   979→      <Dialog open={open} onOpenChange={setOpen}>
+   980→   980→        <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
+   981→   981→          <DialogHeader>
+   982→   982→            <DialogTitle>{label}</DialogTitle>
+   983→   983→            {state && (
+   984→   984→              <DialogDescription>Version {state.version}</DialogDescription>
+   985→   985→            )}
+   986→   986→          </DialogHeader>
+   987→   987→          <div className="text-sm text-muted-foreground whitespace-pre-wrap leading-relaxed">
+   988→   988→            {state?.content ?? "Document text."}
+   989→   989→          </div>
+   990→   990→        </DialogContent>
+   991→   991→      </Dialog>
+   992→   992→    </div>
+   993→   993→  );
+   994→   994→}
+   995→   995→
+   996→   996→/**
+   997→   997→ * Cookie consent management — lets the user review and change their cookie
+   998→   998→ * preferences from Settings → Legal. Reads from / writes to the same
+   999→   999→ * consent-store used by the public banner.
+  1000→  1000→ */
+  1001→  1001→function CookieConsentManagement() {
+  1002→  1002→  const { choice, timestamp, version, preferences, openSettings, reset } = useConsent();
+  1003→  1003→  const [mounted, setMounted] = useState(false);
+  1004→  1004→  useEffect(() => setMounted(true), []);
+  1005→  1005→
+  1006→  1006→  if (!mounted) return null;
+  1007→  1007→
+  1008→  1008→  return (
+  1009→  1009→    <div className="space-y-2">
+  1010→  1010→      <div className="flex items-center justify-between gap-3 py-1">
+  1011→  1011→        <div>
+  1012→  1012→          <div className="font-medium text-sm">Cookie Consent</div>
+  1013→  1013→          <div className="text-xs text-muted-foreground">
+  1014→  1014→            {choice === "undecided"
+  1015→  1015→              ? "No choice made yet."
+  1016→  1016→              : choice === "accepted"
+  1017→  1017→                ? `Accepted · ${timestamp ? new Date(timestamp).toLocaleDateString() : ""}`
+  1018→  1018→                : `Rejected non-essential · ${timestamp ? new Date(timestamp).toLocaleDateString() : ""}`}
+  1019→  1019→            {" · consent v" + version}
+  1020→  1020→          </div>
+  1021→  1021→        </div>
+  1022→  1022→        <div className="flex gap-2">
+  1023→  1023→          <Button size="sm" variant="ghost" onClick={openSettings}>Manage</Button>
+  1024→  1024→          <Button size="sm" variant="ghost" onClick={reset} className="text-muted-foreground">Re-show banner</Button>
+  1025→  1025→        </div>
+  1026→  1026→      </div>
+  1027→  1027→      <div className="flex flex-wrap gap-2 text-[10px] text-muted-foreground">
+  1028→  1028→        <span className={`rounded border border-border px-1.5 py-0.5 ${preferences.essential ? "text-profit" : "text-muted-foreground"}`}>Essential: on</span>
+  1029→  1029→        <span className={`rounded border border-border px-1.5 py-0.5 ${preferences.functional ? "text-profit" : "text-muted-foreground"}`}>Functional: on</span>
+  1030→  1030→        <span className={`rounded border border-border px-1.5 py-0.5 ${preferences.analytics ? "text-profit" : "text-muted-foreground"}`}>Analytics: {preferences.analytics ? "on" : "off"}</span>
+  1031→  1031→        <span className={`rounded border border-border px-1.5 py-0.5 ${preferences.marketing ? "text-profit" : "text-muted-foreground"}`}>Marketing: {preferences.marketing ? "on" : "off"}</span>
+  1032→  1032→      </div>
+  1033→  1033→    </div>
+  1034→  1034→  );
+  1035→  1035→}
+  1036→  1036→

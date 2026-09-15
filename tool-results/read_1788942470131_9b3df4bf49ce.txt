@@ -1,0 +1,502 @@
+   400→   400→  useEffect(() => {
+   401→   401→    if (editingId) return;
+   402→   402→    const saved = localStorage.getItem(DRAFT_KEY);
+   403→   403→    if (saved) {
+   404→   404→      try {
+   405→   405→        const parsed = JSON.parse(saved);
+   406→   406→        setForm((f: any) => ({ ...f, ...parsed }));
+   407→   407→        toast.info("Restored autosaved draft.");
+   408→   408→      } catch {}
+   409→   409→    }
+   410→   410→  }, [editingId]);
+   411→   411→
+   412→   412→  // Deep-link pre-fills from the URL/state params (calendar "Add Trade for
+   413→   413→  // This Day" → `?date=YYYY-MM-DD`; plan detail "Create Trade From Plan" →
+   414→   414→  // `?dailyPlanId=<id>`). Applied only when creating a new trade (not when
+   415→   415→  // editing an existing one). Runs after the draft-restore effect so the
+   416→   416→  // explicit deep-link values override any restored draft entries.
+   417→   417→  useEffect(() => {
+   418→   418→    if (editingId) return;
+   419→   419→    if (!params.date && !params.dailyPlanId) return;
+   420→   420→    setForm((f: any) => {
+   421→   421→      const next: any = { ...f };
+   422→   422→      if (params.date) {
+   423→   423→        // Pre-fill entry time at market open (09:00) on the deep-linked
+   424→   424→        // date. The datetime-local input expects "YYYY-MM-DDTHH:MM" with
+   425→   425→        // no timezone offset; the server parses it as local time on submit.
+   426→   426→        next.entryTime = `${params.date}T09:00`;
+   427→   427→      }
+   428→   428→      if (params.dailyPlanId) {
+   429→   429→        next.dailyPlanId = params.dailyPlanId;
+   430→   430→      }
+   431→   431→      return next;
+   432→   432→    });
+   433→   433→  }, [params.date, params.dailyPlanId, editingId]);
+   434→   434→
+   435→   435→  const [saving, setSaving] = useState(false);
+   436→   436→  const [activeTab, setActiveTab] = useState<string>("basics");
+   437→   437→  const fileInputRef = useRef<HTMLInputElement>(null);
+   438→   438→  const [viewerIndex, setViewerIndex] = useState<number | null>(null);
+   439→   439→
+   440→   440→  const TAB_ORDER = ["basics", "execution", "plan", "setup", "psychology", "review", "evidence"];
+   441→   441→
+   442→   442→  // Upload media files to the server immediately (before the trade is saved).
+   443→   443→  // The media is associated with this trade via the tradeId once the trade is created.
+   444→   444→  // For new trades (no editingId yet), we upload as "orphan" media and attach after save.
+   445→   445→  async function handleFileUpload(files: FileList | File[]) {
+   446→   446→    const fileList = Array.from(files);
+   447→   447→    for (const file of fileList) {
+   448→   448→      const formData = new FormData();
+   449→   449→      formData.append("file", file);
+   450→   450→      if (editingId) formData.append("tradeId", editingId);
+   451→   451→      // Detect evidence kind from the file's MIME type so the form
+   452→   452→      // immediately knows whether to render an <img> (annotation-able) or a
+   453→   453→      // <video controls> element — the server may not always echo back the
+   454→   454→      // kind field reliably.
+   455→   455→      const clientKind = file.type.startsWith("video/") ? "video" : "image";
+   456→   456→      try {
+   457→   457→        const res = await fetch("/api/media", { method: "POST", body: formData });
+   458→   458→        if (res.ok) {
+   459→   459→          const data = await res.json();
+   460→   460→          // Fetch signed URL
+   461→   461→          const detailRes = await fetch(`/api/media/${data.id}`);
+   462→   462→          const detail = await detailRes.json();
+   463→   463→          setForm((f: any) => ({
+   464→   464→            ...f,
+   465→   465→            uploadedMedia: [...(f.uploadedMedia ?? []), { ...data, kind: data.kind ?? clientKind, url: detail.url }],
+   466→   466→          }));
+   467→   467→          toast.success(`${file.name} uploaded.`);
+   468→   468→        } else {
+   469→   469→          const err = await res.json().catch(() => ({}));
+   470→   470→          toast.error(err?.error ?? `Failed to upload ${file.name}`);
+   471→   471→        }
+   472→   472→      } catch {
+   473→   473→        toast.error(`Failed to upload ${file.name}`);
+   474→   474→      }
+   475→   475→    }
+   476→   476→  }
+   477→   477→
+   478→   478→  function setField(path: string, value: any) {
+   479→   479→    setForm((f: any) => {
+   480→   480→      const next = { ...f };
+   481→   481→      const parts = path.split(".");
+   482→   482→      let cur: any = next;
+   483→   483→      for (let i = 0; i < parts.length - 1; i++) {
+   484→   484→        cur[parts[i]] = { ...cur[parts[i]] };
+   485→   485→        cur = cur[parts[i]];
+   486→   486→      }
+   487→   487→      cur[parts[parts.length - 1]] = value;
+   488→   488→      return next;
+   489→   489→    });
+   490→   490→  }
+   491→   491→
+   492→   492→  function toggleArrayField(path: string, value: string) {
+   493→   493→    setForm((f: any) => {
+   494→   494→      const next = { ...f };
+   495→   495→      const parts = path.split(".");
+   496→   496→      let cur: any = next;
+   497→   497→      for (let i = 0; i < parts.length - 1; i++) {
+   498→   498→        cur[parts[i]] = { ...cur[parts[i]] };
+   499→   499→        cur = cur[parts[i]];
+   500→   500→      }
+   501→   501→      const key = parts[parts.length - 1];
+   502→   502→      const arr = Array.isArray(cur[key]) ? [...cur[key]] : [];
+   503→   503→      const idx = arr.indexOf(value);
+   504→   504→      if (idx >= 0) arr.splice(idx, 1); else arr.push(value);
+   505→   505→      cur[key] = arr;
+   506→   506→      return next;
+   507→   507→    });
+   508→   508→  }
+   509→   509→
+   510→   510→  // Update one A+ checklist answer field (`checked` or `note`) for the given
+   511→   511→  // item id. Used by the checkbox + evidence-note inputs in the ICT Setup tab.
+   512→   512→  function updateChecklistAnswer(
+   513→   513→    itemId: string,
+   514→   514→    field: "checked" | "note",
+   515→   515→    value: boolean | string,
+   516→   516→  ) {
+   517→   517→    setForm((f: any) => {
+   518→   518→      const current = f.checklistAnswers?.[itemId] ?? { checked: false };
+   519→   519→      const next = {
+   520→   520→        ...f.checklistAnswers,
+   521→   521→        [itemId]: {
+   522→   522→          ...current,
+   523→   523→          [field]: value,
+   524→   524→        },
+   525→   525→      };
+   526→   526→      // If a checked item is being unchecked, drop its note so storage stays clean.
+   527→   527→      if (field === "checked" && value === false && next[itemId].note) {
+   528→   528→        delete next[itemId].note;
+   529→   529→      }
+   530→   530→      return { ...f, checklistAnswers: next };
+   531→   531→    });
+   532→   532→  }
+   533→   533→
+   534→   534→  async function submit(isDraft: boolean = false) {
+   535→   535→    // Validate required fields and navigate to the first error
+   536→   536→    if (!form.accountId) {
+   537→   537→      toast.error("Please select an account.");
+   538→   538→      setActiveTab("basics");
+   539→   539→      setTimeout(() => document.getElementById("field-account")?.scrollIntoView({ behavior: "smooth", block: "center" }), 100);
+   540→   540→      return;
+   541→   541→    }
+   542→   542→    if (!form.instrumentSymbol) {
+   543→   543→      toast.error("Please enter an instrument symbol.");
+   544→   544→      setActiveTab("basics");
+   545→   545→      setTimeout(() => document.getElementById("field-instrument")?.scrollIntoView({ behavior: "smooth", block: "center" }), 100);
+   546→   546→      return;
+   547→   547→    }
+   548→   548→    setSaving(true);
+   549→   549→    try {
+   550→   550→      const executions = [];
+   551→   551→      if (form.entryPrice) {
+   552→   552→        executions.push({
+   553→   553→          kind: "entry",
+   554→   554→          price: form.entryPrice,
+   555→   555→          quantity: form.quantity || "1",
+   556→   556→          timestamp: form.entryTime ? new Date(form.entryTime).toISOString() : new Date().toISOString(),
+   557→   557→        });
+   558→   558→      }
+   559→   559→      if (form.exitPrice) {
+   560→   560→        executions.push({
+   561→   561→          kind: "exit",
+   562→   562→          price: form.exitPrice,
+   563→   563→          quantity: form.quantity || "1",
+   564→   564→          timestamp: form.exitTime ? new Date(form.exitTime).toISOString() : new Date().toISOString(),
+   565→   565→        });
+   566→   566→      }
+   567→   567→      const payload = {
+   568→   568→        accountId: form.accountId,
+   569→   569→        instrumentSymbol: form.instrumentSymbol.toUpperCase(),
+   570→   570→        market: meta?.instruments?.find((i: any) => i.symbol === form.instrumentSymbol.toUpperCase())?.market ?? "custom",
+   571→   571→        direction: form.direction,
+   572→   572→        session: form.session,
+   573→   573→        newsImpact: form.newsImpact ?? "none",
+   574→   574→        strategyId: form.strategyId || null,
+   575→   575→        // Use the user-selected strategy version directly. The version
+   576→   576→        // dropdown in the Basics tab defaults to the latest version
+   577→   577→        // (`versions[0]`) when a strategy is first picked (see the
+   578→   578→        // strategyDetail effect above), and the user can override it. Stays
+   579→   579→        // null when no strategy is selected.
+   580→   580→        strategyVersionId: form.strategyId ? (form.strategyVersionId || null) : null,
+   581→   581→        dailyPlanId: form.dailyPlanId || null,
+   582→   582→        // Setup grade/score are now derived from the A+ checklist evaluation,
+   583→   583→        // not a manual dropdown. The server re-computes and overrides these
+   584→   584→        // values from the answers to prevent client tampering (spec §102).
+   585→   585→        checklistVersionId: form.strategyVersionId || null,
+   586→   586→        checklistAnswers: form.strategyVersionId ? form.checklistAnswers : null,
+   587→   587→        setupGrade: form.strategyVersionId && checklistItems.length > 0 ? evaluation.grade : null,
+   588→   588→        setupScore: form.strategyVersionId && checklistItems.length > 0 ? String(evaluation.score) : null,
+   589→   589→        tags: form.tags,
+   590→   590→        plannedEntryPrice: form.plannedEntryPrice || null,
+   591→   591→        plannedStopPrice: form.plannedStopPrice || null,
+   592→   592→        plannedTargetPrice: form.plannedTargetPrice || null,
+   593→   593→        plannedRiskPct: form.plannedRiskPct || null,
+   594→   594→        executions,
+   595→   595→        feesCents: Number(form.feesCents) || 0,
+   596→   596→        commissionCents: Number(form.commissionCents) || 0,
+   597→   597→        swapCents: Number(form.swapCents) || 0,
+   598→   598→        slippageCents: Number(form.slippageCents) || 0,
+   599→   599→        entryTime: form.entryTime ? new Date(form.entryTime).toISOString() : null,
+   600→   600→        exitTime: form.exitTime ? new Date(form.exitTime).toISOString() : null,
+   601→   601→        tradingTimezone: form.tradingTimezone,
+   602→   602→        setup: form.setup,
+   603→   603→        thesis: form.thesis,
+   604→   604→        notes: form.notes || null,
+   605→   605→        lessons: form.lessons || null,
+   606→   606→        psychBefore: form.psychBefore,
+   607→   607→        psychAfter: form.psychAfter,
+   608→   608→        behaviorFlags: form.behaviorFlags,
+   609→   609→        ruleCompliance: form.ruleCompliance,
+   610→   610→        isDraft,
+   611→   611→      };
+   612→   612→      const url = editingId ? `/api/trades/${editingId}` : "/api/trades";
+   613→   613→      const method = editingId ? "PATCH" : "POST";
+   614→   614→      const res = await fetch(url, {
+   615→   615→        method,
+   616→   616→        headers: { "Content-Type": "application/json" },
+   617→   617→        body: JSON.stringify(payload),
+   618→   618→      });
+   619→   619→      const data = await res.json();
+   620→   620→      if (!res.ok) {
+   621→   621→        toast.error(data?.error ?? "Failed to save trade.");
+   622→   622→        setSaving(false);
+   623→   623→        return;
+   624→   624→      }
+   625→   625→      // Attach any orphaned uploaded media to the newly created trade and save captions
+   626→   626→      if (form.uploadedMedia?.length > 0) {
+   627→   627→        for (const m of form.uploadedMedia) {
+   628→   628→          if (m.id) {
+   629→   629→            const patchBody: any = {};
+   630→   630→            if (!editingId) patchBody.tradeId = data.id;
+   631→   631→            if (m.caption) patchBody.caption = m.caption;
+   632→   632→            if (Object.keys(patchBody).length > 0) {
+   633→   633→              await fetch(`/api/media/${m.id}`, {
+   634→   634→                method: "PATCH",
+   635→   635→                headers: { "Content-Type": "application/json" },
+   636→   636→                body: JSON.stringify(patchBody),
+   637→   637→              }).catch(() => {});
+   638→   638→            }
+   639→   639→          }
+   640→   640→        }
+   641→   641→      }
+   642→   642→      toast.success(isDraft ? "Draft saved." : "Trade saved.");
+   643→   643→      localStorage.removeItem(DRAFT_KEY);
+   644→   644→      qc.invalidateQueries({ queryKey: ["trades"] });
+   645→   645→      qc.invalidateQueries({ queryKey: ["dashboard"] });
+   646→   646→      navigate("tradeDetail", { id: data.id });
+   647→   647→    } catch (e) {
+   648→   648→      toast.error("Network error");
+   649→   649→      setSaving(false);
+   650→   650→    }
+   651→   651→  }
+   652→   652→
+   653→   653→  return (
+   654→   654→    <div className="p-4 md:p-6 max-w-4xl space-y-4">
+   655→   655→      <div className="flex items-center gap-3">
+   656→   656→        <Button variant="ghost" size="icon" onClick={() => navigate("tradesLog")}>
+   657→   657→          <ArrowLeft className="h-4 w-4" />
+   658→   658→        </Button>
+   659→   659→        <h1 className="text-2xl font-semibold tracking-tight">
+   660→   660→          {editingId ? "Edit Trade" : "Add Trade"}
+   661→   661→        </h1>
+   662→   662→      </div>
+   663→   663→
+   664→   664→      <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
+   665→   665→        <TabsList className="w-full justify-start overflow-x-auto no-scrollbar">
+   666→   666→          <TabsTrigger value="basics">1. Basics</TabsTrigger>
+   667→   667→          <TabsTrigger value="execution">2. Execution</TabsTrigger>
+   668→   668→          <TabsTrigger value="plan">3. Trading Plan</TabsTrigger>
+   669→   669→          <TabsTrigger value="setup">4. ICT Setup</TabsTrigger>
+   670→   670→          <TabsTrigger value="psychology">5. Psychology</TabsTrigger>
+   671→   671→          <TabsTrigger value="review">6. Review</TabsTrigger>
+   672→   672→          <TabsTrigger value="evidence">7. Evidence</TabsTrigger>
+   673→   673→        </TabsList>
+   674→   674→
+   675→   675→        {/* Basics */}
+   676→   676→        <TabsContent value="basics" className="space-y-4 mt-3">
+   677→   677→          <Card className="p-4 space-y-4">
+   678→   678→            <div className="grid sm:grid-cols-2 gap-3">
+   679→   679→              <div className="space-y-2" id="field-account">
+   680→   680→                <FieldLabel required>Account</FieldLabel>
+   681→   681→                <Select value={form.accountId} onValueChange={(v) => setField("accountId", v)}>
+   682→   682→                  <SelectTrigger><SelectValue /></SelectTrigger>
+   683→   683→                  <SelectContent>
+   684→   684→                    {accounts.map((a: any) => (
+   685→   685→                      <SelectItem key={a.id} value={a.id}>{a.name} ({a.currency})</SelectItem>
+   686→   686→                    ))}
+   687→   687→                  </SelectContent>
+   688→   688→                </Select>
+   689→   689→              </div>
+   690→   690→              <div className="space-y-2" id="field-instrument">
+   691→   691→                <FieldLabel required>Instrument</FieldLabel>
+   692→   692→                <Input
+   693→   693→                  list="instruments"
+   694→   694→                  value={form.instrumentSymbol}
+   695→   695→                  onChange={(e) => setField("instrumentSymbol", e.target.value)}
+   696→   696→                 
+   697→   697→                />
+   698→   698→                <datalist id="instruments">
+   699→   699→                  {instruments.map((i: any) => <option key={i.id} value={i.symbol} />)}
+   700→   700→                </datalist>
+   701→   701→              </div>
+   702→   702→              <div className="space-y-2">
+   703→   703→                <FieldLabel required>Direction</FieldLabel>
+   704→   704→                <Select value={form.direction} onValueChange={(v) => setField("direction", v)}>
+   705→   705→                  <SelectTrigger><SelectValue /></SelectTrigger>
+   706→   706→                  <SelectContent>
+   707→   707→                    <SelectItem value="long">Long</SelectItem>
+   708→   708→                    <SelectItem value="short">Short</SelectItem>
+   709→   709→                  </SelectContent>
+   710→   710→                </Select>
+   711→   711→              </div>
+   712→   712→              <div className="space-y-2">
+   713→   713→                <FieldLabel required hint="The trading session for this trade">Session</FieldLabel>
+   714→   714→                <Select value={form.session} onValueChange={(v) => setField("session", v)}>
+   715→   715→                  <SelectTrigger><SelectValue /></SelectTrigger>
+   716→   716→                  <SelectContent>
+   717→   717→                    <SelectItem value="asia">Asia</SelectItem>
+   718→   718→                    <SelectItem value="london">London</SelectItem>
+   719→   719→                    <SelectItem value="ny_am">New York AM</SelectItem>
+   720→   720→                    <SelectItem value="ny_pm">New York PM</SelectItem>
+   721→   721→                    <SelectItem value="custom">Custom</SelectItem>
+   722→   722→                  </SelectContent>
+   723→   723→                </Select>
+   724→   724→              </div>
+   725→   725→              <div className="space-y-2">
+   726→   726→                <FieldLabel hint="News/event impact on this trade (high = red-flag news)">News Impact</FieldLabel>
+   727→   727→                <Select value={form.newsImpact ?? "none"} onValueChange={(v) => setField("newsImpact", v)}>
+   728→   728→                  <SelectTrigger><SelectValue /></SelectTrigger>
+   729→   729→                  <SelectContent>
+   730→   730→                    <SelectItem value="none">None</SelectItem>
+   731→   731→                    <SelectItem value="low">Low</SelectItem>
+   732→   732→                    <SelectItem value="normal">Normal</SelectItem>
+   733→   733→                    <SelectItem value="high">High</SelectItem>
+   734→   734→                  </SelectContent>
+   735→   735→                </Select>
+   736→   736→              </div>
+   737→   737→              <div className="space-y-2">
+   738→   738→                <FieldLabel hint="Select the strategy this trade follows">Strategy</FieldLabel>
+   739→   739→                <Select value={form.strategyId || "__none"} onValueChange={(v) => setField("strategyId", v === "__none" ? "" : v)}>
+   740→   740→                  <SelectTrigger><SelectValue /></SelectTrigger>
+   741→   741→                  <SelectContent>
+   742→   742→                    <SelectItem value="__none">None</SelectItem>
+   743→   743→                    {strategies.map((s: any) => (
+   744→   744→                      <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>
+   745→   745→                    ))}
+   746→   746→                  </SelectContent>
+   747→   747→                </Select>
+   748→   748→              </div>
+   749→   749→              <div className="space-y-2">
+   750→   750→                <FieldLabel hint="The specific version of the strategy used">Strategy Version</FieldLabel>
+   751→   751→                <Select
+   752→   752→                  value={form.strategyVersionId || "__none"}
+   753→   753→                  onValueChange={(v) => setField("strategyVersionId", v === "__none" ? "" : v)}
+   754→   754→                  disabled={!form.strategyId || !strategyDetail?.versions?.length}
+   755→   755→                >
+   756→   756→                  <SelectTrigger>
+   757→   757→                    <SelectValue placeholder={form.strategyId ? "No versions" : "Select a strategy first"} />
+   758→   758→                  </SelectTrigger>
+   759→   759→                  <SelectContent>
+   760→   760→                    {form.strategyId && (strategyDetail?.versions ?? []).length === 0 && (
+   761→   761→                      <SelectItem value="__none" disabled>No versions defined</SelectItem>
+   762→   762→                    )}
+   763→   763→                    {(strategyDetail?.versions ?? []).map((v: any) => (
+   764→   764→                      <SelectItem key={v.id} value={v.id}>v{v.versionLabel}</SelectItem>
+   765→   765→                    ))}
+   766→   766→                  </SelectContent>
+   767→   767→                </Select>
+   768→   768→                <p className="text-[11px] text-muted-foreground">
+   769→   769→                  Defaults to the latest version. Pick the rule set this trade was executed under.
+   770→   770→                </p>
+   771→   771→              </div>
+   772→   772→              <div className="space-y-2">
+   773→   773→                <FieldLabel hint="Link this trade to a pre-made daily plan">Daily Plan</FieldLabel>
+   774→   774→                <Select value={form.dailyPlanId || "__none"} onValueChange={(v) => setField("dailyPlanId", v === "__none" ? "" : v)}>
+   775→   775→                  <SelectTrigger><SelectValue /></SelectTrigger>
+   776→   776→                  <SelectContent>
+   777→   777→                    <SelectItem value="__none">None</SelectItem>
+   778→   778→                    {dailyPlans.map((p: any) => {
+   779→   779→                      const d = p.date ? new Date(p.date) : null;
+   780→   780→                      const dateLabel = d
+   781→   781→                        ? d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })
+   782→   782→                        : "Unknown date";
+   783→   783→                      const bias = p.dailyBias ? ` · ${p.dailyBias}` : "";
+   784→   784→                      return (
+   785→   785→                        <SelectItem key={p.id} value={p.id}>{dateLabel}{bias}</SelectItem>
+   786→   786→                      );
+   787→   787→                    })}
+   788→   788→                  </SelectContent>
+   789→   789→                </Select>
+   790→   790→              </div>
+   791→   791→              {/* Setup grade is now derived from the A+ checklist in the ICT Setup
+   792→   792→                  tab — no manual dropdown here. See the A+ Setup Checklist card. */}
+   793→   793→              <div className="space-y-2">
+   794→   794→                <FieldLabel hint="When you entered the trade">Entry Time</FieldLabel>
+   795→   795→                <Input
+   796→   796→                  type="datetime-local"
+   797→   797→                  value={form.entryTime}
+   798→   798→                  onChange={(e) => setField("entryTime", e.target.value)}
+   799→   799→                />
+   800→   800→              </div>
+   801→   801→              <div className="space-y-2">
+   802→   802→                <FieldLabel hint="When you exited the trade">Exit Time</FieldLabel>
+   803→   803→                <Input
+   804→   804→                  type="datetime-local"
+   805→   805→                  value={form.exitTime}
+   806→   806→                  onChange={(e) => setField("exitTime", e.target.value)}
+   807→   807→                />
+   808→   808→              </div>
+   809→   809→            </div>
+   810→   810→          </Card>
+   811→   811→        </TabsContent>
+   812→   812→
+   813→   813→        {/* Execution */}
+   814→   814→        <TabsContent value="execution" className="space-y-4 mt-3">
+   815→   815→          <Card className="p-4 space-y-4">
+   816→   816→            <div className="grid sm:grid-cols-2 gap-3">
+   817→   817→              <div className="space-y-2">
+   818→   818→                <FieldLabel hint="Actual entry fill price">Entry Price</FieldLabel>
+   819→   819→                <Input value={form.entryPrice} onChange={(e) => setField("entryPrice", e.target.value)} />
+   820→   820→              </div>
+   821→   821→              <div className="space-y-2">
+   822→   822→                <FieldLabel hint="Actual exit fill price">Exit Price</FieldLabel>
+   823→   823→                <Input value={form.exitPrice} onChange={(e) => setField("exitPrice", e.target.value)} />
+   824→   824→              </div>
+   825→   825→              <div className="space-y-2">
+   826→   826→                <FieldLabel hint="Position size (e.g. 0.5 lots, 1 contract)">Quantity / Size</FieldLabel>
+   827→   827→                <Input value={form.quantity} onChange={(e) => setField("quantity", e.target.value)} />
+   828→   828→              </div>
+   829→   829→              <div className="space-y-2">
+   830→   830→                <FieldLabel hint="Risk as a decimal (e.g. 0.005 = 0.5%)">Risk %</FieldLabel>
+   831→   831→                <Input value={form.plannedRiskPct} onChange={(e) => setField("plannedRiskPct", e.target.value)} />
+   832→   832→              </div>
+   833→   833→            </div>
+   834→   834→            <Separator />
+   835→   835→            <div className="grid sm:grid-cols-2 gap-3">
+   836→   836→              <div className="space-y-2">
+   837→   837→                <FieldLabel hint="Trading fees in cents">Fees (cents)</FieldLabel>
+   838→   838→                <Input type="number" value={form.feesCents} onChange={(e) => setField("feesCents", Number(e.target.value))} />
+   839→   839→              </div>
+   840→   840→              <div className="space-y-2">
+   841→   841→                <FieldLabel hint="Commission in cents">Commission (cents)</FieldLabel>
+   842→   842→                <Input type="number" value={form.commissionCents} onChange={(e) => setField("commissionCents", Number(e.target.value))} />
+   843→   843→              </div>
+   844→   844→              <div className="space-y-2">
+   845→   845→                <FieldLabel hint="Swap charges in cents">Swap (cents)</FieldLabel>
+   846→   846→                <Input type="number" value={form.swapCents} onChange={(e) => setField("swapCents", Number(e.target.value))} />
+   847→   847→              </div>
+   848→   848→              <div className="space-y-2">
+   849→   849→                <FieldLabel hint="Slippage cost in cents">Slippage (cents)</FieldLabel>
+   850→   850→                <Input type="number" value={form.slippageCents} onChange={(e) => setField("slippageCents", Number(e.target.value))} />
+   851→   851→              </div>
+   852→   852→            </div>
+   853→   853→            <p className="text-xs text-muted-foreground">
+   854→   854→              P&L and R are computed server-side. Values shown are computed from the execution ledger and validated before storage.
+   855→   855→            </p>
+   856→   856→          </Card>
+   857→   857→        </TabsContent>
+   858→   858→
+   859→   859→        {/* Plan */}
+   860→   860→        <TabsContent value="plan" className="space-y-4 mt-3">
+   861→   861→          <Card className="p-4 space-y-4">
+   862→   862→            <div className="grid sm:grid-cols-3 gap-3">
+   863→   863→              <div className="space-y-2">
+   864→   864→                <FieldLabel hint="The price you planned to enter at">Planned Entry</FieldLabel>
+   865→   865→                <Input value={form.plannedEntryPrice} onChange={(e) => setField("plannedEntryPrice", e.target.value)} />
+   866→   866→              </div>
+   867→   867→              <div className="space-y-2">
+   868→   868→                <FieldLabel hint="The stop loss you planned">Planned Stop</FieldLabel>
+   869→   869→                <Input value={form.plannedStopPrice} onChange={(e) => setField("plannedStopPrice", e.target.value)} />
+   870→   870→              </div>
+   871→   871→              <div className="space-y-2">
+   872→   872→                <FieldLabel hint="The take profit you planned">Planned Target</FieldLabel>
+   873→   873→                <Input value={form.plannedTargetPrice} onChange={(e) => setField("plannedTargetPrice", e.target.value)} />
+   874→   874→              </div>
+   875→   875→            </div>
+   876→   876→            <Separator />
+   877→   877→            <div className="space-y-2">
+   878→   878→              <FieldLabel hint="Your core reasoning for taking this trade">Thesis: Why am I taking this trade?</FieldLabel>
+   879→   879→              <Textarea
+   880→   880→                value={form.thesis.why}
+   881→   881→                onChange={(e) => setField("thesis.why", e.target.value)}
+   882→   882→                rows={3}
+   883→   883→               
+   884→   884→              />
+   885→   885→            </div>
+   886→   886→            <div className="grid sm:grid-cols-2 gap-3">
+   887→   887→              <div className="space-y-2">
+   888→   888→                <FieldLabel hint="What signals confirm the setup is valid">What confirms the setup?</FieldLabel>
+   889→   889→                <Input
+   890→   890→                  value={(form.thesis.confirms ?? []).join(", ")}
+   891→   891→                  onChange={(e) => setField("thesis.confirms", e.target.value.split(",").map((s: string) => s.trim()).filter(Boolean))}
+   892→   892→                 
+   893→   893→                />
+   894→   894→              </div>
+   895→   895→              <div className="space-y-2">
+   896→   896→                <FieldLabel hint="What would invalidate this trade">What invalidates it?</FieldLabel>
+   897→   897→                <Input
+   898→   898→                  value={(form.thesis.invalidates ?? []).join(", ")}
+   899→   899→                  onChange={(e) => setField("thesis.invalidates", e.target.value.split(",").map((s: string) => s.trim()).filter(Boolean))}
+
+[showing lines 400-899 of 1434; use offset=900 with limit to continue reading]

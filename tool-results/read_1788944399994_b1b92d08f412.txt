@@ -1,0 +1,758 @@
+     1→"use client";
+     2→
+     3→/**
+     4→ * Settings — reference-aligned, simplified.
+     5→ *
+     6→ * Premium navy-blue + white-card aesthetic (matches
+     7→ * https://ae-tradingjournal.vercel.app/):
+     8→ *   - App background: bg-background
+     9→ *   - Cards: bg-card border border-border rounded-xl shadow-sm p-6
+    10→ *   - Section heading: text-sm font-semibold text-foreground uppercase tracking-wide
+    11→ *   - Save button: bg-primary text-primary-foreground hover:bg-primary/90
+    12→ *   - Sign Out: bg-red-50 text-loss hover:bg-loss/15 border-red-200
+    13→ *
+    14→ * Simplified to four tabs (the reference's Settings is intentionally minimal):
+    15→ *   1. Profile
+    16→ *   2. Trading (default) — General Preferences + Risk Threshold Banners + Account & Session
+    17→ *   3. Appearance
+    18→ *   4. Legal (cookie consent management preserved from prior task)
+    19→ *
+    20→ * Removed tabs (per the ref-site-alignment task): Accounts (now a standalone
+    21→ * Accounts page), Instruments, Privacy, Data (now in the standalone Backup
+    22→ * view). The dialogs that backed those tabs were deleted with them.
+    23→ */
+    24→
+    25→import { useQuery, useQueryClient } from "@tanstack/react-query";
+    26→import { useState, useEffect } from "react";
+    27→import { Button } from "@/components/ui/button";
+    28→import { Input } from "@/components/ui/input";
+    29→import { Switch } from "@/components/ui/switch";
+    30→import { Separator } from "@/components/ui/separator";
+    31→import { Skeleton } from "@/components/ui/skeleton";
+    32→import {
+    33→  Select,
+    34→  SelectContent,
+    35→  SelectItem,
+    36→  SelectTrigger,
+    37→  SelectValue,
+    38→} from "@/components/ui/select";
+    39→import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+    40→import {
+    41→  Dialog,
+    42→  DialogContent,
+    43→  DialogDescription,
+    44→  DialogHeader,
+    45→  DialogTitle,
+    46→} from "@/components/ui/dialog";
+    47→import {
+    48→  setTheme,
+    49→  setDensity,
+    50→  setLargerText,
+    51→  setReducedMotion,
+    52→  useTheme,
+    53→} from "@/components/theme-provider";
+    54→import { useConsent } from "@/lib/consent-store";
+    55→import { useAuth } from "@/lib/auth-store";
+    56→import { TimezoneSelect } from "@/components/common/timezone-select";
+    57→import { toast } from "sonner";
+    58→import {
+    59→  LogOut,
+    60→  Save,
+    61→  Shield,
+    62→  Palette,
+    63→  User,
+    64→  Sliders,
+    65→  Check,
+    66→  AlertTriangle,
+    67→} from "lucide-react";
+    68→import { cn } from "@/lib/utils";
+    69→import { FieldLabel } from "@/components/common/field-label";
+    70→
+    71→async function fetchSettings() {
+    72→  const res = await fetch("/api/settings", { cache: "no-store" });
+    73→  if (!res.ok) throw new Error("Failed to fetch settings");
+    74→  return res.json();
+    75→}
+    76→
+    77→export function SettingsView() {
+    78→  const qc = useQueryClient();
+    79→  const { data, isLoading } = useQuery({
+    80→    queryKey: ["settings"],
+    81→    queryFn: fetchSettings,
+    82→  });
+    83→
+    84→  // General preferences
+    85→  const [baseCurrencySymbol, setBaseCurrencySymbol] = useState("$");
+    86→  const [defaultRiskPct, setDefaultRiskPct] = useState("1");
+    87→  const [defaultSession, setDefaultSession] = useState("ny_am");
+    88→  const [timezone, setTimezone] = useState("UTC");
+    89→  const [dailyLossLimitPct, setDailyLossLimitPct] = useState("");
+    90→  const [dailyTradeLimit, setDailyTradeLimit] = useState<number | "">("");
+    91→
+    92→  // Risk threshold banners
+    93→  const [normalRiskMaxPct, setNormalRiskMaxPct] = useState("1.5");
+    94→  const [warningRiskMaxPct, setWarningRiskMaxPct] = useState("3");
+    95→  const [criticalRiskMaxPct, setCriticalRiskMaxPct] = useState("5");
+    96→
+    97→  // Profile
+    98→  const [name, setName] = useState("");
+    99→
+   100→  // Appearance
+   101→  const [density, setDensityState] = useState("comfortable");
+   102→  const [largerText, setLargerTextState] = useState(false);
+   103→  const [reducedMotion, setReducedMotionState] = useState(false);
+   104→
+   105→  // Reactive theme from the theme provider (tracks the actual current theme).
+   106→  const { theme, setTheme: applyTheme } = useTheme();
+   107→
+   108→  // Auth (for the Account & Session → Sign Out button).
+   109→  const { signOut } = useAuth();
+   110→
+   111→  useEffect(() => {
+   112→    if (data?.settings) {
+   113→      setBaseCurrencySymbol(data.settings.baseCurrencySymbol ?? "$");
+   114→      setDefaultRiskPct(data.settings.defaultRiskPct ?? "1");
+   115→      setDefaultSession(data.settings.defaultSession ?? "ny_am");
+   116→      setTimezone(data.settings.timezone ?? "UTC");
+   117→      setDailyLossLimitPct(data.settings.dailyLossLimitPct ?? "");
+   118→      setDailyTradeLimit(data.settings.dailyTradeLimit ?? "");
+   119→      setNormalRiskMaxPct(String(data.settings.normalRiskMaxPct ?? 1.5));
+   120→      setWarningRiskMaxPct(String(data.settings.warningRiskMaxPct ?? 3));
+   121→      setCriticalRiskMaxPct(String(data.settings.criticalRiskMaxPct ?? 5));
+   122→      setDensityState(data.settings.density || "comfortable");
+   123→      setLargerTextState(data.settings.largerText ?? false);
+   124→      setReducedMotionState(data.settings.reducedMotion ?? false);
+   125→    }
+   126→    if (data?.user) {
+   127→      // Initialize the editable display name from the settings GET response
+   128→      // (which now includes `user.name`). `data.user.name` is null when the
+   129→      // user has never set a name.
+   130→      setName(data.user.name ?? "");
+   131→    }
+   132→  }, [data]);
+   133→
+   134→  async function saveSettings() {
+   135→    const res = await fetch("/api/settings", {
+   136→      method: "PATCH",
+   137→      headers: { "Content-Type": "application/json" },
+   138→      body: JSON.stringify({
+   139→        name,
+   140→        theme,
+   141→        density,
+   142→        largerText,
+   143→        reducedMotion,
+   144→        baseCurrencySymbol,
+   145→        defaultRiskPct,
+   146→        defaultSession,
+   147→        timezone,
+   148→        dailyLossLimitPct,
+   149→        dailyTradeLimit: dailyTradeLimit === "" ? null : dailyTradeLimit,
+   150→        normalRiskMaxPct: Number(normalRiskMaxPct),
+   151→        warningRiskMaxPct: Number(warningRiskMaxPct),
+   152→        criticalRiskMaxPct: Number(criticalRiskMaxPct),
+   153→      }),
+   154→    });
+   155→    if (res.ok) {
+   156→      toast.success("Settings saved.");
+   157→      setTheme(theme as any);
+   158→      setDensity(density as any);
+   159→      setLargerText(largerText);
+   160→      setReducedMotion(reducedMotion);
+   161→      qc.invalidateQueries({ queryKey: ["settings"] });
+   162→    } else {
+   163→      toast.error("Failed to save settings.");
+   164→    }
+   165→  }
+   166→
+   167→  if (isLoading) {
+   168→    return (
+   169→      <div className="min-h-full bg-background p-4 md:p-6 lg:p-8">
+   170→        <div className="mx-auto max-w-4xl space-y-6">
+   171→          <Skeleton className="h-10 w-48 rounded-lg" />
+   172→          <Skeleton className="h-10 w-full rounded-lg" />
+   173→          <Skeleton className="h-96 rounded-xl" />
+   174→        </div>
+   175→      </div>
+   176→    );
+   177→  }
+   178→
+   179→  return (
+   180→    <div className="min-h-full bg-background">
+   181→      <div className="mx-auto max-w-4xl px-4 py-6 md:px-6 md:py-8 lg:px-8 space-y-6">
+   182→        {/* Header */}
+   183→        <div>
+   184→          <h1 className="text-2xl md:text-3xl font-bold text-foreground tracking-tight">
+   185→            Settings
+   186→          </h1>
+   187→          <p className="text-sm text-muted-foreground mt-1">
+   188→            Application Settings &amp; Storage Durability
+   189→          </p>
+   190→        </div>
+   191→
+   192→        <Tabs defaultValue="trading">
+   193→          <div className="border-b border-border overflow-x-auto">
+   194→            <TabsList className="bg-transparent h-auto p-0 rounded-none gap-0 w-auto">
+   195→              <SettingsTabTrigger value="trading" icon={Sliders}>
+   196→                Trading
+   197→              </SettingsTabTrigger>
+   198→              <SettingsTabTrigger value="profile" icon={User}>
+   199→                Profile
+   200→              </SettingsTabTrigger>
+   201→              <SettingsTabTrigger value="appearance" icon={Palette}>
+   202→                Appearance
+   203→              </SettingsTabTrigger>
+   204→              <SettingsTabTrigger value="legal" icon={Shield}>
+   205→                Legal
+   206→              </SettingsTabTrigger>
+   207→            </TabsList>
+   208→          </div>
+   209→
+   210→          {/* Trading tab — primary, default-open */}
+   211→          <TabsContent value="trading" className="mt-6 space-y-6 focus-visible:outline-none">
+   212→            {/* General Preferences */}
+   213→            <SettingsCard>
+   214→              <SettingsSectionHeading>General Preferences</SettingsSectionHeading>
+   215→              <p className="text-xs text-muted-foreground mt-1">
+   216→                Defaults applied when creating a new trade.
+   217→              </p>
+   218→              <div className="grid sm:grid-cols-2 gap-4 mt-5">
+   219→                <div className="space-y-1.5">
+   220→                  <FieldLabel hint="Symbol used in currency display ($, €, £, …)">
+   221→                    Base Currency Symbol
+   222→                  </FieldLabel>
+   223→                  <Input
+   224→                    value={baseCurrencySymbol}
+   225→                    onChange={(e) => setBaseCurrencySymbol(e.target.value)}
+   226→                    placeholder="$"
+   227→                    className="border-input rounded-lg focus-visible:ring-[#1e2330] focus-visible:border-[#1e2330]"
+   228→                  />
+   229→                  <p className="text-[11px] text-muted-foreground">Default: $</p>
+   230→                </div>
+   231→                <div className="space-y-1.5">
+   232→                  <FieldLabel hint="Default risk per trade (as %)">Default Risk %</FieldLabel>
+   233→                  <Input
+   234→                    type="number"
+   235→                    min="0"
+   236→                    step="0.1"
+   237→                    value={defaultRiskPct}
+   238→                    onChange={(e) => setDefaultRiskPct(e.target.value)}
+   239→                    className="border-input rounded-lg focus-visible:ring-[#1e2330] focus-visible:border-[#1e2330]"
+   240→                  />
+   241→                  <p className="text-[11px] text-muted-foreground">Default: 1</p>
+   242→                </div>
+   243→                <div className="space-y-1.5">
+   244→                  <FieldLabel hint="Default session for new trades">Default Session</FieldLabel>
+   245→                  <Select value={defaultSession} onValueChange={setDefaultSession}>
+   246→                    <SelectTrigger className="border-input rounded-lg focus-visible:ring-[#1e2330] focus-visible:border-[#1e2330]">
+   247→                      <SelectValue />
+   248→                    </SelectTrigger>
+   249→                    <SelectContent>
+   250→                      <SelectItem value="asia">Asia</SelectItem>
+   251→                      <SelectItem value="london">London</SelectItem>
+   252→                      <SelectItem value="ny_am">New York AM</SelectItem>
+   253→                      <SelectItem value="ny_pm">New York PM</SelectItem>
+   254→                    </SelectContent>
+   255→                  </Select>
+   256→                </div>
+   257→                <div className="space-y-1.5">
+   258→                  <FieldLabel hint="Max trades per day">Daily Trade Limit</FieldLabel>
+   259→                  <Input
+   260→                    type="number"
+   261→                    min="0"
+   262→                    value={dailyTradeLimit}
+   263→                    onChange={(e) =>
+   264→                      setDailyTradeLimit(e.target.value === "" ? "" : Number(e.target.value))
+   265→                    }
+   266→                    placeholder="—"
+   267→                    className="border-input rounded-lg focus-visible:ring-[#1e2330] focus-visible:border-[#1e2330]"
+   268→                  />
+   269→                </div>
+   270→                <div className="space-y-1.5">
+   271→                  <FieldLabel hint="Max daily loss (as %)">Daily Loss Limit %</FieldLabel>
+   272→                  <Input
+   273→                    value={dailyLossLimitPct}
+   274→                    onChange={(e) => setDailyLossLimitPct(e.target.value)}
+   275→                    placeholder="—"
+   276→                    className="border-input rounded-lg focus-visible:ring-[#1e2330] focus-visible:border-[#1e2330]"
+   277→                  />
+   278→                </div>
+   279→              </div>
+   280→            </SettingsCard>
+   281→
+   282→            {/* Risk Threshold Banners */}
+   283→            <SettingsCard>
+   284→              <SettingsSectionHeading>Risk Threshold Banners</SettingsSectionHeading>
+   285→              <p className="text-xs text-muted-foreground mt-1">
+   286→                DnD flags a trade&apos;s planned risk against these percentage
+   287→                thresholds. Use them to keep your sizing honest at a glance.
+   288→              </p>
+   289→              <div className="grid sm:grid-cols-3 gap-4 mt-5">
+   290→                <div className="space-y-1.5">
+   291→                  <FieldLabel hint="Up to this % is normal">Normal Risk Max %</FieldLabel>
+   292→                  <Input
+   293→                    type="number"
+   294→                    min="0"
+   295→                    step="0.1"
+   296→                    value={normalRiskMaxPct}
+   297→                    onChange={(e) => setNormalRiskMaxPct(e.target.value)}
+   298→                    className="border-input rounded-lg focus-visible:ring-emerald-500 focus-visible:border-emerald-500"
+   299→                  />
+   300→                </div>
+   301→                <div className="space-y-1.5">
+   302→                  <FieldLabel hint="Above normal — caution">Warning Risk Max %</FieldLabel>
+   303→                  <Input
+   304→                    type="number"
+   305→                    min="0"
+   306→                    step="0.1"
+   307→                    value={warningRiskMaxPct}
+   308→                    onChange={(e) => setWarningRiskMaxPct(e.target.value)}
+   309→                    className="border-input rounded-lg focus-visible:ring-amber-500 focus-visible:border-amber-500"
+   310→                  />
+   311→                </div>
+   312→                <div className="space-y-1.5">
+   313→                  <FieldLabel hint="Above warning — stop">Critical Risk Max %</FieldLabel>
+   314→                  <Input
+   315→                    type="number"
+   316→                    min="0"
+   317→                    step="0.1"
+   318→                    value={criticalRiskMaxPct}
+   319→                    onChange={(e) => setCriticalRiskMaxPct(e.target.value)}
+   320→                    className="border-input rounded-lg focus-visible:ring-red-500 focus-visible:border-red-500"
+   321→                  />
+   322→                </div>
+   323→              </div>
+   324→              {/* Live preview */}
+   325→              <div className="mt-5 rounded-lg border border-border bg-muted/50 p-3">
+   326→                <div className="text-[10px] uppercase tracking-wide text-muted-foreground font-semibold mb-2">
+   327→                  Live Preview
+   328→                </div>
+   329→                <div className="flex flex-wrap items-center gap-2 text-xs font-medium">
+   330→                  <span className="inline-flex items-center gap-1 rounded-md border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-profit">
+   331→                    <Check className="h-3 w-3" />
+   332→                    Normal ≤ {normalRiskMaxPct}%
+   333→                  </span>
+   334→                  <span className="text-muted-foreground/70">|</span>
+   335→                  <span className="inline-flex items-center gap-1 rounded-md border border-amber-200 bg-amber-50 px-2.5 py-1 text-warning">
+   336→                    <AlertTriangle className="h-3 w-3" />
+   337→                    Warning ≤ {warningRiskMaxPct}%
+   338→                  </span>
+   339→                  <span className="text-muted-foreground/70">|</span>
+   340→                  <span className="inline-flex items-center gap-1 rounded-md border border-red-200 bg-red-50 px-2.5 py-1 text-loss">
+   341→                    <AlertTriangle className="h-3 w-3" />
+   342→                    Critical &gt; {criticalRiskMaxPct}%
+   343→                  </span>
+   344→                </div>
+   345→              </div>
+   346→            </SettingsCard>
+   347→
+   348→            {/* Save Preferences */}
+   349→            <div className="flex justify-end">
+   350→              <Button
+   351→                onClick={saveSettings}
+   352→                className="bg-primary text-primary-foreground hover:bg-primary/90 rounded-lg shadow-sm"
+   353→              >
+   354→                <Save className="h-4 w-4" />
+   355→                Save Preferences
+   356→              </Button>
+   357→            </div>
+   358→
+   359→            {/* Account & Session */}
+   360→            <SettingsCard>
+   361→              <SettingsSectionHeading>Account &amp; Session</SettingsSectionHeading>
+   362→              <p className="text-xs text-muted-foreground mt-1">
+   363→                Manage your active session. Signing out will return you to the
+   364→                landing page.
+   365→              </p>
+   366→              <div className="mt-5">
+   367→                <Button
+   368→                  variant="outline"
+   369→                  onClick={() => signOut()}
+   370→                  className="bg-red-50 text-loss hover:bg-loss/15 border-red-200 rounded-lg"
+   371→                >
+   372→                  <LogOut className="h-4 w-4" />
+   373→                  Sign Out
+   374→                </Button>
+   375→              </div>
+   376→            </SettingsCard>
+   377→          </TabsContent>
+   378→
+   379→          {/* Profile tab */}
+   380→          <TabsContent value="profile" className="mt-6 space-y-6 focus-visible:outline-none">
+   381→            <SettingsCard>
+   382→              <SettingsSectionHeading>Profile</SettingsSectionHeading>
+   383→              <p className="text-xs text-muted-foreground mt-1">
+   384→                Your display name and timezone. Used across the app to personalize
+   385→                your experience and bucket calendar days correctly.
+   386→              </p>
+   387→              <div className="grid sm:grid-cols-2 gap-4 mt-5">
+   388→                <div className="space-y-1.5">
+   389→                  <FieldLabel hint="Your display name">Name</FieldLabel>
+   390→                  <Input
+   391→                    value={name}
+   392→                    onChange={(e) => setName(e.target.value)}
+   393→                    placeholder="Your name"
+   394→                    className="border-input rounded-lg focus-visible:ring-[#1e2330] focus-visible:border-[#1e2330]"
+   395→                  />
+   396→                </div>
+   397→                <div className="space-y-1.5">
+   398→                  <FieldLabel required>Timezone</FieldLabel>
+   399→                  <TimezoneSelect value={timezone} onChange={setTimezone} />
+   400→                  <p className="text-[11px] text-muted-foreground">
+   401→                    IANA timezone. Used for calendar day bucketing and analytics.
+   402→                  </p>
+   403→                </div>
+   404→              </div>
+   405→            </SettingsCard>
+   406→            <div className="flex justify-end">
+   407→              <Button
+   408→                onClick={saveSettings}
+   409→                className="bg-primary text-primary-foreground hover:bg-primary/90 rounded-lg shadow-sm"
+   410→              >
+   411→                <Save className="h-4 w-4" />
+   412→                Save Profile
+   413→              </Button>
+   414→            </div>
+   415→          </TabsContent>
+   416→
+   417→          {/* Appearance tab */}
+   418→          <TabsContent value="appearance" className="mt-6 space-y-6 focus-visible:outline-none">
+   419→            <SettingsCard>
+   420→              <SettingsSectionHeading>Theme</SettingsSectionHeading>
+   421→              <p className="text-xs text-muted-foreground mt-1">
+   422→                Choose how DnD looks. Each theme is a complete visual system.
+   423→              </p>
+   424→              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mt-5">
+   425→                {[
+   426→                  { key: "nordic", label: "Nordic Clean", desc: "Light, quiet, precise" },
+   427→                  { key: "terminal", label: "Sleek Terminal", desc: "Dark, technical" },
+   428→                  { key: "institutional", label: "Institutional", desc: "Premium, analytical" },
+   429→                ].map((t) => (
+   430→                  <button
+   431→                    key={t.key}
+   432→                    onClick={() => applyTheme(t.key as any)}
+   433→                    className={cn(
+   434→                      "p-4 rounded-lg border text-left transition-colors",
+   435→                      theme === t.key
+   436→                        ? "border-[#1e2330] ring-2 ring-[#1e2330]/20 bg-card"
+   437→                        : "border-border hover:bg-muted/50 bg-card",
+   438→                    )}
+   439→                  >
+   440→                    <div className="font-medium text-sm text-foreground">{t.label}</div>
+   441→                    <div className="text-xs text-muted-foreground mt-1">{t.desc}</div>
+   442→                    {theme === t.key && (
+   443→                      <div className="mt-2 inline-flex items-center gap-1 text-[10px] font-semibold text-primary uppercase tracking-wide">
+   444→                        <Check className="h-3 w-3" /> Active
+   445→                      </div>
+   446→                    )}
+   447→                  </button>
+   448→                ))}
+   449→              </div>
+   450→            </SettingsCard>
+   451→
+   452→            <SettingsCard>
+   453→              <SettingsSectionHeading>Display</SettingsSectionHeading>
+   454→              <div className="mt-5 space-y-4">
+   455→                <div className="space-y-1.5">
+   456→                  <FieldLabel required>Density</FieldLabel>
+   457→                  <Select
+   458→                    value={density}
+   459→                    onValueChange={(v) => {
+   460→                      setDensityState(v);
+   461→                      setDensity(v as any);
+   462→                    }}
+   463→                  >
+   464→                    <SelectTrigger className="border-input rounded-lg focus-visible:ring-[#1e2330] focus-visible:border-[#1e2330]">
+   465→                      <SelectValue />
+   466→                    </SelectTrigger>
+   467→                    <SelectContent>
+   468→                      <SelectItem value="comfortable">Comfortable</SelectItem>
+   469→                      <SelectItem value="compact">Compact</SelectItem>
+   470→                    </SelectContent>
+   471→                  </Select>
+   472→                </div>
+   473→                <Separator className="bg-border" />
+   474→                <div className="flex items-center justify-between gap-3">
+   475→                  <div>
+   476→                    <div className="text-sm font-medium text-foreground">Larger Text</div>
+   477→                    <div className="text-xs text-muted-foreground">
+   478→                      Increase base font size for readability.
+   479→                    </div>
+   480→                  </div>
+   481→                  <Switch
+   482→                    checked={largerText}
+   483→                    onCheckedChange={(v) => {
+   484→                      setLargerTextState(v);
+   485→                      setLargerText(v);
+   486→                    }}
+   487→                  />
+   488→                </div>
+   489→                <Separator className="bg-border" />
+   490→                <div className="flex items-center justify-between gap-3">
+   491→                  <div>
+   492→                    <div className="text-sm font-medium text-foreground">Reduced Motion</div>
+   493→                    <div className="text-xs text-muted-foreground">
+   494→                      Minimize animations and transitions.
+   495→                    </div>
+   496→                  </div>
+   497→                  <Switch
+   498→                    checked={reducedMotion}
+   499→                    onCheckedChange={(v) => {
+   500→                      setReducedMotionState(v);
+   501→                      setReducedMotion(v);
+   502→                    }}
+   503→                  />
+   504→                </div>
+   505→              </div>
+   506→            </SettingsCard>
+   507→            <div className="flex justify-end">
+   508→              <Button
+   509→                onClick={saveSettings}
+   510→                className="bg-primary text-primary-foreground hover:bg-primary/90 rounded-lg shadow-sm"
+   511→              >
+   512→                <Save className="h-4 w-4" />
+   513→                Save Appearance
+   514→              </Button>
+   515→            </div>
+   516→          </TabsContent>
+   517→
+   518→          {/* Legal tab — preserved from prior task (cookie consent) */}
+   519→          <TabsContent value="legal" className="mt-6 space-y-6 focus-visible:outline-none">
+   520→            <SettingsCard>
+   521→              <SettingsSectionHeading>Legal Documents</SettingsSectionHeading>
+   522→              <p className="text-xs text-muted-foreground mt-1">
+   523→                Review the policies that govern your use of DnD. Acceptance is
+   524→                recorded against the version shown.
+   525→              </p>
+   526→              <div className="mt-5 space-y-2">
+   527→                <LegalDoc doc="terms" label="Terms of Service" />
+   528→                <LegalDoc doc="privacy" label="Privacy Policy" />
+   529→                <LegalDoc doc="cookies" label="Cookie Policy" />
+   530→              </div>
+   531→              <Separator className="bg-border my-4" />
+   532→              <CookieConsentManagement />
+   533→              <Separator className="bg-border my-4" />
+   534→              <p className="text-xs text-muted-foreground">
+   535→                DnD is a trading journaling, analytics and performance-management
+   536→                product. It is not financial advice, not investment advice, and
+   537→                does not guarantee profit.
+   538→              </p>
+   539→            </SettingsCard>
+   540→          </TabsContent>
+   541→        </Tabs>
+   542→      </div>
+   543→    </div>
+   544→  );
+   545→}
+   546→
+   547→// ---------------------------------------------------------------------------
+   548→// Shared presentational primitives (slate/white aesthetic)
+   549→// ---------------------------------------------------------------------------
+   550→
+   551→function SettingsCard({ children }: { children: React.ReactNode }) {
+   552→  return (
+   553→    <div className="bg-card rounded-xl border border-border p-6 shadow-sm">
+   554→      {children}
+   555→    </div>
+   556→  );
+   557→}
+   558→
+   559→function SettingsSectionHeading({ children }: { children: React.ReactNode }) {
+   560→  return (
+   561→    <h2 className="text-sm font-semibold text-foreground uppercase tracking-wide">
+   562→      {children}
+   563→    </h2>
+   564→  );
+   565→}
+   566→
+   567→function SettingsTabTrigger({
+   568→  value,
+   569→  icon: Icon,
+   570→  children,
+   571→}: {
+   572→  value: string;
+   573→  icon?: React.ComponentType<{ className?: string }>;
+   574→  children: React.ReactNode;
+   575→}) {
+   576→  return (
+   577→    <TabsTrigger
+   578→      value={value}
+   579→      className={cn(
+   580→        "rounded-none border-b-2 border-transparent bg-transparent px-4 py-3 text-sm font-medium whitespace-nowrap gap-1.5",
+   581→        "data-[state=active]:bg-transparent data-[state=active]:shadow-none data-[state=active]:border-[#1e2330] data-[state=active]:text-foreground",
+   582→        "text-muted-foreground hover:text-foreground",
+   583→      )}
+   584→    >
+   585→      {Icon && <Icon className="h-4 w-4" />}
+   586→      {children}
+   587→    </TabsTrigger>
+   588→  );
+   589→}
+   590→
+   591→// ---------------------------------------------------------------------------
+   592→// LegalDoc — preserved from prior task (reads /api/legal/[doc], allows
+   593→// acceptance / re-acceptance on version changes).
+   594→// ---------------------------------------------------------------------------
+   595→
+   596→function LegalDoc({ doc, label }: { doc: string; label: string }) {
+   597→  const [state, setState] = useState<any>(null);
+   598→  const [open, setOpen] = useState(false);
+   599→
+   600→  useEffect(() => {
+   601→    fetch(`/api/legal/${doc}`).then((r) => r.json()).then(setState);
+   602→  }, [doc]);
+   603→
+   604→  async function accept() {
+   605→    const res = await fetch(`/api/legal/${doc}`, {
+   606→      method: "POST",
+   607→      headers: { "Content-Type": "application/json" },
+   608→      body: JSON.stringify({}),
+   609→    });
+   610→    if (res.ok) {
+   611→      toast.success(`${label} accepted.`);
+   612→      const data = await res.json();
+   613→      setState({
+   614→        ...state,
+   615→        accepted: true,
+   616→        acceptedAt: data.acceptedAt,
+   617→        isCurrent: true,
+   618→        version: data.version,
+   619→      });
+   620→    }
+   621→  }
+   622→
+   623→  const needsAccept = state && (!state.accepted || state.isCurrent === false);
+   624→
+   625→  return (
+   626→    <div className="flex items-center justify-between gap-3 py-2 rounded-lg hover:bg-muted/50 px-2 -mx-2">
+   627→      <div className="min-w-0">
+   628→        <div className="font-medium text-sm text-foreground">{label}</div>
+   629→        <div className="text-xs text-muted-foreground">
+   630→          {state ? (
+   631→            <>
+   632→              Version {state.version}
+   633→              {" · "}
+   634→              {state.accepted
+   635→                ? `Accepted ${new Date(state.acceptedAt).toLocaleDateString()}`
+   636→                : "Not yet accepted"}
+   637→              {state.isCurrent === false && (
+   638→                <span className="text-warning"> · outdated (v{state.acceptedVersion || "?"})</span>
+   639→              )}
+   640→            </>
+   641→          ) : (
+   642→            "Loading…"
+   643→          )}
+   644→        </div>
+   645→      </div>
+   646→      <div className="flex gap-2 shrink-0">
+   647→        <Button
+   648→          size="sm"
+   649→          variant="ghost"
+   650→          onClick={() => setOpen(true)}
+   651→          className="text-muted-foreground hover:text-foreground hover:bg-background"
+   652→        >
+   653→          View
+   654→        </Button>
+   655→        {needsAccept && (
+   656→          <Button
+   657→            size="sm"
+   658→            onClick={accept}
+   659→            className="bg-primary text-primary-foreground hover:bg-primary/90"
+   660→          >
+   661→            Accept
+   662→          </Button>
+   663→        )}
+   664→      </div>
+   665→      <Dialog open={open} onOpenChange={setOpen}>
+   666→        <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
+   667→          <DialogHeader>
+   668→            <DialogTitle>{label}</DialogTitle>
+   669→            {state && <DialogDescription>Version {state.version}</DialogDescription>}
+   670→          </DialogHeader>
+   671→          <div className="text-sm text-muted-foreground whitespace-pre-wrap leading-relaxed">
+   672→            {state?.content ?? "Document text."}
+   673→          </div>
+   674→        </DialogContent>
+   675→      </Dialog>
+   676→    </div>
+   677→  );
+   678→}
+   679→
+   680→/**
+   681→ * Cookie consent management — lets the user review and change their cookie
+   682→ * preferences from Settings → Legal. Reads from / writes to the same
+   683→ * consent-store used by the public banner.
+   684→ */
+   685→function CookieConsentManagement() {
+   686→  const { choice, timestamp, version, preferences, openSettings, reset } = useConsent();
+   687→  const [mounted, setMounted] = useState(false);
+   688→  useEffect(() => setMounted(true), []);
+   689→
+   690→  if (!mounted) return null;
+   691→
+   692→  return (
+   693→    <div className="space-y-3">
+   694→      <div className="text-sm font-semibold text-foreground uppercase tracking-wide">
+   695→        Cookie Consent
+   696→      </div>
+   697→      <div className="flex items-center justify-between gap-3 py-1">
+   698→        <div>
+   699→          <div className="text-sm text-foreground">
+   700→            {choice === "undecided"
+   701→              ? "No choice made yet."
+   702→              : choice === "accepted"
+   703→                ? `Accepted · ${timestamp ? new Date(timestamp).toLocaleDateString() : ""}`
+   704→                : `Rejected non-essential · ${timestamp ? new Date(timestamp).toLocaleDateString() : ""}`}
+   705→          </div>
+   706→          <div className="text-xs text-muted-foreground">consent v{version}</div>
+   707→        </div>
+   708→        <div className="flex gap-2">
+   709→          <Button
+   710→            size="sm"
+   711→            variant="outline"
+   712→            onClick={openSettings}
+   713→            className="border-input text-foreground hover:bg-muted/50"
+   714→          >
+   715→            Manage
+   716→          </Button>
+   717→          <Button
+   718→            size="sm"
+   719→            variant="ghost"
+   720→            onClick={reset}
+   721→            className="text-muted-foreground hover:bg-background"
+   722→          >
+   723→            Re-show banner
+   724→          </Button>
+   725→        </div>
+   726→      </div>
+   727→      <div className="flex flex-wrap gap-2 text-[10px]">
+   728→        <span className="rounded border border-emerald-200 bg-emerald-50 px-2 py-1 font-medium text-profit">
+   729→          Essential: on
+   730→        </span>
+   731→        <span className="rounded border border-emerald-200 bg-emerald-50 px-2 py-1 font-medium text-profit">
+   732→          Functional: on
+   733→        </span>
+   734→        <span
+   735→          className={cn(
+   736→            "rounded border px-2 py-1 font-medium",
+   737→            preferences.analytics
+   738→              ? "border-emerald-200 bg-emerald-50 text-profit"
+   739→              : "border-border bg-muted/50 text-muted-foreground",
+   740→          )}
+   741→        >
+   742→          Analytics: {preferences.analytics ? "on" : "off"}
+   743→        </span>
+   744→        <span
+   745→          className={cn(
+   746→            "rounded border px-2 py-1 font-medium",
+   747→            preferences.marketing
+   748→              ? "border-emerald-200 bg-emerald-50 text-profit"
+   749→              : "border-border bg-muted/50 text-muted-foreground",
+   750→          )}
+   751→        >
+   752→          Marketing: {preferences.marketing ? "on" : "off"}
+   753→        </span>
+   754→      </div>
+   755→    </div>
+   756→  );
+   757→}
+   758→

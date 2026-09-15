@@ -1,0 +1,806 @@
+     1→"use client";
+     2→
+     3→import { useQuery, useQueryClient } from "@tanstack/react-query";
+     4→import { useNav } from "@/lib/nav-store";
+     5→import { Card } from "@/components/ui/card";
+     6→import { Badge } from "@/components/ui/badge";
+     7→import { Button } from "@/components/ui/button";
+     8→import { Skeleton } from "@/components/ui/skeleton";
+     9→import { Separator } from "@/components/ui/separator";
+    10→import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+    11→import { formatSignedCents, formatR, formatPrice, centsToNumberString } from "@/lib/money";
+    12→import { dToNumber } from "@/lib/decimal";
+    13→import {
+    14→  parseChecklistItems,
+    15→  parseAnswers,
+    16→  type ChecklistItem,
+    17→  type ChecklistAnswer,
+    18→} from "@/lib/checklist-evaluation";
+    19→import {
+    20→  ArrowLeft,
+    21→  Copy,
+    22→  Trash2,
+    23→  Edit,
+    24→  TrendingUp,
+    25→  TrendingDown,
+    26→  Clock,
+    27→  Tag,
+    28→  AlertTriangle,
+    29→  Image as ImageIcon,
+    30→  Check,
+    31→  X,
+    32→  Sparkles,
+    33→  ClipboardList,
+    34→  HelpCircle,
+    35→  Lock,
+    36→  Play,
+    37→} from "lucide-react";
+    38→import { toast } from "sonner";
+    39→import { cn } from "@/lib/utils";
+    40→import { useState, useMemo } from "react";
+    41→import { ImageViewer } from "@/components/trade/image-viewer";
+    42→import { CloseTradeModal } from "@/components/trade/close-trade-modal";
+    43→import { ExecuteTradeModal } from "@/components/trade/execute-trade-modal";
+    44→import { useRouter } from "next/navigation";
+    45→
+    46→async function fetchTrade(id: string) {
+    47→  const res = await fetch(`/api/trades/${id}`, { cache: "no-store" });
+    48→  if (!res.ok) throw new Error("Failed to load trade");
+    49→  return res.json();
+    50→}
+    51→
+    52→export function TradeDetailView() {
+    53→  const { params, navigate } = useNav();
+    54→  const qc = useQueryClient();
+    55→  const id = params.id;
+    56→  const { data: trade, isLoading } = useQuery({
+    57→    queryKey: ["trade", id],
+    58→    queryFn: () => fetchTrade(id),
+    59→    enabled: !!id,
+    60→  });
+    61→  const [viewerOpen, setViewerOpen] = useState(false);
+    62→  const [viewerIndex, setViewerIndex] = useState(0);
+    63→  const [closeTradeOpen, setCloseTradeOpen] = useState(false);
+    64→  const [executeTradeOpen, setExecuteTradeOpen] = useState(false);
+    65→
+    66→  // Latest checklist evaluation for the trade (Fix 3). The trade-detail GET
+    67→  // returns `checklistEvaluations` ordered by `evaluatedAt` desc, so the
+    68→  // first entry is the most recent. We parse the version's `itemsJson`
+    69→  // (for item labels) and the evaluation's `rawAnswersJson` (for the
+    70→  // checked/unchecked state of each item) once here so the Setup tab can
+    71→  // render the full evaluation breakdown. Declared before the early-return
+    72→  // guards so the hook ordering stays stable across renders.
+    73→  const checklistEvaluation = useMemo(() => {
+    74→    if (!trade) return null;
+    75→    const evals = Array.isArray(trade.checklistEvaluations)
+    76→      ? trade.checklistEvaluations
+    77→      : [];
+    78→    if (evals.length === 0) return null;
+    79→    const latest = evals[0];
+    80→    const version = latest?.checklistVersion;
+    81→    if (!version) return null;
+    82→    const items: ChecklistItem[] = parseChecklistItems(version.itemsJson);
+    83→    const answers: ChecklistAnswer = parseAnswers(latest.rawAnswersJson);
+    84→    const checklistName = version.checklist?.name ?? "Checklist";
+    85→    return {
+    86→      checklistName,
+    87→      versionLabel: version.versionLabel,
+    88→      weightedScore: latest.weightedScore,
+    89→      finalGrade: latest.finalGrade,
+    90→      evaluatedAt: latest.evaluatedAt,
+    91→      items,
+    92→      answers,
+    93→    };
+    94→  }, [trade]);
+    95→
+    96→  if (isLoading) {
+    97→    return (
+    98→      <div className="p-4 md:p-6 space-y-3">
+    99→        <Skeleton className="h-8 w-32" />
+   100→        <Skeleton className="h-24" />
+   101→        <Skeleton className="h-64" />
+   102→      </div>
+   103→    );
+   104→  }
+   105→
+   106→  if (!trade) return null;
+   107→
+   108→  const pnl = formatSignedCents(trade.netPnlCents);
+   109→  const setup = safeJson(trade.setupJson, {});
+   110→  const thesis = safeJson(trade.thesisJson, {});
+   111→  const psychBefore = safeJson(trade.psychBeforeJson, {});
+   112→  const psychAfter = safeJson(trade.psychAfterJson, {});
+   113→  const behaviorFlags: string[] = safeJson(trade.behaviorFlagsJson, []);
+   114→  const tags: string[] = safeJson(trade.tagsJson, []);
+   115→  const planAdherence = safeJson(trade.planAdherenceJson, {});
+   116→
+   117→  const media = trade.media ?? [];
+   118→  // Evidence timeline renders both images and videos. The ImageViewer modal
+   119→  // is image-only by design, but videos get an inline <video controls>
+   120→  // player below in the grid (Fix 4 — video playback).
+   121→  const images = media.filter((m: any) => m.kind === "image");
+   122→  const evidenceMedia = media.filter((m: any) => m.kind === "image" || m.kind === "video");
+   123→
+   124→  // Strategy + version display label (Fix 2). Falls back to just the
+   125→  // strategy name if no version is linked, or "-" if neither exists.
+   126→  const strategyLabel = trade.strategy?.name
+   127→    ? trade.strategyVersion?.versionLabel
+   128→      ? `${trade.strategy.name} v${trade.strategyVersion.versionLabel}`
+   129→      : trade.strategy.name
+   130→    : "-";
+   131→
+   132→  return (
+   133→    <div className="p-4 md:p-6 space-y-4 max-w-5xl">
+   134→      {/* Header */}
+   135→      <div className="flex items-center gap-3">
+   136→        <Button variant="ghost" size="icon" onClick={() => navigate("tradesLog")}>
+   137→          <ArrowLeft className="h-4 w-4" />
+   138→        </Button>
+   139→        <div className="flex-1 min-w-0">
+   140→          <div className="flex items-center gap-2 flex-wrap">
+   141→            <h1 className="text-2xl font-semibold tracking-tight">{trade.instrumentSymbol}</h1>
+   142→            <Badge variant="outline" className={cn(trade.direction === "long" ? "text-profit" : "text-loss")}>
+   143→              {trade.direction === "long" ? "LONG" : "SHORT"}
+   144→            </Badge>
+   145→            {trade.setupGrade && (
+   146→              <Badge variant="outline" className={cn(gradeClass(trade.setupGrade))}>{trade.setupGrade}</Badge>
+   147→            )}
+   148→            {trade.strategyVersion?.versionLabel && (
+   149→              <Badge variant="outline" className="font-normal">
+   150→                v{trade.strategyVersion.versionLabel}
+   151→              </Badge>
+   152→            )}
+   153→            <Badge
+   154→              variant="secondary"
+   155→              className={cn(
+   156→                "capitalize",
+   157→                trade.status === "planned" && "bg-primary/10 text-primary",
+   158→                trade.status === "open" && "bg-warning/15 text-warning",
+   159→              )}
+   160→            >
+   161→              {trade.status}
+   162→            </Badge>
+   163→          </div>
+   164→          <div className="mt-1 text-sm text-muted-foreground">
+   165→            {trade.entryTime ? new Date(trade.entryTime).toLocaleString() : "Open"} · {trade.session ?? "-"}
+   166→          </div>
+   167→        </div>
+   168→        <div className="text-right">
+   169→          <div className={cn("text-xl font-semibold tnum", pnl.sign > 0 ? "text-profit" : pnl.sign < 0 ? "text-loss" : "")}>
+   170→            {pnl.text}
+   171→          </div>
+   172→          <div className={cn("text-sm tnum", trade.actualR && dToNumber(trade.actualR) > 0 ? "text-profit" : trade.actualR && dToNumber(trade.actualR) < 0 ? "text-loss" : "text-muted-foreground")}>
+   173→            {formatR(trade.actualR)}
+   174→          </div>
+   175→        </div>
+   176→      </div>
+   177→
+   178→      {/* Actions */}
+   179→      <div className="flex flex-wrap gap-2">
+   180→        {trade.status === "planned" && !trade.isDraft && (
+   181→          <Button
+   182→            variant="default"
+   183→            size="sm"
+   184→            onClick={() => setExecuteTradeOpen(true)}
+   185→            className="bg-primary"
+   186→          >
+   187→            <Play className="h-4 w-4" /> Start Trade
+   188→          </Button>
+   189→        )}
+   190→        {trade.status === "open" && !trade.isDraft && (
+   191→          <Button
+   192→            variant="default"
+   193→            size="sm"
+   194→            onClick={() => setCloseTradeOpen(true)}
+   195→            className="bg-primary"
+   196→          >
+   197→            <Lock className="h-4 w-4" /> Close Trade
+   198→          </Button>
+   199→        )}
+   200→        <Button variant="outline" size="sm" onClick={() => navigate("tradeNew", { id })}>
+   201→          <Edit className="h-4 w-4" /> Edit
+   202→        </Button>
+   203→        {trade.dailyPlanId && (
+   204→          <Button
+   205→            variant="outline"
+   206→            size="sm"
+   207→            onClick={() => navigate("dashboard", { id: trade.dailyPlanId })}
+   208→          >
+   209→            <ClipboardList className="h-4 w-4" /> View Daily Plan
+   210→          </Button>
+   211→        )}
+   212→        <Button
+   213→          variant="outline"
+   214→          size="sm"
+   215→          onClick={async () => {
+   216→            const res = await fetch(`/api/trades/${id}/duplicate`, { method: "POST" });
+   217→            if (res.ok) {
+   218→              toast.success("Trade duplicated as draft.");
+   219→              qc.invalidateQueries({ queryKey: ["trades"] });
+   220→            } else {
+   221→              toast.error("Failed to duplicate.");
+   222→            }
+   223→          }}
+   224→        >
+   225→          <Copy className="h-4 w-4" /> Duplicate
+   226→        </Button>
+   227→        <Button
+   228→          variant="outline"
+   229→          size="sm"
+   230→          className="text-loss hover:text-loss"
+   231→          onClick={async () => {
+   232→            if (!confirm("Delete this trade? This cannot be undone.")) return;
+   233→            const res = await fetch(`/api/trades/${id}`, { method: "DELETE" });
+   234→            if (res.ok) {
+   235→              toast.success("Trade deleted.");
+   236→              navigate("tradesLog");
+   237→            } else {
+   238→              toast.error("Failed to delete.");
+   239→            }
+   240→          }}
+   241→        >
+   242→          <Trash2 className="h-4 w-4" /> Delete
+   243→        </Button>
+   244→      </div>
+   245→
+   246→      {/* Quick stats */}
+   247→      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+   248→        <MiniStat label="Entry" value={trade.entryPriceAvg ? formatPrice(trade.entryPriceAvg, 5) : "-"} />
+   249→        <MiniStat label="Exit" value={trade.exitPriceAvg ? formatPrice(trade.exitPriceAvg, 5) : "-"} />
+   250→        <MiniStat label="Quantity" value={trade.positionSize ?? "-"} />
+   251→        <MiniStat label="Net P&L" value={pnl.text} tone={pnl.sign > 0 ? "profit" : pnl.sign < 0 ? "loss" : "neutral"} />
+   252→        <MiniStat label="Gross P&L" value={formatSignedCents(trade.grossPnlCents).text} tone={trade.grossPnlCents > 0 ? "profit" : trade.grossPnlCents < 0 ? "loss" : "neutral"} />
+   253→        <MiniStat label="R Multiple" value={formatR(trade.actualR)} tone={trade.actualR && dToNumber(trade.actualR) > 0 ? "profit" : trade.actualR && dToNumber(trade.actualR) < 0 ? "loss" : "neutral"} hint="Realized result relative to your planned risk" />
+   254→        <MiniStat label="Costs" value={centsToNumberString(trade.feesCents + trade.commissionCents + trade.swapCents)} />
+   255→        <MiniStat label="Strategy" value={strategyLabel} />
+   256→      </div>
+   257→
+   258→      {/* Tabs */}
+   259→      <Tabs defaultValue="overview" className="w-full">
+   260→        <TabsList className="w-full justify-start overflow-x-auto">
+   261→          <TabsTrigger value="overview">Overview</TabsTrigger>
+   262→          <TabsTrigger value="setup">Setup</TabsTrigger>
+   263→          <TabsTrigger value="execution">Execution</TabsTrigger>
+   264→          <TabsTrigger value="psychology">Psychology</TabsTrigger>
+   265→          <TabsTrigger value="evidence">Evidence</TabsTrigger>
+   266→          <TabsTrigger value="review">Review</TabsTrigger>
+   267→        </TabsList>
+   268→
+   269→        <TabsContent value="overview" className="space-y-4 mt-3">
+   270→          <Card className="p-4">
+   271→            <h3 className="font-medium mb-2">Trading Thesis</h3>
+   272→            {thesis?.why ? (
+   273→              <p className="text-sm text-muted-foreground leading-relaxed">{thesis.why}</p>
+   274→            ) : (
+   275→              <p className="text-sm text-muted-foreground">No thesis recorded.</p>
+   276→            )}
+   277→            {thesis?.narrative && (
+   278→              <div className="mt-3 text-sm">
+   279→                <span className="text-muted-foreground">Narrative:</span> {thesis.narrative}
+   280→              </div>
+   281→            )}
+   282→            <div className="mt-3 grid sm:grid-cols-2 gap-2 text-sm">
+   283→              {thesis?.liquidityTarget && <div><span className="text-muted-foreground">Liquidity target:</span> {thesis.liquidityTarget}</div>}
+   284→              {thesis?.target && <div><span className="text-muted-foreground">Target:</span> {thesis.target}</div>}
+   285→            </div>
+   286→            {thesis?.confirms && Array.isArray(thesis.confirms) && thesis.confirms.length > 0 && (
+   287→              <div className="mt-3 text-sm">
+   288→                <span className="text-muted-foreground">Confirmations:</span>
+   289→                <div className="flex flex-wrap gap-1 mt-1">
+   290→                  {thesis.confirms.map((c: string) => <Badge key={c} variant="secondary" className="text-xs">{c}</Badge>)}
+   291→                </div>
+   292→              </div>
+   293→            )}
+   294→            {thesis?.invalidates && Array.isArray(thesis.invalidates) && thesis.invalidates.length > 0 && (
+   295→              <div className="mt-3 text-sm">
+   296→                <span className="text-muted-foreground">Invalidations:</span>
+   297→                <div className="flex flex-wrap gap-1 mt-1">
+   298→                  {thesis.invalidates.map((c: string) => <Badge key={c} variant="outline" className="text-xs text-loss">{c}</Badge>)}
+   299→                </div>
+   300→              </div>
+   301→            )}
+   302→          </Card>
+   303→
+   304→          {tags.length > 0 && (
+   305→            <Card className="p-4">
+   306→              <h3 className="font-medium mb-2 flex items-center gap-2"><Tag className="h-4 w-4" /> Tags</h3>
+   307→              <div className="flex flex-wrap gap-1">
+   308→                {tags.map((t) => <Badge key={t} variant="secondary">{t}</Badge>)}
+   309→              </div>
+   310→            </Card>
+   311→          )}
+   312→
+   313→          {behaviorFlags.length > 0 && (
+   314→            <Card className="p-4 border-warning/50">
+   315→              <h3 className="font-medium mb-2 flex items-center gap-2"><AlertTriangle className="h-4 w-4 text-warning" /> Behavior Flags</h3>
+   316→              <div className="flex flex-wrap gap-1">
+   317→                {behaviorFlags.map((f) => (
+   318→                  <Badge key={f} variant="outline" className="text-warning">
+   319→                    {f.split("_").map((w) => w.charAt(0).toUpperCase() + w.slice(1)).join(" ")}
+   320→                  </Badge>
+   321→                ))}
+   322→              </div>
+   323→            </Card>
+   324→          )}
+   325→
+   326→          {trade.notes && (
+   327→            <Card className="p-4">
+   328→              <h3 className="font-medium mb-2">Notes</h3>
+   329→              <p className="text-sm text-muted-foreground whitespace-pre-wrap leading-relaxed">{trade.notes}</p>
+   330→            </Card>
+   331→          )}
+   332→        </TabsContent>
+   333→
+   334→        <TabsContent value="setup" className="space-y-4 mt-3">
+   335→          <Card className="p-4">
+   336→            <h3 className="font-medium mb-3">ICT Setup</h3>
+   337→            <div className="grid sm:grid-cols-2 gap-4 text-sm">
+   338→              <SetupSection title="Higher Timeframe Context" data={setup?.htfContext} />
+   339→              <SetupSection title="Liquidity" data={setup?.liquidity} isList />
+   340→              <SetupSection title="Structure" data={setup?.structure} isList />
+   341→              <SetupSection title="Entry Model" data={setup?.entryModel} />
+   342→              <SetupSection title="Session" data={setup?.session} />
+   343→              <SetupSection title="Setup Score" data={trade.setupScore ? `${(dToNumber(trade.setupScore) * 100).toFixed(0)}%` : null} hint="Calculated from the weighted rules defined by your strategy" />
+   344→            </div>
+   345→          </Card>
+   346→
+   347→          {/* Checklist Evaluation (Fix 3). Shows the snapshot of the A+
+   348→              checklist answers + the computed score/grade at the time the
+   349→              trade was saved. The evaluation row is created server-side on
+   350→              POST/PATCH /api/trades/[id] (see checklist-evaluation.ts). */}
+   351→          {checklistEvaluation ? (
+   352→            <Card className="p-4 space-y-4">
+   353→              <div className="flex items-start justify-between gap-3 flex-wrap">
+   354→                <div className="min-w-0">
+   355→                  <h3 className="font-medium flex items-center gap-2">
+   356→                    Checklist Evaluation
+   357→                    <Sparkles className="h-4 w-4 text-primary" />
+   358→                  </h3>
+   359→                  <p className="text-xs text-muted-foreground mt-0.5">
+   360→                    {checklistEvaluation.checklistName} · v{checklistEvaluation.versionLabel}
+   361→                  </p>
+   362→                </div>
+   363→                <div className="flex items-center gap-2 shrink-0">
+   364→                  <Badge
+   365→                    variant="outline"
+   366→                    className={cn(gradeClass(checklistEvaluation.finalGrade))}
+   367→                  >
+   368→                    {checklistEvaluation.finalGrade}
+   369→                  </Badge>
+   370→                  <span className="text-sm font-semibold tabular-nums">
+   371→                    {(dToNumber(checklistEvaluation.weightedScore) * 100).toFixed(1)}%
+   372→                  </span>
+   373→                </div>
+   374→              </div>
+   375→
+   376→              <div className="flex items-center gap-2 text-xs text-muted-foreground">
+   377→                <Clock className="h-3.5 w-3.5" />
+   378→                <span>
+   379→                  Evaluated {new Date(checklistEvaluation.evaluatedAt).toLocaleString()}
+   380→                </span>
+   381→              </div>
+   382→
+   383→              {/* Score progress bar */}
+   384→              <div className="space-y-1.5">
+   385→                <div className="h-2 w-full rounded-full bg-muted overflow-hidden">
+   386→                  <div
+   387→                    className={cn(
+   388→                      "h-full transition-all duration-300",
+   389→                      checklistEvaluation.finalGrade === "A+" ? "bg-profit" :
+   390→                      checklistEvaluation.finalGrade === "A" ? "bg-profit/80" :
+   391→                      checklistEvaluation.finalGrade === "B" ? "bg-warning" :
+   392→                      checklistEvaluation.finalGrade === "C" ? "bg-muted-foreground" :
+   393→                      "bg-destructive",
+   394→                    )}
+   395→                    style={{
+   396→                      width: `${Math.round(dToNumber(checklistEvaluation.weightedScore) * 100)}%`,
+   397→                    }}
+   398→                  />
+   399→                </div>
+   400→              </div>
+   401→
+   402→              {/* Per-item answers */}
+   403→              {checklistEvaluation.items.length > 0 ? (
+   404→                <div className="space-y-1.5">
+   405→                  {checklistEvaluation.items.map((item) => {
+   406→                    const ans = checklistEvaluation.answers[item.id] ?? { checked: false };
+   407→                    return (
+   408→                      <div
+   409→                        key={item.id}
+   410→                        className={cn(
+   411→                          "flex items-start gap-2 p-2 rounded-md border text-sm",
+   412→                          ans.checked
+   413→                            ? "bg-profit/5 border-profit/20"
+   414→                            : "border-border bg-muted/20",
+   415→                        )}
+   416→                      >
+   417→                        {ans.checked ? (
+   418→                          <Check className="h-4 w-4 text-profit shrink-0 mt-0.5" />
+   419→                        ) : (
+   420→                          <X className="h-4 w-4 text-muted-foreground shrink-0 mt-0.5" />
+   421→                        )}
+   422→                        <span className={cn("flex-1 min-w-0", !ans.checked && "text-muted-foreground line-through")}>
+   423→                          {item.text}
+   424→                        </span>
+   425→                        {item.required && (
+   426→                          <Badge variant="outline" className="text-[10px] py-0 px-1 shrink-0">
+   427→                            Required
+   428→                          </Badge>
+   429→                        )}
+   430→                        <Badge variant="secondary" className="text-[10px] py-0 px-1 shrink-0">
+   431→                          ×{item.weight}
+   432→                        </Badge>
+   433→                      </div>
+   434→                    );
+   435→                  })}
+   436→                </div>
+   437→              ) : (
+   438→                <p className="text-sm text-muted-foreground text-center py-2">
+   439→                  This checklist version has no items defined.
+   440→                </p>
+   441→              )}
+   442→
+   443→              {checklistEvaluation.items.length > 0 && (
+   444→                <p className="text-xs text-muted-foreground">
+   445→                  Score = sum(weights of checked) / sum(weights of all). Required items must all be checked to keep an A+/A/B grade; otherwise the grade is capped at C.
+   446→                </p>
+   447→              )}
+   448→            </Card>
+   449→          ) : (
+   450→            <Card className="p-4">
+   451→              <div className="text-center py-3 space-y-1">
+   452→                <p className="text-sm text-muted-foreground">
+   453→                  No checklist evaluation recorded for this trade.
+   454→                </p>
+   455→                <p className="text-xs text-muted-foreground">
+   456→                  Evaluations are captured when the A+ Setup Checklist is filled in on the trade form.
+   457→                </p>
+   458→              </div>
+   459→            </Card>
+   460→          )}
+   461→        </TabsContent>
+   462→
+   463→        <TabsContent value="execution" className="space-y-4 mt-3">
+   464→          <Card className="p-4">
+   465→            <h3 className="font-medium mb-3">Execution Ledger</h3>
+   466→            <div className="rounded-md border border-border overflow-hidden">
+   467→              <table className="w-full text-sm">
+   468→                <thead className="bg-muted/50 text-xs uppercase text-muted-foreground">
+   469→                  <tr>
+   470→                    <th className="px-3 py-2 text-left">Type</th>
+   471→                    <th className="px-3 py-2 text-right">Price</th>
+   472→                    <th className="px-3 py-2 text-right">Qty</th>
+   473→                    <th className="px-3 py-2 text-right hidden md:table-cell">Time</th>
+   474→                  </tr>
+   475→                </thead>
+   476→                <tbody>
+   477→                  {trade.executions?.map((e: any) => (
+   478→                    <tr key={e.id} className="border-t border-border">
+   479→                      <td className="px-3 py-2">
+   480→                        <Badge variant="outline" className={cn(e.kind === "entry" ? "text-profit" : "text-loss")}>
+   481→                          {e.kind}
+   482→                        </Badge>
+   483→                      </td>
+   484→                      <td className="px-3 py-2 text-right tnum">{formatPrice(e.price, 5)}</td>
+   485→                      <td className="px-3 py-2 text-right tnum">{e.quantity}</td>
+   486→                      <td className="px-3 py-2 text-right tnum text-xs text-muted-foreground hidden md:table-cell">
+   487→                        {new Date(e.timestamp).toLocaleString()}
+   488→                      </td>
+   489→                    </tr>
+   490→                  ))}
+   491→                </tbody>
+   492→              </table>
+   493→            </div>
+   494→          </Card>
+   495→
+   496→          <Card className="p-4">
+   497→            <h3 className="font-medium mb-3">Planned Partial Exits</h3>
+   498→            {Array.isArray(trade.targets) && trade.targets.length > 0 ? (
+   499→              <div className="space-y-2">
+   500→                {trade.targets.map((tp: any, idx: number) => (
+   501→                  <div key={tp.id ?? idx} className="flex items-center justify-between text-sm py-1.5 border-b border-border/50 last:border-0">
+   502→                    <span className="font-medium text-foreground">{tp.label || `TP${idx + 1}`}</span>
+   503→                    <span className="font-mono tabular-nums text-muted-foreground">
+   504→                      {tp.price ? formatPrice(tp.price, 5) : "-"}
+   505→                    </span>
+   506→                  </div>
+   507→                ))}
+   508→                {trade.targets.length > 1 && (() => {
+   509→                  // Compute the equal-weighted average of valid prices (same
+   510→                  // logic as the trade form's "Weighted Exit Price" preview).
+   511→                  const validPrices = trade.targets
+   512→                    .map((tp: any) => tp.price)
+   513→                    .filter((p: any) => p && dToNumber(String(p)) > 0);
+   514→                  if (validPrices.length === 0) return null;
+   515→                  const sum = validPrices.reduce(
+   516→                    (acc: number, p: any) => acc + dToNumber(String(p)),
+   517→                    0,
+   518→                  );
+   519→                  const avg = sum / validPrices.length;
+   520→                  return (
+   521→                    <div className="flex items-center justify-between text-xs text-muted-foreground pt-2">
+   522→                      <span>Average Exit Price</span>
+   523→                      <span className="font-mono tabular-nums">{avg.toFixed(5)}</span>
+   524→                    </div>
+   525→                  );
+   526→                })()}
+   527→              </div>
+   528→            ) : (
+   529→              <p className="text-sm text-muted-foreground italic">No planned partial exits recorded.</p>
+   530→            )}
+   531→          </Card>
+   532→
+   533→          <Card className="p-4">
+   534→            <h3 className="font-medium mb-3">Planned vs Actual</h3>
+   535→            <div className="grid sm:grid-cols-3 gap-4 text-sm">
+   536→              <div>
+   537→                <div className="text-xs text-muted-foreground">Planned Entry</div>
+   538→                <div className="font-medium tnum">{trade.plannedEntryPrice ? formatPrice(trade.plannedEntryPrice, 5) : "-"}</div>
+   539→              </div>
+   540→              <div>
+   541→                <div className="text-xs text-muted-foreground">Planned Stop</div>
+   542→                <div className="font-medium tnum">{trade.plannedStopPrice ? formatPrice(trade.plannedStopPrice, 5) : "-"}</div>
+   543→              </div>
+   544→              <div>
+   545→                <div className="text-xs text-muted-foreground">Planned Target</div>
+   546→                <div className="font-medium tnum">{trade.plannedTargetPrice ? formatPrice(trade.plannedTargetPrice, 5) : "-"}</div>
+   547→              </div>
+   548→              <div>
+   549→                <div className="text-xs text-muted-foreground">Avg Entry</div>
+   550→                <div className="font-medium tnum">{trade.entryPriceAvg ? formatPrice(trade.entryPriceAvg, 5) : "-"}</div>
+   551→              </div>
+   552→              <div>
+   553→                <div className="text-xs text-muted-foreground">Avg Exit</div>
+   554→                <div className="font-medium tnum">{trade.exitPriceAvg ? formatPrice(trade.exitPriceAvg, 5) : "-"}</div>
+   555→              </div>
+   556→              <div>
+   557→                <div className="text-xs text-muted-foreground">Risk %</div>
+   558→                <div className="font-medium tnum">{trade.plannedRiskPct ? `${(dToNumber(trade.plannedRiskPct) * 100).toFixed(2)}%` : "-"}</div>
+   559→              </div>
+   560→            </div>
+   561→
+   562→            {/* Plan Adherence summary */}
+   563→            {planAdherence && Object.keys(planAdherence).length > 0 && (
+   564→              <div className="mt-4 pt-3 border-t border-border">
+   565→                <div className="flex items-center gap-2 mb-2">
+   566→                  <span className="text-xs font-medium text-muted-foreground">Plan Adherence:</span>
+   567→                  <span className={cn(
+   568→                    "text-xs px-2 py-0.5 rounded-full font-medium",
+   569→                    planAdherence.followedPlan !== false
+   570→                      ? "bg-profit/10 text-profit"
+   571→                      : "bg-loss/10 text-loss",
+   572→                  )}>
+   573→                    {planAdherence.followedPlan !== false ? "Followed Plan" : "Deviated"}
+   574→                  </span>
+   575→                </div>
+   576→                {planAdherence.followedPlan === false && (
+   577→                  <div className="grid sm:grid-cols-4 gap-3 text-sm">
+   578→                    <div>
+   579→                      <div className="text-xs text-muted-foreground">Actual Entry</div>
+   580→                      <div className="font-medium tnum">{planAdherence.actualEntryPrice ? formatPrice(planAdherence.actualEntryPrice, 5) : "-"}</div>
+   581→                    </div>
+   582→                    <div>
+   583→                      <div className="text-xs text-muted-foreground">Actual Stop</div>
+   584→                      <div className="font-medium tnum">{planAdherence.actualStopPrice ? formatPrice(planAdherence.actualStopPrice, 5) : "-"}</div>
+   585→                    </div>
+   586→                    <div>
+   587→                      <div className="text-xs text-muted-foreground">Actual Target</div>
+   588→                      <div className="font-medium tnum">{planAdherence.actualTargetPrice ? formatPrice(planAdherence.actualTargetPrice, 5) : "-"}</div>
+   589→                    </div>
+   590→                    <div>
+   591→                      <div className="text-xs text-muted-foreground">Actual Lot</div>
+   592→                      <div className="font-medium tnum">{planAdherence.actualLotSize || "-"}</div>
+   593→                    </div>
+   594→                  </div>
+   595→                )}
+   596→              </div>
+   597→            )}
+   598→          </Card>
+   599→        </TabsContent>
+   600→
+   601→        <TabsContent value="psychology" className="space-y-4 mt-3">
+   602→          <div className="grid md:grid-cols-2 gap-4">
+   603→            <Card className="p-4">
+   604→              <h3 className="font-medium mb-3">Before Execution</h3>
+   605→              {psychBefore?.moodTags && (
+   606→                <div className="flex flex-wrap gap-1 mb-3">
+   607→                  {psychBefore.moodTags.map((t: string) => <Badge key={t} variant="secondary">{t}</Badge>)}
+   608→                </div>
+   609→              )}
+   610→              <div className="grid grid-cols-2 gap-3 text-sm">
+   611→                <div><span className="text-muted-foreground">Confidence:</span> {psychBefore?.confidence ?? "-"}/5</div>
+   612→                <div><span className="text-muted-foreground">Energy:</span> {psychBefore?.energy ?? "-"}/5</div>
+   613→              </div>
+   614→            </Card>
+   615→            <Card className="p-4">
+   616→              <h3 className="font-medium mb-3">After Execution</h3>
+   617→              {psychAfter?.moodTags && (
+   618→                <div className="flex flex-wrap gap-1 mb-3">
+   619→                  {psychAfter.moodTags.map((t: string) => <Badge key={t} variant="secondary">{t}</Badge>)}
+   620→                </div>
+   621→              )}
+   622→              <div className="grid grid-cols-2 gap-3 text-sm">
+   623→                <div><span className="text-muted-foreground">Confidence:</span> {psychAfter?.confidence ?? "-"}/5</div>
+   624→                <div><span className="text-muted-foreground">Energy:</span> {psychAfter?.energy ?? "-"}/5</div>
+   625→              </div>
+   626→            </Card>
+   627→          </div>
+   628→        </TabsContent>
+   629→
+   630→        <TabsContent value="evidence" className="space-y-4 mt-3">
+   631→          <Card className="p-4">
+   632→            <div className="flex items-center justify-between mb-3">
+   633→              <h3 className="font-medium">Evidence Timeline</h3>
+   634→              <Button size="sm" variant="outline" onClick={() => navigate("tradeNew", { id })}>
+   635→                <ImageIcon className="h-4 w-4" /> Add Media
+   636→              </Button>
+   637→            </div>
+   638→            {evidenceMedia.length === 0 ? (
+   639→              <div className="rounded-md border border-dashed border-border p-8 text-center text-sm text-muted-foreground">
+   640→                No evidence uploaded yet. Add screenshots or videos to build a chronological story of this trade.
+   641→              </div>
+   642→            ) : (
+   643→              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2">
+   644→                {evidenceMedia.map((m: any) => {
+   645→                  const isVideo = m.kind === "video";
+   646→                  return (
+   647→                    <div key={m.id}>
+   648→                    <button
+   649→                      onClick={() => {
+   650→                        // m.url is already populated by the trade detail API
+   651→                        // (signed URL inlined server-side), so we no longer need
+   652→                        // to fan out a GET /api/media/[id] request here.
+   653→                        if (isVideo) return; // video has inline controls; don't open the image modal
+   654→                        const imgIdx = images.findIndex((im: any) => im.id === m.id);
+   655→                        if (imgIdx >= 0) {
+   656→                          setViewerIndex(imgIdx);
+   657→                          setViewerOpen(true);
+   658→                        }
+   659→                      }}
+   660→                      className="aspect-video rounded-md border border-border overflow-hidden bg-muted hover:opacity-80 transition-opacity text-left w-full"
+   661→                    >
+   662→                      {isVideo && m.url ? (
+   663→                        <video src={m.url} className="w-full h-full object-cover" preload="metadata" controls />
+   664→                      ) : (
+   665→                        <img src={m.url || `/api/media/file?token=placeholder`} alt={m.caption || "Evidence"} className="w-full h-full object-cover" />
+   666→                      )}
+   667→                    </button>
+   668→                    {m.caption && (
+   669→                      <p className="text-xs text-muted-foreground mt-1 line-clamp-2">{m.caption}</p>
+   670→                    )}
+   671→                    </div>
+   672→                  );
+   673→                })}
+   674→              </div>
+   675→            )}
+   676→          </Card>
+   677→        </TabsContent>
+   678→
+   679→        <TabsContent value="review" className="space-y-4 mt-3">
+   680→          <Card className="p-4">
+   681→            <h3 className="font-medium mb-2">Lessons</h3>
+   682→            {trade.lessons ? (
+   683→              <p className="text-sm text-muted-foreground whitespace-pre-wrap leading-relaxed">{trade.lessons}</p>
+   684→            ) : (
+   685→              <p className="text-sm text-muted-foreground">No lessons recorded for this trade.</p>
+   686→            )}
+   687→          </Card>
+   688→        </TabsContent>
+   689→      </Tabs>
+   690→
+   691→      {viewerOpen && images.length > 0 && (
+   692→        <ImageViewer
+   693→          mediaItems={images}
+   694→          initialIndex={viewerIndex}
+   695→          onClose={() => setViewerOpen(false)}
+   696→        />
+   697→      )}
+   698→
+   699→      {/* Close Trade Modal */}
+   700→      <CloseTradeModal
+   701→        tradeId={closeTradeOpen ? id : null}
+   702→        onClose={() => setCloseTradeOpen(false)}
+   703→      />
+   704→
+   705→      {/* Execute Trade Modal */}
+   706→      <ExecuteTradeModal
+   707→        tradeId={executeTradeOpen ? id : null}
+   708→        onClose={() => setExecuteTradeOpen(false)}
+   709→      />
+   710→    </div>
+   711→  );
+   712→}
+   713→
+   714→function MiniStat({ label, value, tone, hint }: { label: string; value: string; tone?: "profit" | "loss" | "neutral"; hint?: string }) {
+   715→  const [showHint, setShowHint] = useState(false);
+   716→  return (
+   717→    <Card className="p-3">
+   718→      <div className="text-xs text-muted-foreground flex items-center gap-1.5">
+   719→        {label}
+   720→        {hint && (
+   721→          <span
+   722→            className="relative inline-flex"
+   723→            onMouseEnter={() => setShowHint(true)}
+   724→            onMouseLeave={() => setShowHint(false)}
+   725→            onClick={(e) => { e.preventDefault(); setShowHint((s) => !s); }}
+   726→          >
+   727→            <HelpCircle className="h-3 w-3 text-muted-foreground cursor-help" />
+   728→            {showHint && (
+   729→              <span
+   730→                className="absolute left-0 top-4 z-50 w-48 rounded-md border border-border bg-popover p-2 text-xs font-normal text-popover-foreground shadow-md"
+   731→                role="tooltip"
+   732→              >
+   733→                {hint}
+   734→              </span>
+   735→            )}
+   736→          </span>
+   737→        )}
+   738→      </div>
+   739→      <div className={cn("font-medium tnum mt-1", tone === "profit" ? "text-profit" : tone === "loss" ? "text-loss" : "")}>
+   740→        {value}
+   741→      </div>
+   742→    </Card>
+   743→  );
+   744→}
+   745→
+   746→function SetupSection({ title, data, isList, hint }: { title: string; data: any; isList?: boolean; hint?: string }) {
+   747→  const [showHint, setShowHint] = useState(false);
+   748→  if (!data) return null;
+   749→  return (
+   750→    <div>
+   751→      <div className="text-xs text-muted-foreground uppercase tracking-wide flex items-center gap-1.5">
+   752→        {title}
+   753→        {hint && (
+   754→          <span
+   755→            className="relative inline-flex normal-case"
+   756→            onMouseEnter={() => setShowHint(true)}
+   757→            onMouseLeave={() => setShowHint(false)}
+   758→            onClick={(e) => { e.preventDefault(); setShowHint((s) => !s); }}
+   759→          >
+   760→            <HelpCircle className="h-3 w-3 text-muted-foreground cursor-help" />
+   761→            {showHint && (
+   762→              <span
+   763→                className="absolute left-0 top-4 z-50 w-48 rounded-md border border-border bg-popover p-2 text-xs font-normal normal-case text-popover-foreground shadow-md"
+   764→                role="tooltip"
+   765→              >
+   766→                {hint}
+   767→              </span>
+   768→            )}
+   769→          </span>
+   770→        )}
+   771→      </div>
+   772→      {isList && Array.isArray(data) ? (
+   773→        <div className="flex flex-wrap gap-1 mt-1">
+   774→          {data.map((d: string, i: number) => <Badge key={i} variant="secondary" className="text-xs">{d}</Badge>)}
+   775→        </div>
+   776→      ) : typeof data === "object" ? (
+   777→        <div className="mt-1 text-sm">
+   778→          {Object.entries(data).map(([k, v]) => (
+   779→            <div key={k}>
+   780→              <span className="text-muted-foreground">{k}:</span> {String(v)}
+   781→            </div>
+   782→          ))}
+   783→        </div>
+   784→      ) : (
+   785→        <div className="font-medium mt-1">{String(data)}</div>
+   786→      )}
+   787→    </div>
+   788→  );
+   789→}
+   790→
+   791→function safeJson(json: string | null, fallback: any): any {
+   792→  if (!json) return fallback;
+   793→  try { return JSON.parse(json); } catch { return fallback; }
+   794→}
+   795→
+   796→function gradeClass(g: string): string {
+   797→  switch (g) {
+   798→    case "A+": return "bg-profit/15 text-profit";
+   799→    case "A": return "bg-profit/10 text-profit";
+   800→    case "B": return "bg-warning/15 text-warning";
+   801→    case "C": return "bg-muted text-muted-foreground";
+   802→    case "Invalid": return "bg-loss/15 text-loss";
+   803→    default: return "bg-muted text-muted-foreground";
+   804→  }
+   805→}
+   806→

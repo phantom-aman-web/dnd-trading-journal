@@ -1,0 +1,951 @@
+     1→"use client";
+     2→
+     3→import { useEffect, useState, useRef } from "react";
+     4→import { Button } from "@/components/ui/button";
+     5→import { Input } from "@/components/ui/input";
+     6→import { Textarea } from "@/components/ui/textarea";
+     7→import { Badge } from "@/components/ui/badge";
+     8→import {
+     9→  Select,
+    10→  SelectContent,
+    11→  SelectItem,
+    12→  SelectTrigger,
+    13→  SelectValue,
+    14→} from "@/components/ui/select";
+    15→import { Checkbox } from "@/components/ui/checkbox";
+    16→import {
+    17→  ArrowLeft,
+    18→  ArrowRight,
+    19→  Check,
+    20→  Loader2,
+    21→  X,
+    22→  Plus,
+    23→  Trash2,
+    24→  Wallet,
+    25→  Target,
+    26→  Shield,
+    27→  Sparkles,
+    28→} from "lucide-react";
+    29→import { toast } from "sonner";
+    30→import { cn } from "@/lib/utils";
+    31→import { useNav } from "@/lib/nav-store";
+    32→import { useQueryClient } from "@tanstack/react-query";
+    33→import {
+    34→  useOnboarding,
+    35→  TOTAL_SETUP_STEPS,
+    36→} from "@/lib/onboarding-store";
+    37→import { TimezoneSelect } from "@/components/common/timezone-select";
+    38→import { InstrumentSelector } from "@/components/common/instrument-selector";
+    39→import { INSTRUMENT_CATALOG, type InstrumentDef } from "@/lib/instrument-catalog";
+    40→
+    41→const CURRENCIES = ["USD", "EUR", "GBP", "JPY", "AUD", "CAD", "CHF", "NZD"];
+    42→const SESSIONS = [
+    43→  { value: "asian_range", label: "Asian Range" },
+    44→  { value: "london_open", label: "London Open" },
+    45→  { value: "ny_am", label: "New York AM" },
+    46→  { value: "ny_lunch", label: "New York Lunch" },
+    47→  { value: "ny_pm", label: "New York PM" },
+    48→  { value: "off_hours", label: "Off Hours" },
+    49→];
+    50→const TIMEFRAMES = ["1m", "5m", "15m", "1h", "4h", "1D"];
+    51→
+    52→// Strategy templates
+    53→const STRATEGY_TEMPLATES = [
+    54→  { value: "blank", label: "Blank Strategy" },
+    55→  { value: "ict", label: "ICT 2022 Style" },
+    56→  { value: "trend", label: "Trend Following" },
+    57→  { value: "breakout", label: "Breakout" },
+    58→  { value: "custom", label: "Custom" },
+    59→];
+    60→
+    61→const ICT_RULES = [
+    62→  { title: "HTF bias aligned", required: true, description: "4H/Daily direction confirmed" },
+    63→  { title: "Liquidity sweep confirmed", required: true, description: "Asian/London high or low swept" },
+    64→  { title: "Market structure shift on LTF", required: true, description: "1m/5m MS break with displacement" },
+    65→  { title: "Entry inside FVG", required: false, description: "Fair value gap retest" },
+    66→];
+    67→
+    68→const TREND_RULES = [
+    69→  { title: "Higher timeframe trend confirmed", required: true, description: "Trade in direction of HTF trend" },
+    70→  { title: "Pullback to moving average", required: true, description: "Price retraces to 20/50 EMA" },
+    71→  { title: "Trend continuation signal", required: false, description: "Engulfing or pin bar" },
+    72→];
+    73→
+    74→const BREAKOUT_RULES = [
+    75→  { title: "Range identified", required: true, description: "Clear consolidation zone" },
+    76→  { title: "Breakout with volume", required: true, description: "Above-average volume on breakout" },
+    77→  { title: "Retest of breakout level", required: false, description: "Wait for pullback to confirm" },
+    78→];
+    79→
+    80→/* ------------------------------------------------------------------ */
+    81→/* Shared state — lifted to the parent so all steps preserve data     */
+    82→/* ------------------------------------------------------------------ */
+    83→
+    84→interface SetupData {
+    85→  // Step 1: Profile
+    86→  name: string;
+    87→  timezone: string;
+    88→  currency: string;
+    89→  // Step 2: Account + Markets
+    90→  accountName: string;
+    91→  broker: string;
+    92→  accountType: string;
+    93→  startingBalance: string;
+    94→  selectedInstruments: string[];
+    95→  defaultInstrument: string;
+    96→  // Step 3: Strategy
+    97→  strategyName: string;
+    98→  strategyDescription: string;
+    99→  strategyTemplate: string;
+   100→  rules: { title: string; required: boolean; description: string }[];
+   101→  // Step 4: Risk + Defaults
+   102→  defaultRiskPct: string;
+   103→  defaultSession: string;
+   104→  defaultTimeframe: string;
+   105→  maxTradesPerDay: string;
+   106→  dailyLossLimitPct: string;
+   107→  maxRiskPerTradePct: string;
+   108→}
+   109→
+   110→const DEFAULT_DATA: SetupData = {
+   111→  name: "",
+   112→  timezone: "UTC",
+   113→  currency: "USD",
+   114→  accountName: "Primary",
+   115→  broker: "",
+   116→  accountType: "live",
+   117→  startingBalance: "10000",
+   118→  selectedInstruments: [],
+   119→  defaultInstrument: "",
+   120→  strategyName: "",
+   121→  strategyDescription: "",
+   122→  strategyTemplate: "blank",
+   123→  rules: [{ title: "", required: true, description: "" }],
+   124→  defaultRiskPct: "1",
+   125→  defaultSession: "ny_am",
+   126→  defaultTimeframe: "5m",
+   127→  maxTradesPerDay: "",
+   128→  dailyLossLimitPct: "",
+   129→  maxRiskPerTradePct: "",
+   130→};
+   131→
+   132→/* ------------------------------------------------------------------ */
+   133→/* Main Setup Wizard 2.0                                              */
+   134→/* ------------------------------------------------------------------ */
+   135→
+   136→export function SetupWizard() {
+   137→  const { state, setupStep, nextSetupStep, prevSetupStep, setState } = useOnboarding();
+   138→  const visible = state === "setup";
+   139→  const { navigate } = useNav();
+   140→  const [data, setData] = useState<SetupData>(DEFAULT_DATA);
+   141→  const [loading, setLoading] = useState(false);
+   142→
+   143→  useEffect(() => {
+   144→    if (!visible) return;
+   145→    const handler = (e: KeyboardEvent) => {
+   146→      if (e.key === "Escape") {
+   147→        e.preventDefault();
+   148→        setState("skipped");
+   149→      }
+   150→    };
+   151→    window.addEventListener("keydown", handler);
+   152→    return () => window.removeEventListener("keydown", handler);
+   153→  }, [visible, setState]);
+   154→
+   155→  function update(patch: Partial<SetupData>) {
+   156→    setData((d) => ({ ...d, ...patch }));
+   157→  }
+   158→
+   159→  function handleSkip() {
+   160→    setState("tour");
+   161→  }
+   162→
+   163→  if (!visible) return null;
+   164→
+   165→  const progress = ((setupStep + 1) / TOTAL_SETUP_STEPS) * 100;
+   166→
+   167→  return (
+   168→    <div
+   169→      role="dialog"
+   170→      aria-modal="true"
+   171→      aria-labelledby="setup-title"
+   172→      className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-in fade-in duration-200"
+   173→    >
+   174→      <div className="w-full max-w-xl max-h-[92vh] flex flex-col rounded-xl border border-border bg-card text-card-foreground shadow-xl animate-in zoom-in-95 duration-200">
+   175→        {/* Header — minimal, just close button */}
+   176→        <button
+   177→          aria-label="Close setup"
+   178→          onClick={() => setState("skipped")}
+   179→          className="absolute top-4 right-4 z-10 inline-flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground"
+   180→        >
+   181→          <X className="h-4 w-4" />
+   182→        </button>
+   183→
+   184→        {/* Progress — subtle, just step numbers */}
+   185→        <div className="px-6 pt-6 pb-2">
+   186→          <div className="flex items-center justify-between">
+   187→            <Badge variant="outline" className="text-[10px] uppercase tracking-wider text-muted-foreground">
+   188→              Step {setupStep + 1} of {TOTAL_SETUP_STEPS}
+   189→            </Badge>
+   190→            <div className="h-1 w-24 rounded-full bg-muted overflow-hidden">
+   191→              <div
+   192→                className="h-full bg-primary transition-all duration-300"
+   193→                style={{ width: `${progress}%` }}
+   194→              />
+   195→            </div>
+   196→          </div>
+   197→        </div>
+   198→
+   199→        {/* Step body — all steps stay mounted to preserve state */}
+   200→        <div className="flex-1 overflow-y-auto scroll-thin px-6 py-4">
+   201→          <div className={setupStep === 0 ? "block" : "hidden"}>
+   202→            <Step1Profile data={data} update={update} loading={loading} />
+   203→          </div>
+   204→          <div className={setupStep === 1 ? "block" : "hidden"}>
+   205→            <Step2AccountMarkets data={data} update={update} loading={loading} />
+   206→          </div>
+   207→          <div className={setupStep === 2 ? "block" : "hidden"}>
+   208→            <Step3Strategy data={data} update={update} loading={loading} />
+   209→          </div>
+   210→          <div className={setupStep === 3 ? "block" : "hidden"}>
+   211→            <Step4RiskDefaults data={data} update={update} loading={loading} />
+   212→          </div>
+   213→          <div className={setupStep === 4 ? "block" : "hidden"}>
+   214→            <Step5Ready data={data} />
+   215→          </div>
+   216→        </div>
+   217→
+   218→        {/* Footer — Back / Skip / Next */}
+   219→        <div className="flex items-center justify-between gap-2 border-t border-border p-4 px-6">
+   220→          <Button
+   221→            variant="ghost"
+   222→            size="sm"
+   223→            onClick={() => prevSetupStep()}
+   224→            disabled={setupStep === 0 || loading}
+   225→            className="text-muted-foreground"
+   226→          >
+   227→            <ArrowLeft className="h-4 w-4" /> Back
+   228→          </Button>
+   229→          {setupStep < TOTAL_SETUP_STEPS - 1 ? (
+   230→            <div className="flex items-center gap-2">
+   231→              <Button
+   232→                variant="ghost"
+   233→                size="sm"
+   234→                onClick={handleSkip}
+   235→                disabled={loading}
+   236→                className="text-muted-foreground"
+   237→              >
+   238→                Skip for now
+   239→              </Button>
+   240→              <Button
+   241→                size="sm"
+   242→                onClick={() => nextSetupStep()}
+   243→                disabled={loading}
+   244→              >
+   245→                Continue
+   246→                <ArrowRight className="ml-1 h-4 w-4" />
+   247→              </Button>
+   248→            </div>
+   249→          ) : (
+   250→            <SaveAndFinish data={data} loading={loading} setLoading={setLoading} />
+   251→          )}
+   252→        </div>
+   253→      </div>
+   254→    </div>
+   255→  );
+   256→}
+   257→
+   258→/* ------------------------------------------------------------------ */
+   259→/* Step 1: Welcome + Trading Profile                                  */
+   260→/* ------------------------------------------------------------------ */
+   261→
+   262→function Step1Profile({
+   263→  data,
+   264→  update,
+   265→  loading,
+   266→}: {
+   267→  data: SetupData;
+   268→  update: (patch: Partial<SetupData>) => void;
+   269→  loading: boolean;
+   270→}) {
+   271→  return (
+   272→    <div className="space-y-5">
+   273→      <div>
+   274→        <h2 id="setup-title" className="text-xl font-semibold tracking-tight">
+   275→          Let&apos;s set up your workspace.
+   276→        </h2>
+   277→        <p className="mt-1.5 text-sm text-muted-foreground leading-relaxed">
+   278→          A few details will help DnD organize your trading day, calculations and reports around the way you trade.
+   279→        </p>
+   280→      </div>
+   281→
+   282→      <div className="space-y-4">
+   283→        <div className="space-y-1.5">
+   284→          <label className="text-xs font-semibold text-foreground">Display Name</label>
+   285→          <Input
+   286→            value={data.name}
+   287→            onChange={(e) => update({ name: e.target.value })}
+   288→            placeholder="Your name"
+   289→            autoFocus
+   290→            disabled={loading}
+   291→          />
+   292→        </div>
+   293→
+   294→        <div className="space-y-1.5">
+   295→          <label className="text-xs font-semibold text-foreground">Timezone</label>
+   296→          <TimezoneSelect
+   297→            value={data.timezone}
+   298→            onChange={(tz) => update({ timezone: tz })}
+   299→          />
+   300→          <p className="text-[11px] text-muted-foreground">
+   301→            Controls your trading dates, sessions, calendar and daily reports.
+   302→          </p>
+   303→        </div>
+   304→
+   305→        <div className="space-y-1.5">
+   306→          <label className="text-xs font-semibold text-foreground">Base Currency</label>
+   307→          <Select value={data.currency} onValueChange={(v) => update({ currency: v })}>
+   308→            <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
+   309→            <SelectContent>
+   310→              {CURRENCIES.map((c) => (
+   311→                <SelectItem key={c} value={c}>{c}</SelectItem>
+   312→              ))}
+   313→            </SelectContent>
+   314→          </Select>
+   315→        </div>
+   316→      </div>
+   317→    </div>
+   318→  );
+   319→}
+   320→
+   321→/* ------------------------------------------------------------------ */
+   322→/* Step 2: Your Markets + Trading Account                             */
+   323→/* ------------------------------------------------------------------ */
+   324→
+   325→function Step2AccountMarkets({
+   326→  data,
+   327→  update,
+   328→  loading,
+   329→}: {
+   330→  data: SetupData;
+   331→  update: (patch: Partial<SetupData>) => void;
+   332→  loading: boolean;
+   333→}) {
+   334→  const [showAccount, setShowAccount] = useState(true);
+   335→  const markets = INSTRUMENT_CATALOG.reduce((acc, inst) => {
+   336→    if (!acc.find((m) => m.market === inst.market)) {
+   337→      acc.push({ market: inst.market, label: inst.market.charAt(0).toUpperCase() + inst.market.slice(1) });
+   338→    }
+   339→    return acc;
+   340→  }, [] as { market: string; label: string }[]);
+   341→
+   342→  function toggleInstrument(symbol: string) {
+   343→    const current = data.selectedInstruments;
+   344→    if (current.includes(symbol)) {
+   345→      update({ selectedInstruments: current.filter((s) => s !== symbol) });
+   346→    } else {
+   347→      update({ selectedInstruments: [...current, symbol] });
+   348→    }
+   349→  }
+   350→
+   351→  return (
+   352→    <div className="space-y-5">
+   353→      <div>
+   354→        <h2 className="text-xl font-semibold tracking-tight">What do you trade?</h2>
+   355→        <p className="mt-1.5 text-sm text-muted-foreground leading-relaxed">
+   356→          Choose the markets you trade most often. DnD will use this information throughout your trading workflow.
+   357→        </p>
+   358→      </div>
+   359→
+   360→      {/* Primary Trading Account */}
+   361→      <div className="space-y-3 rounded-lg border border-border bg-muted/30 p-4">
+   362→        <button
+   363→          onClick={() => setShowAccount(!showAccount)}
+   364→          className="flex items-center justify-between w-full text-left"
+   365→        >
+   366→          <div className="flex items-center gap-2">
+   367→            <Wallet className="h-4 w-4 text-muted-foreground" />
+   368→            <span className="text-sm font-semibold">Primary Trading Account</span>
+   369→          </div>
+   370→          <span className="text-xs text-muted-foreground">{showAccount ? "−" : "+"}</span>
+   371→        </button>
+   372→        {showAccount && (
+   373→          <div className="space-y-3 pt-2">
+   374→            <div className="grid grid-cols-2 gap-3">
+   375→              <div className="space-y-1.5">
+   376→                <label className="text-[11px] font-medium text-muted-foreground">Account Name</label>
+   377→                <Input
+   378→                  value={data.accountName}
+   379→                  onChange={(e) => update({ accountName: e.target.value })}
+   380→                  placeholder="Primary"
+   381→                  disabled={loading}
+   382→                  className="h-9 text-sm"
+   383→                />
+   384→              </div>
+   385→              <div className="space-y-1.5">
+   386→                <label className="text-[11px] font-medium text-muted-foreground">Broker (optional)</label>
+   387→                <Input
+   388→                  value={data.broker}
+   389→                  onChange={(e) => update({ broker: e.target.value })}
+   390→                  placeholder="e.g. FTMO, IC Markets"
+   391→                  disabled={loading}
+   392→                  className="h-9 text-sm"
+   393→                />
+   394→              </div>
+   395→            </div>
+   396→            <div className="grid grid-cols-2 gap-3">
+   397→              <div className="space-y-1.5">
+   398→                <label className="text-[11px] font-medium text-muted-foreground">Account Type</label>
+   399→                <Select value={data.accountType} onValueChange={(v) => update({ accountType: v })}>
+   400→                  <SelectTrigger className="h-9 text-sm"><SelectValue /></SelectTrigger>
+   401→                  <SelectContent>
+   402→                    <SelectItem value="live">Live</SelectItem>
+   403→                    <SelectItem value="demo">Demo</SelectItem>
+   404→                    <SelectItem value="prop">Prop Firm</SelectItem>
+   405→                    <SelectItem value="funded">Funded</SelectItem>
+   406→                    <SelectItem value="backtest">Backtest</SelectItem>
+   407→                  </SelectContent>
+   408→                </Select>
+   409→              </div>
+   410→              <div className="space-y-1.5">
+   411→                <label className="text-[11px] font-medium text-muted-foreground">Starting Balance</label>
+   412→                <Input
+   413→                  type="number"
+   414→                  value={data.startingBalance}
+   415→                  onChange={(e) => update({ startingBalance: e.target.value })}
+   416→                  disabled={loading}
+   417→                  className="h-9 text-sm"
+   418→                />
+   419→              </div>
+   420→            </div>
+   421→          </div>
+   422→        )}
+   423→      </div>
+   424→
+   425→      {/* Markets You Trade */}
+   426→      <div className="space-y-3">
+   427→        <div className="flex items-center gap-2">
+   428→          <Target className="h-4 w-4 text-muted-foreground" />
+   429→          <span className="text-sm font-semibold">Markets You Trade</span>
+   430→        </div>
+   431→        <p className="text-[11px] text-muted-foreground">
+   432→          Select the instruments you trade. These become your favorites for quick selection.
+   433→        </p>
+   434→
+   435→        {markets.map((m) => {
+   436→          const instrumentsInMarket = INSTRUMENT_CATALOG.filter((i) => i.market === m.market);
+   437→          const selectedInMarket = data.selectedInstruments.filter((s) =>
+   438→            instrumentsInMarket.some((i) => i.symbol === s)
+   439→          );
+   440→          return (
+   441→            <div key={m.market} className="rounded-md border border-border">
+   442→              <button
+   443→                onClick={() => {
+   444→                  if (selectedInMarket.length === instrumentsInMarket.length) {
+   445→                    update({
+   446→                      selectedInstruments: data.selectedInstruments.filter(
+   447→                        (s) => !instrumentsInMarket.some((i) => i.symbol === s)
+   448→                      ),
+   449→                    });
+   450→                  } else {
+   451→                    update({
+   452→                      selectedInstruments: [
+   453→                        ...data.selectedInstruments,
+   454→                        ...instrumentsInMarket
+   455→                          .filter((i) => !data.selectedInstruments.includes(i.symbol))
+   456→                          .map((i) => i.symbol),
+   457→                      ],
+   458→                    });
+   459→                  }
+   460→                }}
+   461→                className="flex items-center justify-between w-full px-3 py-2 text-left hover:bg-muted/50"
+   462→              >
+   463→                <span className="text-xs font-semibold uppercase tracking-wide">{m.label}</span>
+   464→                <Badge variant="outline" className="text-[10px]">
+   465→                  {selectedInMarket.length}/{instrumentsInMarket.length}
+   466→                </Badge>
+   467→              </button>
+   468→              <div className="flex flex-wrap gap-1.5 px-3 pb-2">
+   469→                {instrumentsInMarket.map((inst) => {
+   470→                  const isSelected = data.selectedInstruments.includes(inst.symbol);
+   471→                  return (
+   472→                    <button
+   473→                      key={inst.symbol}
+   474→                      onClick={() => toggleInstrument(inst.symbol)}
+   475→                      className={cn(
+   476→                        "px-2 py-1 rounded-md text-[11px] font-medium transition-colors",
+   477→                        isSelected
+   478→                          ? "bg-primary text-primary-foreground"
+   479→                          : "bg-muted text-muted-foreground hover:bg-muted/70"
+   480→                      )}
+   481→                    >
+   482→                      {inst.symbol}
+   483→                    </button>
+   484→                  );
+   485→                })}
+   486→              </div>
+   487→            </div>
+   488→          );
+   489→        })}
+   490→      </div>
+   491→
+   492→      {/* Default Instrument */}
+   493→      {data.selectedInstruments.length > 0 && (
+   494→        <div className="space-y-1.5">
+   495→          <label className="text-xs font-semibold text-foreground">Default Instrument</label>
+   496→          <InstrumentSelector
+   497→            value={data.defaultInstrument}
+   498→            onChange={(sym) => update({ defaultInstrument: sym })}
+   499→            placeholder="Select your most-traded instrument…"
+   500→          />
+   501→        </div>
+   502→      )}
+   503→    </div>
+   504→  );
+   505→}
+   506→
+   507→/* ------------------------------------------------------------------ */
+   508→/* Step 3: Your Strategy                                              */
+   509→/* ------------------------------------------------------------------ */
+   510→
+   511→function Step3Strategy({
+   512→  data,
+   513→  update,
+   514→  loading,
+   515→}: {
+   516→  data: SetupData;
+   517→  update: (patch: Partial<SetupData>) => void;
+   518→  loading: boolean;
+   519→}) {
+   520→  function applyTemplate(template: string) {
+   521→    update({ strategyTemplate: template });
+   522→    let rules: { title: string; required: boolean; description: string }[] = [];
+   523→    if (template === "ict") rules = ICT_RULES.map((r) => ({ ...r }));
+   524→    else if (template === "trend") rules = TREND_RULES.map((r) => ({ ...r }));
+   525→    else if (template === "breakout") rules = BREAKOUT_RULES.map((r) => ({ ...r }));
+   526→    else rules = [{ title: "", required: true, description: "" }];
+   527→    update({ rules });
+   528→
+   529→    if (template === "ict" && !data.strategyName) update({ strategyName: "ICT Setup" });
+   530→    else if (template === "trend" && !data.strategyName) update({ strategyName: "Trend Following" });
+   531→    else if (template === "breakout" && !data.strategyName) update({ strategyName: "Breakout" });
+   532→  }
+   533→
+   534→  function addRule() {
+   535→    update({ rules: [...data.rules, { title: "", required: true, description: "" }] });
+   536→  }
+   537→
+   538→  function removeRule(idx: number) {
+   539→    update({ rules: data.rules.filter((_, i) => i !== idx) });
+   540→  }
+   541→
+   542→  function updateRule(idx: number, patch: Partial<{ title: string; required: boolean; description: string }>) {
+   543→    update({ rules: data.rules.map((r, i) => (i === idx ? { ...r, ...patch } : r)) });
+   544→  }
+   545→
+   546→  return (
+   547→    <div className="space-y-5">
+   548→      <div>
+   549→        <h2 className="text-xl font-semibold tracking-tight">How do you trade?</h2>
+   550→        <p className="mt-1.5 text-sm text-muted-foreground leading-relaxed">
+   551→          Create the strategy you want DnD to use when evaluating your setups. These rules become the checklist DnD uses when you evaluate your trades.
+   552→        </p>
+   553→      </div>
+   554→
+   555→      {/* Template selector */}
+   556→      <div className="space-y-1.5">
+   557→        <label className="text-xs font-semibold text-foreground">Start from a template</label>
+   558→        <Select value={data.strategyTemplate} onValueChange={applyTemplate}>
+   559→          <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
+   560→          <SelectContent>
+   561→            {STRATEGY_TEMPLATES.map((t) => (
+   562→              <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>
+   563→            ))}
+   564→          </SelectContent>
+   565→        </Select>
+   566→      </div>
+   567→
+   568→      {/* Strategy name + description */}
+   569→      <div className="space-y-3">
+   570→        <div className="space-y-1.5">
+   571→          <label className="text-xs font-semibold text-foreground">Strategy Name</label>
+   572→          <Input
+   573→            value={data.strategyName}
+   574→            onChange={(e) => update({ strategyName: e.target.value })}
+   575→            placeholder="e.g. London Breakout"
+   576→            disabled={loading}
+   577→          />
+   578→        </div>
+   579→        <div className="space-y-1.5">
+   580→          <label className="text-xs font-semibold text-foreground">Short Description</label>
+   581→          <Textarea
+   582→            value={data.strategyDescription}
+   583→            onChange={(e) => update({ strategyDescription: e.target.value })}
+   584→            placeholder="Briefly describe your strategy edge…"
+   585→            rows={2}
+   586→            disabled={loading}
+   587→            className="resize-none"
+   588→          />
+   589→        </div>
+   590→      </div>
+   591→
+   592→      {/* Rules */}
+   593→      <div className="space-y-2">
+   594→        <div className="flex items-center justify-between">
+   595→          <label className="text-xs font-semibold text-foreground">Rules</label>
+   596→          <Button type="button" variant="ghost" size="sm" onClick={addRule} disabled={loading} className="h-7 text-xs">
+   597→            <Plus className="h-3 w-3" /> Add Rule
+   598→          </Button>
+   599→        </div>
+   600→        {data.rules.map((rule, idx) => (
+   601→          <div key={idx} className="rounded-md border border-border bg-muted/20 p-3 space-y-2">
+   602→            <div className="flex items-start gap-2">
+   603→              <Checkbox
+   604→                checked={rule.required}
+   605→                onCheckedChange={(v) => updateRule(idx, { required: v === true })}
+   606→                className="mt-0.5"
+   607→              />
+   608→              <Input
+   609→                value={rule.title}
+   610→                onChange={(e) => updateRule(idx, { title: e.target.value })}
+   611→                placeholder={`Rule ${idx + 1}`}
+   612→                disabled={loading}
+   613→                className="h-8 text-sm flex-1"
+   614→              />
+   615→              <button
+   616→                onClick={() => removeRule(idx)}
+   617→                disabled={loading || data.rules.length <= 1}
+   618→                className="text-muted-foreground hover:text-loss p-1 disabled:opacity-30"
+   619→              >
+   620→                <Trash2 className="h-3.5 w-3.5" />
+   621→              </button>
+   622→            </div>
+   623→            <Input
+   624→              value={rule.description}
+   625→              onChange={(e) => updateRule(idx, { description: e.target.value })}
+   626→              placeholder="Optional description…"
+   627→              disabled={loading}
+   628→              className="h-8 text-xs"
+   629→            />
+   630→          </div>
+   631→        ))}
+   632→        <p className="text-[11px] text-muted-foreground">
+   633→          Checked = required rule. Unchecked = optional. Required rules cap the grade at &quot;C&quot; if not met.
+   634→        </p>
+   635→      </div>
+   636→    </div>
+   637→  );
+   638→}
+   639→
+   640→/* ------------------------------------------------------------------ */
+   641→/* Step 4: Risk + Trading Defaults                                    */
+   642→/* ------------------------------------------------------------------ */
+   643→
+   644→function Step4RiskDefaults({
+   645→  data,
+   646→  update,
+   647→  loading,
+   648→}: {
+   649→  data: SetupData;
+   650→  update: (patch: Partial<SetupData>) => void;
+   651→  loading: boolean;
+   652→}) {
+   653→  return (
+   654→    <div className="space-y-5">
+   655→      <div>
+   656→        <h2 className="text-xl font-semibold tracking-tight">Set your trading defaults</h2>
+   657→        <p className="mt-1.5 text-sm text-muted-foreground leading-relaxed">
+   658→          These preferences make trade entry faster and help keep your risk visible.
+   659→        </p>
+   660→      </div>
+   661→
+   662→      {/* Defaults */}
+   663→      <div className="space-y-3">
+   664→        <div className="flex items-center gap-2">
+   665→          <Sparkles className="h-4 w-4 text-muted-foreground" />
+   666→          <span className="text-sm font-semibold">Defaults</span>
+   667→        </div>
+   668→        <div className="grid grid-cols-2 gap-3">
+   669→          <div className="space-y-1">
+   670→            <label className="text-[11px] font-medium text-muted-foreground">Default Risk %</label>
+   671→            <Input
+   672→              type="number"
+   673→              step="0.1"
+   674→              value={data.defaultRiskPct}
+   675→              onChange={(e) => update({ defaultRiskPct: e.target.value })}
+   676→              disabled={loading}
+   677→              className="h-9 text-sm"
+   678→            />
+   679→            <p className="text-[10px] text-muted-foreground">Your normal planned risk for one trade.</p>
+   680→          </div>
+   681→          <div className="space-y-1">
+   682→            <label className="text-[11px] font-medium text-muted-foreground">Default Session</label>
+   683→            <Select value={data.defaultSession} onValueChange={(v) => update({ defaultSession: v })}>
+   684→              <SelectTrigger className="h-9 text-sm"><SelectValue /></SelectTrigger>
+   685→              <SelectContent>
+   686→                {SESSIONS.map((s) => (
+   687→                  <SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>
+   688→                ))}
+   689→              </SelectContent>
+   690→            </Select>
+   691→          </div>
+   692→          <div className="space-y-1">
+   693→            <label className="text-[11px] font-medium text-muted-foreground">Default Timeframe</label>
+   694→            <Select value={data.defaultTimeframe} onValueChange={(v) => update({ defaultTimeframe: v })}>
+   695→              <SelectTrigger className="h-9 text-sm"><SelectValue /></SelectTrigger>
+   696→              <SelectContent>
+   697→                {TIMEFRAMES.map((tf) => (
+   698→                  <SelectItem key={tf} value={tf}>{tf}</SelectItem>
+   699→                ))}
+   700→              </SelectContent>
+   701→            </Select>
+   702→          </div>
+   703→        </div>
+   704→      </div>
+   705→
+   706→      {/* Risk Management */}
+   707→      <div className="space-y-3">
+   708→        <div className="flex items-center gap-2">
+   709→          <Shield className="h-4 w-4 text-muted-foreground" />
+   710→          <span className="text-sm font-semibold">Risk Management</span>
+   711→        </div>
+   712→        <div className="grid grid-cols-2 gap-3">
+   713→          <div className="space-y-1">
+   714→            <label className="text-[11px] font-medium text-muted-foreground">Max Trades / Day</label>
+   715→            <Input
+   716→              type="number"
+   717→              value={data.maxTradesPerDay}
+   718→              onChange={(e) => update({ maxTradesPerDay: e.target.value })}
+   719→              placeholder="Optional"
+   720→              disabled={loading}
+   721→              className="h-9 text-sm"
+   722→            />
+   723→            <p className="text-[10px] text-muted-foreground">Helps you keep overtrading visible.</p>
+   724→          </div>
+   725→          <div className="space-y-1">
+   726→            <label className="text-[11px] font-medium text-muted-foreground">Daily Loss Limit %</label>
+   727→            <Input
+   728→              type="number"
+   729→              step="0.1"
+   730→              value={data.dailyLossLimitPct}
+   731→              onChange={(e) => update({ dailyLossLimitPct: e.target.value })}
+   732→              placeholder="Optional"
+   733→              disabled={loading}
+   734→              className="h-9 text-sm"
+   735→            />
+   736→            <p className="text-[10px] text-muted-foreground">Your maximum planned loss for the day.</p>
+   737→          </div>
+   738→          <div className="space-y-1">
+   739→            <label className="text-[11px] font-medium text-muted-foreground">Max Risk / Trade %</label>
+   740→            <Input
+   741→              type="number"
+   742→              step="0.1"
+   743→              value={data.maxRiskPerTradePct}
+   744→              onChange={(e) => update({ maxRiskPerTradePct: e.target.value })}
+   745→              placeholder="Optional"
+   746→              disabled={loading}
+   747→              className="h-9 text-sm"
+   748→            />
+   749→            <p className="text-[10px] text-muted-foreground">Hard cap on single-trade risk.</p>
+   750→          </div>
+   751→        </div>
+   752→        <p className="text-[10px] text-muted-foreground">
+   753→          All limits are informational warnings by default — they don&apos;t block trade logging.
+   754→        </p>
+   755→      </div>
+   756→    </div>
+   757→  );
+   758→}
+   759→
+   760→/* ------------------------------------------------------------------ */
+   761→/* Step 5: Ready to Trade                                             */
+   762→/* ------------------------------------------------------------------ */
+   763→
+   764→function Step5Ready({ data }: { data: SetupData }) {
+   765→  const configuredInstruments = data.selectedInstruments.slice(0, 5);
+   766→  const extraInstruments = data.selectedInstruments.length - 5;
+   767→  const validRules = data.rules.filter((r) => r.title.trim());
+   768→
+   769→  return (
+   770→    <div className="space-y-5">
+   771→      <div>
+   772→        <h2 className="text-xl font-semibold tracking-tight">Your workspace is ready.</h2>
+   773→        <p className="mt-1.5 text-sm text-muted-foreground">
+   774→          Here&apos;s what you&apos;ve configured. You can change any of this later in Settings.
+   775→        </p>
+   776→      </div>
+   777→
+   778→      <div className="space-y-3">
+   779→        {/* Profile */}
+   780→        <SummarySection title="Profile" items={[
+   781→          { label: "Timezone", value: data.timezone },
+   782→          { label: "Currency", value: data.currency },
+   783→        ]} />
+   784→
+   785→        {/* Account */}
+   786→        <SummarySection title="Account" items={[
+   787→          { label: "Name", value: data.accountName || "Primary" },
+   788→          { label: "Type", value: data.accountType },
+   789→          { label: "Balance", value: `$${data.startingBalance || "10000"}` },
+   790→        ]} />
+   791→
+   792→        {/* Markets */}
+   793→        {configuredInstruments.length > 0 && (
+   794→          <div className="rounded-lg border border-border bg-muted/20 p-3">
+   795→            <div className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground mb-2">Markets</div>
+   796→            <div className="flex flex-wrap gap-1.5">
+   797→              {configuredInstruments.map((s) => (
+   798→                <Badge key={s} variant="secondary" className="text-[10px]">{s}</Badge>
+   799→              ))}
+   800→              {extraInstruments > 0 && (
+   801→                <Badge variant="outline" className="text-[10px]">+{extraInstruments} more</Badge>
+   802→              )}
+   803→            </div>
+   804→          </div>
+   805→        )}
+   806→
+   807→        {/* Strategy */}
+   808→        {data.strategyName && (
+   809→          <SummarySection title="Strategy" items={[
+   810→            { label: "Name", value: data.strategyName },
+   811→            { label: "Rules", value: `${validRules.length} rules` },
+   812→          ]} />
+   813→        )}
+   814→
+   815→        {/* Trading Defaults */}
+   816→        <SummarySection title="Trading Defaults" items={[
+   817→          { label: "Risk", value: `${data.defaultRiskPct || "1"}%` },
+   818→          { label: "Session", value: SESSIONS.find((s) => s.value === data.defaultSession)?.label ?? data.defaultSession },
+   819→          { label: "Timeframe", value: data.defaultTimeframe },
+   820→        ]} />
+   821→      </div>
+   822→
+   823→      <p className="text-sm text-muted-foreground text-center">
+   824→        You&apos;re ready to start trading with DnD.
+   825→      </p>
+   826→    </div>
+   827→  );
+   828→}
+   829→
+   830→function SummarySection({ title, items }: { title: string; items: { label: string; value: string }[] }) {
+   831→  return (
+   832→    <div className="rounded-lg border border-border bg-muted/20 p-3">
+   833→      <div className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground mb-2">{title}</div>
+   834→      <div className="space-y-1">
+   835→        {items.map((item) => (
+   836→          <div key={item.label} className="flex items-center justify-between text-xs">
+   837→            <span className="text-muted-foreground">{item.label}</span>
+   838→            <span className="font-medium text-foreground">{item.value}</span>
+   839→          </div>
+   840→        ))}
+   841→      </div>
+   842→    </div>
+   843→  );
+   844→}
+   845→
+   846→/* ------------------------------------------------------------------ */
+   847→/* Save + Finish — persists all data then launches the tour            */
+   848→/* ------------------------------------------------------------------ */
+   849→
+   850→function SaveAndFinish({
+   851→  data,
+   852→  loading,
+   853→  setLoading,
+   854→}: {
+   855→  data: SetupData;
+   856→  loading: boolean;
+   857→  setLoading: (b: boolean) => void;
+   858→}) {
+   859→  const qc = useQueryClient();
+   860→  const { setState } = useOnboarding();
+   861→  const { navigate } = useNav();
+   862→
+   863→  async function save() {
+   864→    setLoading(true);
+   865→    try {
+   866→      // 1. Save profile + risk defaults to settings
+   867→      const settingsPatch: Record<string, unknown> = {
+   868→        name: data.name || undefined,
+   869→        timezone: data.timezone,
+   870→        baseCurrencySymbol: data.currency === "USD" ? "$" : data.currency,
+   871→        defaultRiskPct: data.defaultRiskPct,
+   872→        defaultSession: data.defaultSession,
+   873→        defaultTimeframe: data.defaultTimeframe,
+   874→        maxTradesPerDay: data.maxTradesPerDay ? parseInt(data.maxTradesPerDay) : null,
+   875→        dailyLossLimitPct: data.dailyLossLimitPct ? parseFloat(data.dailyLossLimitPct) : null,
+   876→        maxRiskPerTradePct: data.maxRiskPerTradePct ? parseFloat(data.maxRiskPerTradePct) : null,
+   877→      };
+   878→      if (data.defaultInstrument) settingsPatch.defaultInstrument = data.defaultInstrument;
+   879→      if (data.selectedInstruments.length > 0) {
+   880→        settingsPatch.preferredInstruments = JSON.stringify(data.selectedInstruments);
+   881→      }
+   882→
+   883→      await fetch("/api/settings", {
+   884→        method: "PATCH",
+   885→        headers: { "Content-Type": "application/json" },
+   886→        body: JSON.stringify(settingsPatch),
+   887→      });
+   888→
+   889→      // 2. Create trading account
+   890→      const accountRes = await fetch("/api/accounts", {
+   891→        method: "POST",
+   892→        headers: { "Content-Type": "application/json" },
+   893→        body: JSON.stringify({
+   894→          name: data.accountName || "Primary",
+   895→          broker: data.broker || undefined,
+   896→          accountType: data.accountType,
+   897→          currency: data.currency,
+   898→          startingBalanceCents: Math.round(parseFloat(data.startingBalance || "10000") * 100),
+   899→          isDefault: true,
+   900→        }),
+   901→      });
+   902→      if (accountRes.ok) {
+   903→        const account = await accountRes.json();
+   904→        // Update defaultAccountId
+   905→        await fetch("/api/settings", {
+   906→          method: "PATCH",
+   907→          headers: { "Content-Type": "application/json" },
+   908→          body: JSON.stringify({ defaultAccountId: account.id }),
+   909→        });
+   910→      }
+   911→
+   912→      // 3. Create strategy + version
+   913→      if (data.strategyName) {
+   914→        const cleanRules = data.rules
+   915→          .filter((r) => r.title.trim())
+   916→          .map((r) => ({ title: r.title.trim(), required: r.required, description: r.description.trim() }));
+   917→
+   918→        const stratRes = await fetch("/api/strategies", {
+   919→          method: "POST",
+   920→          headers: { "Content-Type": "application/json" },
+   921→          body: JSON.stringify({
+   922→            name: data.strategyName,
+   923→            description: data.strategyDescription || undefined,
+   924→            market: "mixed",
+   925→            rules: cleanRules,
+   926→          }),
+   927→        });
+   928→        if (!stratRes.ok) {
+   929→          toast.error("Failed to create strategy — you can set it up later.");
+   930→        }
+   931→      }
+   932→
+   933→      // 4. Invalidate everything
+   934→      qc.invalidateQueries();
+   935→
+   936→      // 5. Launch tour
+   937→      setState("tour");
+   938→    } catch {
+   939→      toast.error("Something went wrong. Your setup may be incomplete.");
+   940→      setLoading(false);
+   941→    }
+   942→  }
+   943→
+   944→  return (
+   945→    <Button size="sm" onClick={save} disabled={loading}>
+   946→      {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />}
+   947→      Go to Dashboard
+   948→    </Button>
+   949→  );
+   950→}
+   951→

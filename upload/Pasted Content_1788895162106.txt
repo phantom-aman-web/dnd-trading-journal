@@ -1,0 +1,2202 @@
+MASTER DnD PROJECT REVERSE-ENGINEERING + COMPLETE SYSTEM DOCUMENTATION
+
+ROLE
+
+Act as a senior software architect, product architect, UX architect, frontend engineer, backend engineer, database engineer, security engineer, QA engineer, and technical documentation specialist.
+
+Your task is NOT to redesign or modify DnD.
+
+Your task is to completely inspect, reverse-engineer, map, and document the CURRENT STATE of the DnD project after its recent major redesign based on the new reference website.
+
+I need a complete technical and product intelligence report that another senior engineer or AI model can read and understand the entire project without needing to inspect the codebase again.
+
+The final report must describe what the application ACTUALLY does today.
+
+Do not describe what you think it should do.
+
+Do not describe old versions of DnD unless explicitly labeled as historical.
+
+Do not assume implementation details.
+
+Do not invent missing functionality.
+
+If something cannot be verified, explicitly mark it:
+
+- VERIFIED
+- PARTIALLY VERIFIED
+- INFERRED
+- NOT FOUND
+- NOT VERIFIED
+
+The report must be based primarily on the actual codebase, actual running application, actual database/schema, actual routes/API behavior, configuration, and actual UI.
+
+--------------------------------------------------
+0. FIRST PRINCIPLE
+--------------------------------------------------
+
+This is a reverse-engineering task.
+
+DO NOT modify the application.
+
+DO NOT refactor.
+
+DO NOT redesign.
+
+DO NOT "fix" issues found during inspection.
+
+DO NOT silently improve anything.
+
+Do not add missing functionality.
+
+Only inspect, run, trace, document, and verify.
+
+If you need to temporarily run commands, inspect data, build the project, or use browser tooling, that is allowed.
+
+But leave the project unchanged.
+
+--------------------------------------------------
+1. PROJECT IDENTITY
+--------------------------------------------------
+
+Document:
+
+- product name
+- product purpose
+- target user
+- primary user problem
+- core product philosophy
+- primary user workflow
+- major value proposition
+- current positioning
+- current visual/design identity
+- current technical architecture
+- current deployment architecture
+
+Explain what DnD is in one concise paragraph.
+
+Then explain it in a technical/product paragraph.
+
+Also document the current core mental model if one exists.
+
+For example, if the implementation actually follows something like:
+
+PLAN → TRADE → DOCUMENT → REVIEW → ANALYZE → IMPROVE
+
+document that only if supported by the current product.
+
+--------------------------------------------------
+2. COMPLETE APPLICATION MAP
+--------------------------------------------------
+
+Create a complete sitemap / route inventory.
+
+For EVERY route/page:
+
+- route/path
+- public or authenticated
+- purpose
+- page title
+- primary user action
+- secondary actions
+- entry points
+- exit points
+- required permissions
+- data displayed
+- backend dependencies
+- loading state
+- empty state
+- error state
+- success state
+- mobile behavior
+- desktop behavior
+- related routes
+
+Include:
+
+PUBLIC
+- landing page
+- authentication
+- signup
+- sign in
+- password recovery if present
+- legal pages
+- other public routes
+
+AUTHENTICATED
+- dashboard
+- journal
+- add trade
+- trade detail
+- edit trade
+- daily plans
+- calendar
+- analytics
+- strategies/playbooks
+- reviews
+- media
+- settings
+- onboarding
+- any other route discovered
+
+Do not use an assumed sitemap.
+
+Discover the actual one.
+
+--------------------------------------------------
+3. UI / UX REVERSE ENGINEERING
+--------------------------------------------------
+
+Inspect every visible screen.
+
+Document the complete UI system.
+
+For each page explain:
+
+PAGE STRUCTURE
+- overall layout
+- header
+- sidebar
+- content area
+- secondary navigation
+- footer
+- mobile navigation
+- responsive behavior
+
+COMPONENTS
+- major components
+- reusable components
+- cards
+- tables
+- charts
+- modals
+- drawers
+- dropdowns
+- tabs
+- forms
+- tooltips
+- command palette
+- dialogs
+- alerts
+- toasts
+- pagination
+- filters
+- search
+- sorting
+- breadcrumbs
+
+INTERACTIONS
+For each important component document:
+
+- what happens when clicked
+- what state changes
+- what data changes
+- whether the action calls an API/server action/database
+- whether it changes URL state
+- whether it changes client state
+- whether it triggers a refresh/invalidation
+- success behavior
+- error behavior
+
+--------------------------------------------------
+4. VISUAL DESIGN SYSTEM
+--------------------------------------------------
+
+Reverse-engineer the current design system.
+
+Document exact values wherever discoverable.
+
+Include:
+
+COLORS
+- background
+- foreground
+- muted text
+- borders
+- cards/surfaces
+- primary/accent
+- success
+- warning
+- danger
+- informational states
+- chart colors
+
+TYPOGRAPHY
+- font family
+- font weights
+- heading sizes
+- body sizes
+- labels
+- captions
+- monospace usage
+
+SPACING
+- page padding
+- section spacing
+- card spacing
+- grid gaps
+- form spacing
+- sidebar spacing
+
+COMPONENT STYLE
+- border radius
+- border thickness
+- shadows
+- elevation
+- hover behavior
+- focus behavior
+- active states
+- disabled states
+
+LAYOUT
+- max content width
+- sidebar width
+- header height
+- breakpoints
+- grid behavior
+
+THEMES
+- light theme
+- dark theme
+- system preference
+- theme persistence
+- theme switching behavior
+
+ICONS
+- icon library
+- icon sizing
+- icon style
+- icon usage conventions
+
+ANIMATION
+- animation library
+- transitions
+- duration patterns
+- entrance animation
+- hover animation
+- page transitions
+
+ACCESSIBILITY
+- keyboard navigation
+- focus states
+- aria labels
+- color contrast
+- screen reader considerations
+
+Document the actual design tokens or source files whenever possible.
+
+--------------------------------------------------
+5. REFERENCE WEBSITE RELATIONSHIP
+--------------------------------------------------
+
+The current redesign was based on a new reference website.
+
+Identify all evidence of that influence.
+
+Document:
+
+- what visual patterns appear to have been adopted
+- what layouts are similar
+- what interaction patterns are similar
+- what navigation patterns are similar
+- what typography patterns are similar
+- what component patterns are similar
+- what appears original to DnD
+- what appears directly inspired by the reference
+
+IMPORTANT:
+
+Do not accuse the implementation of copying.
+
+Describe observable structural/design relationships objectively.
+
+If the reference website is available in the project, inspect it.
+
+If an external reference URL is configured/documented, inspect it if accessible.
+
+Create a section:
+
+"REFERENCE → CURRENT DnD TRANSLATION"
+
+Explain how the reference concept became the current DnD interface.
+
+--------------------------------------------------
+6. FRONTEND ARCHITECTURE
+--------------------------------------------------
+
+Reverse-engineer the complete frontend architecture.
+
+Document:
+
+FRAMEWORK
+- framework
+- version
+- routing architecture
+- rendering strategy
+- server/client component boundaries
+- SSR/CSR/SSG usage
+- middleware
+
+LANGUAGE
+- TypeScript/JavaScript
+- strictness
+- compiler configuration
+
+STYLING
+- Tailwind
+- CSS modules
+- global CSS
+- component library
+- design tokens
+
+STATE
+Identify ALL state systems.
+
+For each:
+
+- library
+- what state it stores
+- whether state is global/local/server state
+- persistence
+- hydration
+- synchronization
+- invalidation
+- optimistic updates
+- potential stale-state issues
+
+Document things such as:
+
+- auth state
+- user profile state
+- trade state
+- strategy state
+- daily-plan state
+- UI preferences
+- filters
+- selected date
+- modal state
+- onboarding state
+- theme
+- sidebar state
+
+Do not assume Zustand/React Query or any library unless actually present.
+
+--------------------------------------------------
+7. COMPONENT ARCHITECTURE
+--------------------------------------------------
+
+Create a component hierarchy.
+
+Identify:
+
+- layout components
+- navigation components
+- page-level components
+- feature components
+- reusable UI components
+- form components
+- chart components
+- data-table components
+- modal/dialog components
+- shared utilities
+
+Show relationships such as:
+
+App/Layout
+  ├── Navigation
+  ├── Sidebar
+  ├── Main Content
+  │     ├── Dashboard
+  │     ├── Journal
+  │     └── ...
+
+Also identify duplicated components and shared abstractions.
+
+For important components document:
+
+- location/file
+- responsibility
+- props
+- state
+- data dependencies
+- events
+- API calls
+- reuse locations
+
+--------------------------------------------------
+8. FORM SYSTEM
+--------------------------------------------------
+
+Reverse-engineer every major form.
+
+For:
+
+- signup
+- login
+- add trade
+- edit trade
+- strategy creation
+- strategy editing/versioning
+- daily plan
+- review
+- settings
+- media upload
+- onboarding
+- other forms
+
+document:
+
+- fields
+- type
+- required/optional
+- defaults
+- validation
+- validation location
+- client validation
+- server validation
+- error messages
+- submission flow
+- loading state
+- success state
+- reset behavior
+- edit behavior
+- dirty-state behavior
+- unsaved changes protection
+- API/server action used
+
+--------------------------------------------------
+9. AUTHENTICATION
+--------------------------------------------------
+
+Completely reverse-engineer authentication.
+
+Document:
+
+- provider
+- session architecture
+- session lifecycle
+- login flow
+- signup flow
+- logout
+- password recovery
+- password reset
+- email verification
+- session expiration
+- refresh behavior
+- protected routes
+- middleware
+- authorization checks
+
+Trace the exact flow:
+
+USER ACTION
+→ FRONTEND
+→ API/SERVER ACTION
+→ AUTH PROVIDER
+→ DATABASE
+→ SESSION
+→ REDIRECT
+→ APPLICATION STATE
+
+Document any weaknesses or unverified areas.
+
+--------------------------------------------------
+10. AUTHORIZATION + OWNERSHIP
+--------------------------------------------------
+
+For every user-owned resource determine:
+
+- ownership field
+- ownership check
+- server-side authorization
+- database authorization
+- RLS if applicable
+- API-level authorization
+- frontend-only protections
+
+Inspect resources such as:
+
+- trades
+- strategies
+- strategy versions
+- daily plans
+- reviews
+- media
+- annotations
+- analytics
+- settings
+- user profile
+- legal consent
+
+Create a matrix:
+
+RESOURCE | OWNER | READ | CREATE | UPDATE | DELETE | SERVER CHECK | DB CHECK
+
+Do not assume frontend hiding equals authorization.
+
+--------------------------------------------------
+11. DATABASE REVERSE ENGINEERING
+--------------------------------------------------
+
+Produce a COMPLETE database inventory.
+
+For every model/table:
+
+- table/model name
+- purpose
+- primary key
+- foreign keys
+- user ownership
+- fields
+- field types
+- nullable/non-nullable
+- defaults
+- enums
+- indexes
+- unique constraints
+- cascading behavior
+- timestamps
+- soft delete if present
+- audit fields
+- relations
+
+Then produce the relationship map.
+
+Example format:
+
+User
+ ├── Trades
+ ├── Strategies
+ ├── Daily Plans
+ ├── Reviews
+ └── Media
+
+But only show relationships actually present.
+
+Inspect:
+
+- migrations
+- ORM schema
+- SQL schema
+- indexes
+- constraints
+- triggers
+- functions
+- views
+- procedures
+- RLS policies
+
+--------------------------------------------------
+12. COMPLETE DOMAIN MODEL
+--------------------------------------------------
+
+Explain the DnD business domain.
+
+Define every major entity and what it means.
+
+For example, if they exist:
+
+User
+Trade
+Strategy
+StrategyVersion
+Rule
+Checklist
+ChecklistEvaluation
+DailyPlan
+Review
+Media
+Annotation
+AuditEvent
+AnalyticsCache
+etc.
+
+For each entity explain:
+
+- what it represents
+- why it exists
+- how it relates to other entities
+- lifecycle
+- creation
+- update
+- deletion
+- historical preservation
+
+Do not use old DnD terminology if the current application has changed.
+
+--------------------------------------------------
+13. TRADING DOMAIN LOGIC
+--------------------------------------------------
+
+Reverse-engineer ALL trading logic.
+
+Document:
+
+- instruments
+- symbols
+- asset classes
+- direction
+- quantity
+- entry
+- exit
+- stop loss
+- take profit
+- risk
+- fees
+- commissions
+- P&L
+- R multiple
+- win/loss/breakeven
+- account balance
+- equity
+- drawdown
+- streaks
+- profit factor
+- average R
+- expectancy
+- other metrics
+
+For each financial calculation explain:
+
+INPUT
+→ FORMULA
+→ ENGINE
+→ STORAGE
+→ DISPLAY
+
+Important:
+
+Identify the authoritative source of every financial metric.
+
+Document:
+- integer/decimal representation
+- rounding
+- precision
+- currency handling
+- conversion
+- overflow risks
+- recalculation behavior
+- edit behavior
+
+Explicitly identify whether financial values are:
+- database authoritative
+- recalculated
+- cached
+- client-derived
+- server-derived
+
+--------------------------------------------------
+14. TRADE LIFECYCLE
+--------------------------------------------------
+
+Trace the ENTIRE trade lifecycle.
+
+Example:
+
+Create Trade
+→ Plan
+→ Strategy Selection
+→ Setup
+→ Checklist
+→ Risk
+→ Execution
+→ Evidence
+→ Psychology
+→ Result
+→ Review
+→ Analytics
+
+But use the actual current application.
+
+For each stage explain:
+
+- UI
+- fields
+- backend
+- database
+- validations
+- state transitions
+- relationships
+- calculated values
+
+Also document:
+
+CREATE TRADE
+UPDATE TRADE
+DELETE TRADE
+VIEW TRADE
+
+and what happens to related data in each operation.
+
+--------------------------------------------------
+15. STRATEGY SYSTEM
+--------------------------------------------------
+
+Completely reverse-engineer the strategy/playbook architecture.
+
+Document:
+
+- strategy creation
+- strategy editing
+- strategy activation/deactivation
+- versioning
+- rules
+- rule ordering
+- rule weights
+- rule necessity
+- rule scoring
+- grade logic
+- checklist generation
+- checklist evaluation
+- historical preservation
+
+Determine exactly how:
+
+STRATEGY
+→ STRATEGY VERSION
+→ RULES
+→ CHECKLIST
+→ TRADE
+→ EVALUATION
+→ SCORE
+→ GRADE
+
+works.
+
+Explain whether a trade is permanently linked to the exact version/rules used at execution.
+
+--------------------------------------------------
+16. A+ / CHECKLIST SYSTEM
+--------------------------------------------------
+
+Reverse-engineer the current checklist system in detail.
+
+Document:
+
+- where checklist definitions originate
+- whether generic checklists exist
+- whether strategies generate checklists
+- rule fields
+- required rules
+- weights
+- multipliers
+- score calculation
+- grade calculation
+- unanswered rules
+- failed required rules
+- score caps
+- historical snapshots
+- editing behavior
+
+Trace:
+
+RAW ANSWERS
+→ WEIGHTS
+→ SCORE
+→ GRADE
+
+Do not assume this is how it works. Verify it.
+
+--------------------------------------------------
+17. DAILY PLAN SYSTEM
+--------------------------------------------------
+
+Reverse-engineer Daily Plans.
+
+Document:
+
+- creation
+- editing
+- date
+- market/instrument
+- bias
+- liquidity targets
+- HTF levels
+- sessions
+- setup conditions
+- invalidation
+- risk limits
+- max trades
+- strategy
+- trade linkage
+- adherence
+- plan completion
+
+Explain exactly how a Daily Plan connects to a Trade.
+
+Also document whether plan adherence is:
+
+- stored
+- calculated
+- displayed
+- analyzed
+
+--------------------------------------------------
+18. PSYCHOLOGY SYSTEM
+--------------------------------------------------
+
+Document:
+
+- psychological fields
+- emotions
+- tags
+- behavior flags
+- confidence
+- discipline
+- mistakes
+- psychological notes
+- scoring if present
+- analytics
+
+Explain the data flow from:
+
+TRADE PSYCHOLOGY
+→ STORAGE
+→ AGGREGATION
+→ ANALYTICS
+→ INSIGHT
+
+Identify any behavioral impact calculations.
+
+--------------------------------------------------
+19. EVIDENCE / MEDIA SYSTEM
+--------------------------------------------------
+
+Completely reverse-engineer media.
+
+Document:
+
+- uploads
+- file types
+- image handling
+- video handling
+- storage
+- metadata
+- trade relation
+- thumbnails
+- preview
+- downloads
+- deletion
+- annotations
+- annotation persistence
+- canvas/graphics technology
+- access control
+- file size limits
+
+Trace:
+
+UPLOAD
+→ STORAGE
+→ DATABASE
+→ TRADE
+→ DISPLAY
+
+Also identify large-file risks and browser-memory risks.
+
+--------------------------------------------------
+20. CALENDAR
+--------------------------------------------------
+
+Document the Calendar implementation.
+
+Include:
+
+- date grouping
+- timezone
+- day metrics
+- trade list
+- daily P&L
+- R
+- win rate
+- best trade
+- worst trade
+- A+ count
+- rule violations
+- sessions
+- daily-plan relationship
+
+Explain what happens when the user clicks a day.
+
+Trace:
+
+DATE
+→ QUERY
+→ FILTER
+→ AGGREGATION
+→ DAY VIEW
+
+--------------------------------------------------
+21. ANALYTICS
+--------------------------------------------------
+
+Reverse-engineer analytics completely.
+
+Document:
+
+- metrics
+- filters
+- dimensions
+- date ranges
+- strategy analysis
+- instrument analysis
+- session analysis
+- setup analysis
+- psychology analysis
+- direction
+- day/time
+- A+ vs non-A+
+- plan adherence
+- equity curve
+- distribution charts
+- drawdown
+- streaks
+- insights
+
+For EVERY important metric document:
+
+NAME
+SOURCE
+FORMULA
+DATASET
+FILTERS
+MINIMUM SAMPLE SIZE
+DISPLAY
+
+Determine whether analytics are:
+
+- calculated client-side
+- calculated server-side
+- cached
+- precomputed
+- queried live
+- queued
+- background processed
+
+--------------------------------------------------
+22. REVIEWS
+--------------------------------------------------
+
+Reverse-engineer:
+
+- Daily review
+- Weekly review
+- Monthly review
+- reflection
+- auto-generated metrics
+- detected patterns
+- action items
+- strategy improvement
+- links back to trades
+
+Document the exact data flow.
+
+--------------------------------------------------
+23. ONBOARDING
+--------------------------------------------------
+
+Reverse-engineer the new-user experience.
+
+Document:
+
+- first-login behavior
+- welcome screen
+- setup flow
+- guided walkthrough
+- progress state
+- skipped state
+- replay mechanism
+- getting-started checklist
+- contextual help
+- empty states
+- first strategy
+- first Daily Plan
+- first trade
+- first review
+
+Trace the new-user lifecycle:
+
+SIGNUP
+→ LEGAL CONSENT
+→ ACCOUNT
+→ ONBOARDING
+→ STRATEGY
+→ DAILY PLAN
+→ FIRST TRADE
+→ REVIEW
+
+--------------------------------------------------
+24. SETTINGS
+--------------------------------------------------
+
+Document the complete current Settings architecture.
+
+Find every section and every field.
+
+Document:
+
+- Profile
+- Appearance
+- Trading Preferences
+- Notifications
+- Security
+- Data
+- Legal
+- Timezone
+- Account
+- other discovered settings
+
+For every setting:
+
+- source
+- storage
+- default
+- validation
+- where it affects the application
+
+Pay special attention to timezone because it affects:
+
+- dashboard
+- analytics
+- calendar
+- daily plans
+- trade timestamps
+- reviews
+- sessions
+- reports
+
+--------------------------------------------------
+25. LEGAL + CONSENT
+--------------------------------------------------
+
+Reverse-engineer:
+
+- Terms
+- Privacy
+- Cookie Policy
+- cookie consent
+- legal acceptance
+- policy versions
+- consent records
+- signup requirements
+- re-acceptance
+
+Document exactly where legal state is stored and how it is enforced.
+
+--------------------------------------------------
+26. API / SERVER ARCHITECTURE
+--------------------------------------------------
+
+Inventory ALL:
+
+- API routes
+- server actions
+- server components that query data
+- database functions
+- background jobs
+- cron routes
+- webhooks
+- upload endpoints
+
+For every endpoint:
+
+METHOD
+PATH
+AUTH REQUIRED
+OWNER CHECK
+INPUT
+VALIDATION
+DATABASE ACTION
+RESPONSE
+ERRORS
+SIDE EFFECTS
+AUDIT EVENT
+CACHE INVALIDATION
+
+Create an API map.
+
+--------------------------------------------------
+27. DATA FLOW ARCHITECTURE
+--------------------------------------------------
+
+Create end-to-end data flow diagrams.
+
+At minimum:
+
+AUTH FLOW
+
+SIGNUP FLOW
+
+TRADE CREATION FLOW
+
+TRADE UPDATE FLOW
+
+TRADE DELETE FLOW
+
+STRATEGY CREATION FLOW
+
+STRATEGY VERSION FLOW
+
+CHECKLIST EVALUATION FLOW
+
+DAILY PLAN FLOW
+
+MEDIA UPLOAD FLOW
+
+ANALYTICS FLOW
+
+REVIEW FLOW
+
+COOKIE CONSENT FLOW
+
+LEGAL CONSENT FLOW
+
+For each:
+
+UI
+→ STATE
+→ SERVER
+→ DATABASE
+→ RESPONSE
+→ UI UPDATE
+
+--------------------------------------------------
+28. CACHE + PERFORMANCE ARCHITECTURE
+--------------------------------------------------
+
+Inspect:
+
+- caching
+- query caching
+- browser caching
+- server caching
+- analytics cache
+- invalidation
+- pagination
+- query optimization
+- N+1 queries
+- expensive computations
+- large media
+- chart rendering
+- database indexes
+
+Document:
+
+WHAT IS CACHED
+WHERE
+FOR HOW LONG
+HOW INVALIDATED
+WHAT HAPPENS IF CACHE IS STALE
+WHAT HAPPENS IF CACHE FAILS
+
+--------------------------------------------------
+29. BACKGROUND JOBS
+--------------------------------------------------
+
+Determine whether the application currently has:
+
+- analytics jobs
+- workers
+- cron
+- queues
+- retries
+- abandoned job recovery
+- job locking
+- scheduled processing
+
+Do not assume any queue exists.
+
+Explain what actually exists.
+
+--------------------------------------------------
+30. SECURITY AUDIT
+--------------------------------------------------
+
+Perform a static security review.
+
+Inspect:
+
+- authentication
+- authorization
+- RLS
+- API ownership
+- secrets
+- environment variables
+- cookies
+- CSRF
+- XSS
+- SQL injection
+- validation
+- file uploads
+- storage access
+- rate limiting
+- headers
+- CSP
+- HSTS
+- CORS
+- logging
+- error leakage
+- timing attacks
+- mass assignment
+- server/client trust boundaries
+- fallback secrets
+- public/private data exposure
+
+Clearly classify:
+
+SAFE
+WARNING
+CRITICAL
+UNVERIFIED
+
+Do not claim runtime security tests passed unless actually tested.
+
+--------------------------------------------------
+31. ERROR HANDLING
+--------------------------------------------------
+
+Inspect every major error path.
+
+Document:
+
+- validation errors
+- API errors
+- authentication errors
+- database errors
+- upload errors
+- network errors
+- empty states
+- loading states
+- timeout states
+- unexpected errors
+
+Identify pages/components where error handling is missing or weak.
+
+--------------------------------------------------
+32. TESTING
+--------------------------------------------------
+
+Inventory ALL tests.
+
+Document:
+
+- unit tests
+- integration tests
+- API tests
+- database tests
+- RLS tests
+- E2E tests
+- browser tests
+- financial tests
+- security tests
+
+For each test:
+
+- file
+- what it validates
+- status
+- dependencies
+- whether it actually runs
+
+Do not label something tested simply because test code exists.
+
+--------------------------------------------------
+33. BUILD / DEPLOYMENT
+--------------------------------------------------
+
+Reverse-engineer:
+
+- development environment
+- build process
+- production build
+- hosting
+- database hosting
+- storage
+- authentication provider
+- environment variables
+- deployment configuration
+- CI/CD
+- cron
+- workers
+- domains
+- HTTPS
+- monitoring
+- logging
+- error tracking
+
+Document:
+
+LOCAL
+→ BUILD
+→ DEPLOY
+→ DATABASE
+→ STORAGE
+→ AUTH
+→ PRODUCTION
+
+--------------------------------------------------
+34. ENVIRONMENT VARIABLES
+--------------------------------------------------
+
+Inventory environment variables WITHOUT revealing secret values.
+
+Show:
+
+VARIABLE NAME
+PURPOSE
+REQUIRED?
+CLIENT/SERVER
+SOURCE
+FALLBACK?
+
+Never expose actual secret values.
+
+Flag unsafe fallback secrets or public exposure.
+
+--------------------------------------------------
+35. THIRD-PARTY DEPENDENCIES
+--------------------------------------------------
+
+Inventory major packages/services.
+
+For each:
+
+- package/service
+- purpose
+- where used
+- criticality
+- frontend/backend
+- alternatives if relevant
+
+Group by:
+
+UI
+STATE
+DATABASE
+AUTH
+CHARTS
+MEDIA
+VALIDATION
+SECURITY
+MONITORING
+TESTING
+OTHER
+
+--------------------------------------------------
+36. PERFORMANCE CHARACTERISTICS
+--------------------------------------------------
+
+Inspect likely performance bottlenecks.
+
+Pay special attention to:
+
+- analytics
+- large trade datasets
+- tables
+- charts
+- media
+- uploads
+- images
+- video
+- client-side aggregation
+- database queries
+- N+1 queries
+- hydration
+- bundle size
+
+If actual measurements can safely be obtained, record them.
+
+Otherwise mark them UNVERIFIED.
+
+Do not invent benchmark numbers.
+
+--------------------------------------------------
+37. RESPONSIVE DESIGN
+--------------------------------------------------
+
+Inspect desktop/tablet/mobile behavior.
+
+Document:
+
+- desktop navigation
+- mobile navigation
+- sidebar collapse
+- bottom navigation
+- mobile forms
+- tables
+- charts
+- calendars
+- modals
+- touch behavior
+- responsive breakpoints
+
+Identify UI elements that degrade on smaller screens.
+
+--------------------------------------------------
+38. FULL USER JOURNEYS
+--------------------------------------------------
+
+Write complete user journey walkthroughs.
+
+At minimum:
+
+JOURNEY 1:
+First-time visitor
+
+JOURNEY 2:
+Signup
+
+JOURNEY 3:
+First-time onboarding
+
+JOURNEY 4:
+Create strategy
+
+JOURNEY 5:
+Create Daily Plan
+
+JOURNEY 6:
+Add first trade
+
+JOURNEY 7:
+Evaluate checklist
+
+JOURNEY 8:
+Attach evidence
+
+JOURNEY 9:
+Review trade
+
+JOURNEY 10:
+Review day
+
+JOURNEY 11:
+Analyze performance
+
+JOURNEY 12:
+Review strategy performance
+
+JOURNEY 13:
+Edit trade
+
+JOURNEY 14:
+Delete trade
+
+JOURNEY 15:
+Return to previous historical strategy version
+
+JOURNEY 16:
+Change timezone
+
+JOURNEY 17:
+Change legal/cookie preferences
+
+For each journey explain every screen transition and backend interaction.
+
+--------------------------------------------------
+39. STATE MACHINES
+--------------------------------------------------
+
+Where useful, document state transitions.
+
+Examples:
+
+ONBOARDING:
+NOT_STARTED → IN_PROGRESS → COMPLETED / SKIPPED
+
+TRADE:
+PLANNED → EXECUTED → CLOSED → REVIEWED
+
+But only if the current system actually behaves this way.
+
+Identify actual state fields and transition rules.
+
+--------------------------------------------------
+40. AUDIT TRAIL
+--------------------------------------------------
+
+Reverse-engineer audit logging.
+
+Document:
+
+- event types
+- resources
+- create/update/delete coverage
+- user attribution
+- timestamps
+- metadata
+- immutability
+- security
+
+Create a matrix of which mutations generate audit events.
+
+--------------------------------------------------
+41. IMPORT / EXPORT / DATA PORTABILITY
+--------------------------------------------------
+
+Document:
+
+- import formats
+- export formats
+- validation
+- ownership
+- duplicate behavior
+- error behavior
+- backups
+- restore
+- destructive operations
+- account deletion
+
+--------------------------------------------------
+42. KNOWN BUGS / TECHNICAL RISKS
+--------------------------------------------------
+
+Create a comprehensive list of:
+
+CRITICAL
+HIGH
+MEDIUM
+LOW
+
+For each:
+
+- problem
+- evidence
+- affected area
+- severity
+- user impact
+- technical impact
+- reproducibility
+- recommended direction
+
+DO NOT FIX THEM.
+
+--------------------------------------------------
+43. MISSING FEATURES
+--------------------------------------------------
+
+Identify functionality that appears referenced by UI, architecture, documentation, routes, or previous design concepts but is currently missing.
+
+Separate:
+
+CONFIRMED MISSING
+POSSIBLY MISSING
+NOT VERIFIED
+
+Do not turn assumptions into confirmed missing functionality.
+
+--------------------------------------------------
+44. CODE QUALITY / ARCHITECTURE ASSESSMENT
+--------------------------------------------------
+
+Evaluate:
+
+- separation of concerns
+- reusability
+- type safety
+- naming
+- file organization
+- duplicate logic
+- business logic placement
+- frontend/backend boundaries
+- database coupling
+- maintainability
+- scalability
+- technical debt
+
+Do not rewrite code.
+
+Give evidence.
+
+--------------------------------------------------
+45. FEATURE TRACEABILITY MATRIX
+--------------------------------------------------
+
+Create one giant matrix:
+
+FEATURE
+→ UI
+→ COMPONENT
+→ ROUTE
+→ API/SERVER ACTION
+→ DATABASE MODEL
+→ BUSINESS LOGIC
+→ AUTHORIZATION
+→ ANALYTICS
+→ AUDIT
+→ TESTS
+
+Do this for all major DnD features.
+
+--------------------------------------------------
+46. REQUIREMENT TRACEABILITY
+--------------------------------------------------
+
+Where old project requirements/specifications/documentation exist in the repository, compare them against the current implementation.
+
+For each requirement:
+
+- implemented
+- partially implemented
+- changed
+- removed
+- missing
+- unclear
+
+IMPORTANT:
+
+The CURRENT CODEBASE is the primary source of truth for current behavior.
+
+Historical requirements should be labeled historical.
+
+--------------------------------------------------
+47. ACTUAL VS INTENDED
+--------------------------------------------------
+
+Create a very important section:
+
+"CURRENT ACTUAL SYSTEM"
+
+Explain what the product actually does now.
+
+Then:
+
+"INTENDED / DOCUMENTED SYSTEM"
+
+Explain what older project plans/specifications say.
+
+Then:
+
+"DIFFERENCES"
+
+Explain the divergence.
+
+Do not silently combine them.
+
+--------------------------------------------------
+48. MASTER ARCHITECTURE DIAGRAM
+--------------------------------------------------
+
+Create a high-level architecture diagram in text.
+
+Example style:
+
+USER
+ ↓
+PUBLIC WEB / AUTH
+ ↓
+APPLICATION SHELL
+ ↓
+FEATURE MODULES
+ ↓
+STATE / SERVER
+ ↓
+API / SERVER ACTIONS
+ ↓
+BUSINESS LOGIC
+ ↓
+DATABASE / STORAGE
+ ↓
+ANALYTICS / BACKGROUND PROCESSING
+
+Use the ACTUAL architecture.
+
+--------------------------------------------------
+49. MASTER FEATURE MAP
+--------------------------------------------------
+
+Create a concise overview:
+
+DnD
+├── Public Experience
+├── Authentication
+├── Onboarding
+├── Trading Journal
+├── Strategies
+├── Rules / Checklist
+├── Daily Plans
+├── Calendar
+├── Analytics
+├── Reviews
+├── Media
+├── Settings
+├── Legal
+└── Infrastructure
+
+Replace this tree with the actual system.
+
+--------------------------------------------------
+50. MASTER DATA MODEL MAP
+--------------------------------------------------
+
+Create one consolidated entity relationship overview.
+
+Example:
+
+User
+ ├── Strategy
+ │    └── StrategyVersion
+ │          └── Rules
+ ├── DailyPlan
+ ├── Trade
+ │    ├── ChecklistEvaluation
+ │    ├── Psychology
+ │    ├── Media
+ │    └── Review
+ └── LegalConsent
+
+Again, use only actual relationships.
+
+--------------------------------------------------
+51. MASTER USER FLOW
+--------------------------------------------------
+
+Create one consolidated product workflow.
+
+From:
+
+Visitor
+→ Landing Page
+→ Signup
+→ Legal Consent
+→ Onboarding
+→ Strategy
+→ Daily Plan
+→ Trade
+→ Evidence
+→ Review
+→ Analytics
+→ Improvement
+
+Adapt it to the actual product.
+
+--------------------------------------------------
+52. SCREEN-BY-SCREEN INVENTORY
+--------------------------------------------------
+
+Create a table containing EVERY important screen.
+
+Columns:
+
+SCREEN
+ROUTE
+AUTH
+PURPOSE
+PRIMARY ACTION
+MAIN DATA
+BACKEND
+MOBILE
+STATUS
+NOTES
+
+--------------------------------------------------
+53. FILE-BY-FILE IMPORTANT CODE MAP
+--------------------------------------------------
+
+Do NOT dump the entire codebase.
+
+Instead identify important files/directories:
+
+FILE/PATH
+PURPOSE
+RELATED FEATURE
+DEPENDENCIES
+IMPORTANT FUNCTIONS
+IMPORTANT COMPONENTS
+IMPORTANCE
+
+Prioritize architecture-critical files.
+
+--------------------------------------------------
+54. IMPORTANT FUNCTIONS
+--------------------------------------------------
+
+Identify important business functions.
+
+For each:
+
+- function name
+- location
+- purpose
+- inputs
+- outputs
+- callers
+- side effects
+- database interaction
+- financial significance
+- security significance
+
+Especially identify:
+
+- P&L calculations
+- R calculation
+- analytics aggregation
+- checklist scoring
+- grade calculation
+- plan adherence
+- psychology parsing
+- date/time grouping
+- authorization
+- consent
+- strategy versioning
+
+--------------------------------------------------
+55. FINAL EXECUTIVE SUMMARY
+--------------------------------------------------
+
+At the very beginning of the final document provide a concise executive summary containing:
+
+WHAT DnD IS
+
+CURRENT ARCHITECTURE
+
+CURRENT FEATURES
+
+CURRENT UX
+
+CURRENT DATABASE
+
+CURRENT AUTH
+
+CURRENT ANALYTICS
+
+CURRENT SECURITY POSTURE
+
+CURRENT TESTING POSTURE
+
+CURRENT MAJOR RISKS
+
+CURRENT MAJOR GAPS
+
+CURRENT DEPLOYMENT
+
+This section must be understandable without reading the entire report.
+
+--------------------------------------------------
+56. VERIFICATION STANDARD
+--------------------------------------------------
+
+Use these labels consistently:
+
+VERIFIED
+Confirmed directly from code/runtime/database/config.
+
+PARTIALLY VERIFIED
+Some parts confirmed, others not.
+
+INFERRED
+Strongly suggested by architecture but not directly verified.
+
+NOT FOUND
+Search performed and no implementation found.
+
+NOT VERIFIED
+Could not safely test or confirm.
+
+BLOCKED
+Could not inspect because required infrastructure/tooling was unavailable.
+
+Never convert BLOCKED into PASS.
+
+Never convert INFERRED into VERIFIED.
+
+--------------------------------------------------
+57. EVIDENCE REQUIREMENTS
+--------------------------------------------------
+
+For every major architectural conclusion, provide evidence.
+
+Reference:
+
+- exact file path
+- route
+- component
+- model
+- function
+- migration
+- configuration
+- API route
+
+Example:
+
+Authentication:
+src/.../auth...
+VERIFIED
+
+Do not provide vague statements such as:
+"The app uses secure authentication."
+
+Instead explain exactly what you found.
+
+--------------------------------------------------
+58. NO HALLUCINATION RULE
+--------------------------------------------------
+
+This is extremely important.
+
+If you cannot find something:
+
+write:
+
+NOT FOUND
+
+If you suspect something but cannot verify it:
+
+write:
+
+INFERRED
+
+If infrastructure prevents testing:
+
+write:
+
+BLOCKED
+
+Never fill gaps with assumptions.
+
+--------------------------------------------------
+59. FINAL DOCUMENT STRUCTURE
+--------------------------------------------------
+
+Create ONE comprehensive Markdown report.
+
+Recommended structure:
+
+# DnD Complete Reverse-Engineering Report
+
+## 1. Executive Summary
+## 2. Product Identity
+## 3. Current Product Architecture
+## 4. Route / Sitemap
+## 5. UI / UX Architecture
+## 6. Design System
+## 7. Reference Website Translation
+## 8. Frontend Architecture
+## 9. Component Architecture
+## 10. State Management
+## 11. Forms
+## 12. Authentication
+## 13. Authorization
+## 14. Database
+## 15. Domain Model
+## 16. Trading Logic
+## 17. Trade Lifecycle
+## 18. Strategy System
+## 19. Checklist / A+ System
+## 20. Daily Plans
+## 21. Psychology
+## 22. Media
+## 23. Calendar
+## 24. Analytics
+## 25. Reviews
+## 26. Onboarding
+## 27. Settings
+## 28. Legal / Consent
+## 29. APIs / Server
+## 30. Data Flows
+## 31. Cache / Performance
+## 32. Background Jobs
+## 33. Security
+## 34. Error Handling
+## 35. Testing
+## 36. Deployment
+## 37. Environment Variables
+## 38. Dependencies
+## 39. Responsive Behavior
+## 40. User Journeys
+## 41. State Machines
+## 42. Audit Trail
+## 43. Import / Export
+## 44. Known Risks
+## 45. Missing Features
+## 46. Code Quality
+## 47. Feature Traceability
+## 48. Requirement Traceability
+## 49. Actual vs Intended
+## 50. Master Architecture Diagram
+## 51. Master Feature Map
+## 52. Master Data Model
+## 53. Master User Flow
+## 54. Screen Inventory
+## 55. Important Files
+## 56. Important Functions
+## 57. Final Assessment
+
+--------------------------------------------------
+60. REPORT QUALITY
+--------------------------------------------------
+
+The report must be detailed enough that I can hand it to another AI model and say:
+
+"Understand this application completely before making any changes."
+
+The report must therefore prioritize:
+
+- completeness
+- factual accuracy
+- traceability
+- current behavior
+- architecture
+- relationships
+- workflows
+- business logic
+- UI behavior
+- backend behavior
+- database behavior
+- security
+- deployment
+
+Do not optimize for shortness.
+
+Do not omit details just because they seem obvious.
+
+--------------------------------------------------
+61. BROWSER / RUNTIME INSPECTION
+--------------------------------------------------
+
+Do not rely only on reading source code.
+
+Where possible, run the application and inspect it as a real user.
+
+Visit:
+
+- landing page
+- signup
+- login
+- onboarding
+- dashboard
+- journal
+- add trade
+- trade detail
+- strategy
+- daily plan
+- calendar
+- analytics
+- reviews
+- media
+- settings
+- legal
+
+Test important interactions.
+
+Record what actually happens.
+
+Take screenshots of important screens if your environment supports it.
+
+Use screenshots selectively in the report when they help explain the UI.
+
+--------------------------------------------------
+62. DATABASE INSPECTION
+--------------------------------------------------
+
+If the database is available locally or through the configured development environment:
+
+inspect actual schema and sample non-sensitive structure.
+
+Do not expose:
+
+- passwords
+- secret keys
+- tokens
+- private credentials
+- sensitive personal information
+
+Never copy secrets into the report.
+
+--------------------------------------------------
+63. FINAL ASSESSMENT
+--------------------------------------------------
+
+End the report with:
+
+A. Product maturity assessment
+
+B. Frontend maturity
+
+C. Backend maturity
+
+D. Database maturity
+
+E. Financial correctness maturity
+
+F. Security maturity
+
+G. Testing maturity
+
+H. Performance maturity
+
+I. UX maturity
+
+J. Production readiness
+
+Use:
+
+0-10 scores
+
+BUT every score must have evidence.
+
+Then provide:
+
+TOP 10 STRENGTHS
+
+TOP 10 RISKS
+
+TOP 10 MOST IMPORTANT GAPS
+
+TOP 10 THINGS TO PRESERVE
+
+TOP 10 AREAS THAT SHOULD BE IMPROVED LATER
+
+Do not implement any of them.
+
+--------------------------------------------------
+64. MOST IMPORTANT FINAL OUTPUT
+--------------------------------------------------
+
+After completing the full investigation, produce:
+
+1. COMPLETE MARKDOWN REPORT
+
+2. ONE-PAGE ARCHITECTURE SUMMARY
+
+3. ONE-PAGE PRODUCT SUMMARY
+
+4. ONE-PAGE USER FLOW SUMMARY
+
+5. ONE-PAGE DATABASE / DOMAIN SUMMARY
+
+6. ONE-PAGE API / BACKEND SUMMARY
+
+7. ONE-PAGE UI / DESIGN SYSTEM SUMMARY
+
+8. COMPLETE FEATURE TRACEABILITY MATRIX
+
+9. COMPLETE SCREEN INVENTORY
+
+10. COMPLETE KNOWN-ISSUES MATRIX
+
+The complete report is the primary deliverable.
+
+--------------------------------------------------
+FINAL INSTRUCTION
+--------------------------------------------------
+
+Do not modify the project.
+
+Do not implement fixes.
+
+Do not redesign anything.
+
+Do not "clean up" anything while inspecting.
+
+Do not rely on old DnD context unless the current code confirms it.
+
+Treat the current implementation as the source of truth.
+
+Inspect deeply.
+
+Trace relationships.
+
+Verify behavior.
+
+Document everything.
+
+The goal is that once I receive this report, I can give it to another AI model and that model can understand the current DnD project at architectural, product, UI, backend, database, security, and workflow level without starting the investigation from zero.

@@ -1,0 +1,2002 @@
+     1→"use client";
+     2→
+     3→/**
+     4→ * TradeFormView — 5-step wizard trade form.
+     5→ *
+     6→ * Steps (tabs):
+     7→ *   1. Trade Info        — account, strategy, symbol, direction, status,
+     8→ *                          date/time, session, timeframe, news impact,
+     9→ *                          thesis, evidence uploads, advanced (ICT setup,
+    10→ *                          psychology, behavior flags, tags).
+    11→ *   2. Setup Checklist   — items extracted from the selected strategy's
+    12→ *                          rulesJson, each with checkbox + REQUIRED badge,
+    13→ *                          live adherence %, immutable-snapshot note.
+    14→ *   3. Risk & Sizing     — planned entry/stop/target (required), lot size,
+    15→ *                          risk %, auto-calculated stop distance, R:R,
+    16→ *                          risk amount, planned profit.
+    17→ *   4. Partial Exits     — add/remove named exit levels; weighted exit
+    18→ *                          price + total R derived from planned stop/entry.
+    19→ *   5. Review & Save     — summary cards + Save as Draft / Save Trade.
+    20→ *
+    21→ * Defensive fetching (fetchAccounts / fetchStrategies) returns plain arrays
+    22→ * regardless of whether the API wraps its response in `{ items: [...] }` or
+    23→ * returns a bare array. Query keys include accountId so per-account
+    24→ * invalidation works as expected.
+    25→ */
+    26→
+    27→import { useQuery, useQueryClient } from "@tanstack/react-query";
+    28→import { useEffect, useMemo, useRef, useState } from "react";
+    29→import { useNav } from "@/lib/nav-store";
+    30→import {
+    31→  evaluateChecklist,
+    32→  parseAnswers,
+    33→  type ChecklistItem,
+    34→  type ChecklistAnswerValue,
+    35→  type GradingThresholds,
+    36→  DEFAULT_GRADING_THRESHOLDS,
+    37→} from "@/lib/checklist-evaluation";
+    38→import { NEWS_EVENTS, getNewsEventLabel } from "@/lib/news-events";
+    39→import {
+    40→  TIMEFRAMES as MEDIA_TIMEFRAMES,
+    41→  TIMEFRAME_GROUPS,
+    42→  getTimeframeGroup,
+    43→  getTimeframeLabel,
+    44→} from "@/lib/timeframes";
+    45→import { Button } from "@/components/ui/button";
+    46→import { Input } from "@/components/ui/input";
+    47→import { Label } from "@/components/ui/label";
+    48→import { Textarea } from "@/components/ui/textarea";
+    49→import { Card } from "@/components/ui/card";
+    50→import { Badge } from "@/components/ui/badge";
+    51→import { Checkbox } from "@/components/ui/checkbox";
+    52→import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
+    53→import {
+    54→  Collapsible,
+    55→  CollapsibleContent,
+    56→  CollapsibleTrigger,
+    57→} from "@/components/ui/collapsible";
+    58→import {
+    59→  Select,
+    60→  SelectContent,
+    61→  SelectGroup,
+    62→  SelectItem,
+    63→  SelectLabel,
+    64→  SelectTrigger,
+    65→  SelectValue,
+    66→} from "@/components/ui/select";
+    67→import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+    68→import { FieldLabel } from "@/components/common/field-label";
+    69→import { ImageAnnotator, type ImageAnnotation } from "@/components/common/image-annotator";
+    70→import { toast } from "sonner";
+    71→import { cn } from "@/lib/utils";
+    72→import {
+    73→  ArrowLeft,
+    74→  ArrowRight,
+    75→  ChevronDown,
+    76→  Loader2,
+    77→  Plus,
+    78→  Save,
+    79→  Sparkles,
+    80→  Trash2,
+    81→  Upload,
+    82→  Image as ImageIcon,
+    83→  AlertTriangle,
+    84→  Lock,
+    85→} from "lucide-react";
+    86→import { InstrumentSelector } from "@/components/common/instrument-selector";
+    87→import {
+    88→  findInstrument,
+    89→  normalizeSymbol,
+    90→  resolveInstrument,
+    91→  unitLabel,
+    92→  distanceInUnits,
+    93→  type InstrumentDef,
+    94→} from "@/lib/instrument-catalog";
+    95→
+    96→/* ------------------------------------------------------------------ */
+    97→/* Constants                                                           */
+    98→/* ------------------------------------------------------------------ */
+    99→
+   100→const DRAFT_KEY = "dnd-trade-draft-5step";
+   101→
+   102→const SESSIONS = [
+   103→  { value: "asian_range", label: "Asian Range" },
+   104→  { value: "london_open", label: "London Open" },
+   105→  { value: "ny_am", label: "New York AM" },
+   106→  { value: "ny_lunch", label: "New York Lunch" },
+   107→  { value: "ny_pm", label: "New York PM" },
+   108→  { value: "off_hours", label: "Off Hours" },
+   109→] as const;
+   110→
+   111→const TIMEFRAMES = ["1m", "5m", "15m", "1h", "4h", "1D"] as const;
+   112→
+   113→const STATUSES = [
+   114→  { value: "draft", label: "Draft" },
+   115→  { value: "open", label: "Open" },
+   116→  { value: "closed", label: "Closed" },
+   117→  { value: "planned", label: "Planned" },
+   118→] as const;
+   119→
+   120→const PSYCH_BEFORE = [
+   121→  "calm", "confident", "hesitant", "fearful", "FOMO",
+   122→  "impatient", "distracted", "excited", "tired", "focused",
+   123→];
+   124→const PSYCH_AFTER = [
+   125→  "satisfied", "frustrated", "regret", "relief",
+   126→  "overconfident", "disappointed", "calm", "confused", "angry",
+   127→];
+   128→const BEHAVIOR_FLAGS = [
+   129→  "entered_early", "broke_rules", "moved_stop", "moved_target",
+   130→  "exited_early", "revenge_trade", "overtraded", "increased_size",
+   131→  "chased_price", "ignored_plan",
+   132→];
+   133→
+   134→const ACCEPTED_MEDIA =
+   135→  "image/png,image/jpeg,image/webp,image/gif,video/mp4,video/webm,video/quicktime";
+   136→
+   137→const STEP_ORDER = ["trade-info", "checklist", "risk", "exits", "review"] as const;
+   138→type StepKey = (typeof STEP_ORDER)[number];
+   139→
+   140→/* ------------------------------------------------------------------ */
+   141→/* Helpers                                                             */
+   142→/* ------------------------------------------------------------------ */
+   143→
+   144→async function fetchMe() {
+   145→  const res = await fetch("/api/me", { cache: "no-store" });
+   146→  if (!res.ok) return null;
+   147→  return res.json();
+   148→}
+   149→
+   150→/** Fetch the user's accounts as a plain array (defensive). Returns [] on
+   151→ *  any error or unexpected shape. */
+   152→async function fetchAccounts(accountId?: string) {
+   153→  try {
+   154→    const qs = new URLSearchParams({ ...(accountId ? { accountId } : {}) }).toString();
+   155→    const url = `/api/accounts${qs ? `?${qs}` : ""}`;
+   156→    const res = await fetch(url, { cache: "no-store" });
+   157→    if (!res.ok) return [];
+   158→    const data = await res.json();
+   159→    const arr = data?.items ?? data?.accounts ?? (Array.isArray(data) ? data : []);
+   160→    return Array.isArray(arr) ? arr : [];
+   161→  } catch {
+   162→    return [];
+   163→  }
+   164→}
+   165→
+   166→/** Fetch the user's strategies as a plain array (defensive). Returns [] on
+   167→ *  any error or unexpected shape. */
+   168→async function fetchStrategies() {
+   169→  try {
+   170→    const res = await fetch("/api/strategies", { cache: "no-store" });
+   171→    if (!res.ok) return [];
+   172→    const data = await res.json();
+   173→    const arr = data?.items ?? data?.strategies ?? (Array.isArray(data) ? data : []);
+   174→    return Array.isArray(arr) ? arr : [];
+   175→  } catch {
+   176→    return [];
+   177→  }
+   178→}
+   179→
+   180→/** Extract a flat `ChecklistItem[]` from a strategy version's rulesJson.
+   181→ *  Supports both:
+   182→ *    - flat array:   [{ title, required, description, weight }, ...]
+   183→ *                    [{ text,   required, weight }, ...]
+   184→ *                    ["plain string rule", ...]
+   185→ *    - legacy object: { entry: [...], stop: [...], target: [...],
+   186→ *                       management: [...], invalidation: [...] }
+   187→ */
+   188→function extractChecklist(rulesJson: string | null | undefined): ChecklistItem[] {
+   189→  if (!rulesJson) return [];
+   190→  let parsed: unknown;
+   191→  try {
+   192→    parsed = JSON.parse(rulesJson);
+   193→  } catch {
+   194→    return [];
+   195→  }
+   196→  const items: ChecklistItem[] = [];
+   197→  let idx = 0;
+   198→
+   199→  const pushRule = (rule: unknown) => {
+   200→    if (typeof rule === "string") {
+   201→      const text = rule.trim();
+   202→      if (!text) return;
+   203→      items.push({
+   204→        id: `rule_${idx}`,
+   205→        text,
+   206→        required: true,
+   207→        weight: 1,
+   208→        evidenceRequired: false,
+   209→      });
+   210→      idx++;
+   211→      return;
+   212→    }
+   213→    if (rule && typeof rule === "object") {
+   214→      const r = rule as Record<string, unknown>;
+   215→      const text = String(r.text ?? r.title ?? "").trim();
+   216→      if (!text) return;
+   217→      const weightNum = typeof r.weight === "number" && Number.isFinite(r.weight) ? r.weight : 1;
+   218→      items.push({
+   219→        id: `rule_${idx}`,
+   220→        text,
+   221→        required: r.required !== false,
+   222→        weight: Math.max(0, weightNum),
+   223→        evidenceRequired: r.evidenceRequired === true,
+   224→      });
+   225→      idx++;
+   226→    }
+   227→  };
+   228→
+   229→  if (Array.isArray(parsed)) {
+   230→    parsed.forEach(pushRule);
+   231→    return items;
+   232→  }
+   233→  if (parsed && typeof parsed === "object") {
+   234→    const obj = parsed as Record<string, unknown>;
+   235→    // New playbooks-view format: { items: [...] }
+   236→    if (Array.isArray(obj.items)) {
+   237→      obj.items.forEach(pushRule);
+   238→      return items;
+   239→    }
+   240→    // Legacy category object: { entry, stop, target, management, invalidation }
+   241→    for (const section of ["entry", "stop", "target", "management", "invalidation"]) {
+   242→      const arr = obj[section];
+   243→      if (Array.isArray(arr)) arr.forEach(pushRule);
+   244→    }
+   245→    return items;
+   246→  }
+   247→  return [];
+   248→}
+   249→
+   250→/** Parse a JSON string into the typed fallback; never throws. */
+   251→function safeJsonParse(json: string | null | undefined, fallback: any): any {
+   252→  if (!json) return fallback;
+   253→  try { return JSON.parse(json); } catch { return fallback; }
+   254→}
+   255→
+   256→/** Format a numeric price with the given decimal precision (default 5,
+   257→ *  matching the historical forex-major behaviour). Returns "—" when the
+   258→ *  value is missing or non-finite. Pass the selected instrument's
+   259→ *  `pricePrecision` to render prices with the right number of decimals
+   260→ *  (e.g. 2 for gold, 1 for indices, 0 for YM). */
+   261→function fmtPrice(
+   262→  value: number | string | null | undefined,
+   263→  precision: number = 5,
+   264→): string {
+   265→  if (value == null || value === "") return "—";
+   266→  const n = typeof value === "string" ? Number(value) : value;
+   267→  if (!Number.isFinite(n)) return "—";
+   268→  const p =
+   269→    Number.isFinite(precision) && precision >= 0 && precision <= 8
+   270→      ? Math.round(precision)
+   271→      : 5;
+   272→  return n.toFixed(p);
+   273→}
+   274→
+   275→/** Format a money amount given a dollars-number (NOT cents). */
+   276→function fmtMoney(dollars: number | null | undefined, currency = "USD"): string {
+   277→  if (dollars == null || !Number.isFinite(dollars)) return "—";
+   278→  try {
+   279→    return new Intl.NumberFormat("en-US", {
+   280→      style: "currency",
+   281→      currency,
+   282→      minimumFractionDigits: 2,
+   283→      maximumFractionDigits: 2,
+   284→    }).format(dollars);
+   285→  } catch {
+   286→    return `$${dollars.toFixed(2)}`;
+   287→  }
+   288→}
+   289→
+   290→/** Generate a short random id for client-side list items. */
+   291→function uid(): string {
+   292→  return Math.random().toString(36).slice(2, 10);
+   293→}
+   294→
+   295→/* ------------------------------------------------------------------ */
+   296→/* Component                                                           */
+   297→/* ------------------------------------------------------------------ */
+   298→
+   299→export function TradeFormView() {
+   300→  const { params, navigate } = useNav();
+   301→  const qc = useQueryClient();
+   302→  const editingId = params.id;
+   303→
+   304→  /* ---------- Fetch metadata ---------- */
+   305→  const { data: meta } = useQuery({ queryKey: ["me"], queryFn: fetchMe });
+   306→  const { data: accountsData } = useQuery({
+   307→    queryKey: ["accounts-form", meta?.user?.id ?? "anon"],
+   308→    queryFn: () => fetchAccounts(),
+   309→  });
+   310→  const { data: strategiesData } = useQuery({
+   311→    queryKey: ["strategies-form"],
+   312→    queryFn: fetchStrategies,
+   313→  });
+   314→
+   315→  // Defensive: pick arrays whether the API returns a bare array or an
+   316→  // `{ items: [...] }` envelope. Falls back to /api/me lists too.
+   317→  const accounts: any[] = (Array.isArray(accountsData)
+   318→    ? accountsData
+   319→    : Array.isArray((accountsData as any)?.items)
+   320→      ? (accountsData as any).items
+   321→      : Array.isArray(meta?.accounts)
+   322→        ? meta.accounts
+   323→        : []) as any[];
+   324→  const strategies: any[] = (Array.isArray(strategiesData)
+   325→    ? strategiesData
+   326→    : Array.isArray((strategiesData as any)?.items)
+   327→      ? (strategiesData as any).items
+   328→      : Array.isArray(meta?.strategies)
+   329→        ? meta.strategies
+   330→        : []) as any[];
+   331→  const tags: any[] = Array.isArray(meta?.tags)
+   332→    ? meta.tags
+   333→    : Array.isArray((meta as any)?.tags?.items)
+   334→      ? (meta as any).tags.items
+   335→      : [];
+   336→
+   337→  /* ---------- Existing trade (edit mode) ---------- */
+   338→  const { data: existing } = useQuery({
+   339→    queryKey: ["trade", editingId],
+   340→    queryFn: async () => {
+   341→      const res = await fetch(`/api/trades/${editingId}`, { cache: "no-store" });
+   342→      if (!res.ok) return null;
+   343→      return res.json();
+   344→    },
+   345→    enabled: !!editingId,
+   346→  });
+   347→
+   348→  /* ---------- Form state ---------- */
+   349→  const today = new Date();
+   350→  const [form, setForm] = useState<any>({
+   351→    accountId: "",
+   352→    strategyId: "",
+   353→    instrumentSymbol: "",
+   354→    direction: "long",
+   355→    status: "open",
+   356→    tradeDate: today.toISOString().slice(0, 10),
+   357→    tradeTime: today.toTimeString().slice(0, 5),
+   358→    session: "ny_am",
+   359→    timeframe: "5m",
+   360→    newsEvent: "none",
+   361→    thesisWhy: "",
+   362→    checklistAnswers: {} as Record<string, ChecklistAnswerValue>,
+   363→    plannedEntryPrice: "",
+   364→    plannedStopPrice: "",
+   365→    plannedTargetPrice: "",
+   366→    lotSize: "1",
+   367→    riskPct: "0.005",
+   368→    partialExits: [] as Array<{ id: string; name: string; price: string }>,
+   369→    behaviorFlags: [] as string[],
+   370→    tags: [] as string[],
+   371→    notes: "",
+   372→    lessons: "",
+   373→    psychBefore: { moodTags: [], confidence: 3, energy: 3, impact: "moderate" },
+   374→    psychAfter: { moodTags: [], confidence: 3, energy: 3, impact: "moderate" },
+   375→    setup: {
+   376→      htfContext: { weeklyBias: "bullish", dailyBias: "bullish" },
+   377→      liquidity: [],
+   378→      structure: [],
+   379→      entryModel: "FVG",
+   380→      session: "ny_am",
+   381→      timeframe: "5m",
+   382→    },
+   383→    thesis: {
+   384→      narrative: "",
+   385→      liquidityTarget: "",
+   386→      confirms: [],
+   387→      invalidates: [],
+   388→      target: "",
+   389→      earlyExit: "",
+   390→    },
+   391→    uploadedMedia: [] as any[],
+   392→    isDraft: false,
+   393→  });
+   394→
+   395→  const [activeStep, setActiveStep] = useState<StepKey>("trade-info");
+   396→  const [saving, setSaving] = useState(false);
+   397→  const [advancedOpen, setAdvancedOpen] = useState(false);
+   398→  const fileInputRef = useRef<HTMLInputElement>(null);
+   399→
+   400→  /* ---------- Strategy detail (versions + rulesJson) ---------- */
+   401→  const { data: strategyDetail } = useQuery({
+   402→    queryKey: ["strategy-for-form", form.strategyId],
+   403→    queryFn: async () => {
+   404→      if (!form.strategyId) return null;
+   405→      const res = await fetch(`/api/strategies/${form.strategyId}`, { cache: "no-store" });
+   406→      if (!res.ok) return null;
+   407→      return res.json();
+   408→    },
+   409→    enabled: !!form.strategyId,
+   410→  });
+   411→
+   412→  const selectedStrategyVersion = useMemo(() => {
+   413→    const versions: any[] = strategyDetail?.versions ?? [];
+   414→    if (versions.length === 0) return null;
+   415→    if (form.strategyVersionId) {
+   416→      return (
+   417→        versions.find((v: any) => v.id === form.strategyVersionId) ?? versions[0]
+   418→      );
+   419→    }
+   420→    return versions[0];
+   421→  }, [strategyDetail, form.strategyVersionId]);
+   422→
+   423→  const checklistItems: ChecklistItem[] = useMemo(
+   424→    () => extractChecklist(selectedStrategyVersion?.rulesJson),
+   425→    [selectedStrategyVersion?.rulesJson],
+   426→  );
+   427→
+   428→  const checklistThresholds: GradingThresholds | null = useMemo(() => {
+   429→    if (!selectedStrategyVersion?.rulesJson) return DEFAULT_GRADING_THRESHOLDS;
+   430→    try {
+   431→      const parsed = JSON.parse(selectedStrategyVersion.rulesJson);
+   432→      if (parsed?.gradingThresholds && typeof parsed.gradingThresholds === "object") {
+   433→        return { ...DEFAULT_GRADING_THRESHOLDS, ...parsed.gradingThresholds };
+   434→      }
+   435→    } catch {
+   436→      // fall through
+   437→    }
+   438→    return DEFAULT_GRADING_THRESHOLDS;
+   439→  }, [selectedStrategyVersion?.rulesJson]);
+   440→
+   441→  const evaluation = useMemo(
+   442→    () =>
+   443→      evaluateChecklist(
+   444→        checklistItems,
+   445→        (form.checklistAnswers ?? {}) as Record<string, ChecklistAnswerValue>,
+   446→        checklistThresholds,
+   447→      ),
+   448→    [checklistItems, form.checklistAnswers, checklistThresholds],
+   449→  );
+   450→
+   451→  /* ---------- Instrument catalog lookup ---------- */
+   452→  // Resolve the selected symbol against the static instrument catalog so
+   453→  // the form can drive price-precision formatting, unit labels (pips /
+   454→  // points / ticks), and the per-instrument risk preview without an API
+   455→  // roundtrip. Falls back to a synthetic `custom` def for unknown symbols
+   456→  // so the form always has a usable InstrumentDef.
+   457→  const selectedInstrument: InstrumentDef = useMemo(
+   458→    () => resolveInstrument(form.instrumentSymbol),
+   459→    [form.instrumentSymbol],
+   460→  );
+   461→  const isKnownInstrument = !!findInstrument(form.instrumentSymbol);
+   462→  const pricePrecision = selectedInstrument.pricePrecision;
+   463→  const unitWord = unitLabel(selectedInstrument.market);
+   464→
+   465→  /* ---------- Effects: defaults, edits, drafts ---------- */
+   466→
+   467→  // Default account (first or marked-isDefault) once /api/me resolves.
+   468→  useEffect(() => {
+   469→    if (form.accountId) return;
+   470→    if (accounts.length === 0) return;
+   471→    const def = accounts.find((a: any) => a.isDefault) ?? accounts[0];
+   472→    if (def) setForm((f: any) => ({ ...f, accountId: def.id }));
+   473→  }, [accounts, form.accountId]);
+   474→
+   475→  // Reset checklist answers + versionId when strategy changes (new trades).
+   476→  // When editing, skipStrategyResetRef prevents the load effect's restored
+   477→  // values from being clobbered on the very next strategy-change tick.
+   478→  const skipStrategyResetRef = useRef(false);
+   479→  useEffect(() => {
+   480→    if (skipStrategyResetRef.current) {
+   481→      skipStrategyResetRef.current = false;
+   482→      return;
+   483→    }
+   484→    setForm((f: any) => ({
+   485→      ...f,
+   486→      checklistAnswers: {},
+   487→      strategyVersionId: "",
+   488→    }));
+   489→  }, [form.strategyId]);
+   490→
+   491→  // Default the strategy version to the latest (`versions[0]`) when the
+   492→  // detail loads and no version is currently selected.
+   493→  useEffect(() => {
+   494→    if (!strategyDetail) return;
+   495→    const versions: any[] = strategyDetail.versions ?? [];
+   496→    if (versions.length === 0) return;
+   497→    const matches = versions.some((v: any) => v.id === form.strategyVersionId);
+   498→    if (!matches) {
+   499→      setForm((f: any) => ({ ...f, strategyVersionId: versions[0].id }));
+   500→    }
+   501→  }, [strategyDetail, form.strategyVersionId]);
+   502→
+   503→  // Load existing trade for editing.
+   504→  useEffect(() => {
+   505→    if (!existing) return;
+   506→    skipStrategyResetRef.current = true;
+   507→
+   508→    const evals = Array.isArray(existing.checklistEvaluations)
+   509→      ? [...existing.checklistEvaluations].sort(
+   510→          (a: any, b: any) =>
+   511→            new Date(b.evaluatedAt).getTime() - new Date(a.evaluatedAt).getTime(),
+   512→        )
+   513→      : [];
+   514→    const latestEval = evals[0];
+   515→    const restoredAnswers = latestEval?.rawAnswersJson
+   516→      ? parseAnswers(latestEval.rawAnswersJson)
+   517→      : {};
+   518→
+   519→    const entryTime = existing.entryTime ? new Date(existing.entryTime) : null;
+   520→    const exitTime = existing.exitTime ? new Date(existing.exitTime) : null;
+   521→
+   522→    const setup = safeJsonParse(existing.setupJson, {
+   523→      htfContext: { weeklyBias: "bullish", dailyBias: "bullish" },
+   524→      liquidity: [],
+   525→      structure: [],
+   526→      entryModel: "FVG",
+   527→      session: existing.session ?? "ny_am",
+   528→      timeframe: "5m",
+   529→    });
+   530→    const thesis = safeJsonParse(existing.thesisJson, {
+   531→      narrative: "",
+   532→      liquidityTarget: "",
+   533→      confirms: [],
+   534→      invalidates: [],
+   535→      target: "",
+   536→      earlyExit: "",
+   537→      why: existing.notes ?? "",
+   538→    });
+   539→
+   540→    setForm((f: any) => ({
+   541→      ...f,
+   542→      accountId: existing.accountId,
+   543→      instrumentSymbol: existing.instrumentSymbol,
+   544→      direction: existing.direction,
+   545→      status: existing.isDraft ? "draft" : (existing.status ?? "open"),
+   546→      tradeDate: entryTime ? entryTime.toISOString().slice(0, 10) : f.tradeDate,
+   547→      tradeTime: entryTime ? entryTime.toTimeString().slice(0, 5) : f.tradeTime,
+   548→      session: existing.session ?? "ny_am",
+   549→      timeframe: setup?.timeframe ?? "5m",
+   550→      newsEvent: (existing as any).newsEvent ?? "none",
+   551→      thesisWhy: thesis?.why ?? "",
+   552→      strategyId: existing.strategyId ?? "",
+   553→      strategyVersionId: existing.strategyVersionId ?? "",
+   554→      checklistAnswers: restoredAnswers,
+   555→      plannedEntryPrice: existing.plannedEntryPrice ?? "",
+   556→      plannedStopPrice: existing.plannedStopPrice ?? "",
+   557→      plannedTargetPrice: existing.plannedTargetPrice ?? "",
+   558→      lotSize: existing.positionSize ?? "1",
+   559→      riskPct: existing.plannedRiskPct ?? "0.005",
+   560→      partialExits: Array.isArray(existing.partialExits)
+   561→        ? existing.partialExits
+   562→        : [],
+   563→      behaviorFlags: safeJsonParse(existing.behaviorFlagsJson, []),
+   564→      tags: safeJsonParse(existing.tagsJson, []),
+   565→      notes: existing.notes ?? "",
+   566→      lessons: existing.lessons ?? "",
+   567→      psychBefore: safeJsonParse(existing.psychBeforeJson, f.psychBefore),
+   568→      psychAfter: safeJsonParse(existing.psychAfterJson, f.psychAfter),
+   569→      setup,
+   570→      thesis,
+   571→      uploadedMedia: [],
+   572→      isDraft: existing.isDraft ?? false,
+   573→    }));
+   574→
+   575→    // Fetch signed URLs for existing media in parallel (Fix 3 — N+1 query).
+   576→    if (existing.media?.length > 0) {
+   577→      Promise.all(
+   578→        existing.media.map(async (m: any) => {
+   579→          try {
+   580→            const res = await fetch(`/api/media/${m.id}`);
+   581→            if (res.ok) {
+   582→              const detail = await res.json();
+   583→              // Deserialize the MediaAnnotation rows back into the
+   584→              // ImageAnnotation shape the ImageAnnotator expects
+   585→              // ({ id, kind, x1, y1, x2, y2, text?, color }). The API stores
+   586→              // each row as { id, mediaId, kind, payloadJson }. The payload
+   587→              // is the geometry + style JSON written by either this form or
+   588→              // the trade-detail ImageViewer.
+   589→              const annotations: ImageAnnotation[] = (detail.annotations ?? [])
+   590→                .map((row: any): ImageAnnotation | null => {
+   591→                  let p: any = {};
+   592→                  try { p = row.payloadJson ? JSON.parse(row.payloadJson) : {}; } catch {}
+   593→                  if (!row.kind || typeof p.x1 !== "number") return null;
+   594→                  return {
+   595→                    id: row.id,
+   596→                    kind: row.kind,
+   597→                    x1: p.x1, y1: p.y1, x2: p.x2, y2: p.y2,
+   598→                    text: typeof p.text === "string" ? p.text : undefined,
+   599→                    color: typeof p.color === "string" ? p.color : "#EF4444",
+   600→                  };
+   601→                })
+   602→                .filter((a: ImageAnnotation | null): a is ImageAnnotation => a !== null);
+   603→              return {
+   604→                ...m,
+   605→                url: detail.url,
+   606→                caption: detail.caption ?? m.caption ?? "",
+   607→                timeframe: detail.timeframe ?? m.timeframe ?? "",
+   608→                annotations,
+   609→              };
+   610→            }
+   611→          } catch {
+   612→            // ignore
+   613→          }
+   614→          return m;
+   615→        }),
+   616→      ).then((mediaWithUrls) => {
+   617→        setForm((f: any) => ({ ...f, uploadedMedia: mediaWithUrls }));
+   618→      });
+   619→    }
+   620→  }, [existing]);
+   621→
+   622→  // Deep-link pre-fills: ?date=YYYY-MM-DD (from calendar), ?dailyPlanId=...
+   623→  useEffect(() => {
+   624→    if (editingId) return;
+   625→    if (!params.date && !params.dailyPlanId) return;
+   626→    setForm((f: any) => {
+   627→      const next = { ...f };
+   628→      if (params.date) {
+   629→        next.tradeDate = params.date;
+   630→        if (!next.tradeTime) next.tradeTime = "09:00";
+   631→      }
+   632→      return next;
+   633→    });
+   634→  }, [params.date, params.dailyPlanId, editingId]);
+   635→
+   636→  // Autosave draft (new trades only).
+   637→  useEffect(() => {
+   638→    if (editingId) return;
+   639→    const t = setTimeout(() => {
+   640→      try {
+   641→        localStorage.setItem(DRAFT_KEY, JSON.stringify(form));
+   642→      } catch {
+   643→        // ignore quota errors
+   644→      }
+   645→    }, 500);
+   646→    return () => clearTimeout(t);
+   647→  }, [form, editingId]);
+   648→
+   649→  // Restore draft on mount (new trades only).
+   650→  useEffect(() => {
+   651→    if (editingId) return;
+   652→    const saved = localStorage.getItem(DRAFT_KEY);
+   653→    if (!saved) return;
+   654→    try {
+   655→      const parsed = JSON.parse(saved);
+   656→      setForm((f: any) => ({ ...f, ...parsed }));
+   657→      toast.info("Restored autosaved draft.");
+   658→    } catch {
+   659→      // ignore
+   660→    }
+   661→  }, [editingId]);
+   662→
+   663→  /* ---------- Field helpers ---------- */
+   664→
+   665→  function setField(path: string, value: any) {
+   666→    setForm((f: any) => {
+   667→      const next = { ...f };
+   668→      const parts = path.split(".");
+   669→      let cur: any = next;
+   670→      for (let i = 0; i < parts.length - 1; i++) {
+   671→        cur[parts[i]] = { ...cur[parts[i]] };
+   672→        cur = cur[parts[i]];
+   673→      }
+   674→      cur[parts[parts.length - 1]] = value;
+   675→      return next;
+   676→    });
+   677→  }
+   678→
+   679→  function toggleArrayField(path: string, value: string) {
+   680→    setForm((f: any) => {
+   681→      const next = { ...f };
+   682→      const parts = path.split(".");
+   683→      let cur: any = next;
+   684→      for (let i = 0; i < parts.length - 1; i++) {
+   685→        cur[parts[i]] = { ...cur[parts[i]] };
+   686→        cur = cur[parts[i]];
+   687→      }
+   688→      const key = parts[parts.length - 1];
+   689→      const arr = Array.isArray(cur[key]) ? [...cur[key]] : [];
+   690→      const idx = arr.indexOf(value);
+   691→      if (idx >= 0) arr.splice(idx, 1);
+   692→      else arr.push(value);
+   693→      cur[key] = arr;
+   694→      return next;
+   695→    });
+   696→  }
+   697→
+   698→  function updateChecklistAnswer(itemId: string, checked: boolean) {
+   699→    setForm((f: any) => {
+   700→      const cur = f.checklistAnswers?.[itemId] ?? { checked: false };
+   701→      const nextAnswers = {
+   702→        ...f.checklistAnswers,
+   703→        [itemId]: { ...cur, checked },
+   704→      };
+   705→      // Drop note when unchecked so storage stays clean.
+   706→      if (!checked && nextAnswers[itemId].note) {
+   707→        delete nextAnswers[itemId].note;
+   708→      }
+   709→      return { ...f, checklistAnswers: nextAnswers };
+   710→    });
+   711→  }
+   712→
+   713→  /* ---------- File upload ---------- */
+   714→
+   715→  async function handleFileUpload(files: FileList | File[]) {
+   716→    const fileList = Array.from(files);
+   717→    for (const file of fileList) {
+   718→      const formData = new FormData();
+   719→      formData.append("file", file);
+   720→      if (editingId) formData.append("tradeId", editingId);
+   721→      // Detect kind from MIME type so the form immediately knows whether to
+   722→      // render an <img> (annotation-able) or a <video controls> element.
+   723→      const clientKind = file.type.startsWith("video/") ? "video" : "image";
+   724→      try {
+   725→        const res = await fetch("/api/media", { method: "POST", body: formData });
+   726→        if (res.ok) {
+   727→          const data = await res.json();
+   728→          const detailRes = await fetch(`/api/media/${data.id}`);
+   729→          const detail = await detailRes.json();
+   730→          setForm((f: any) => ({
+   731→            ...f,
+   732→            uploadedMedia: [
+   733→              ...(f.uploadedMedia ?? []),
+   734→              { ...data, kind: data.kind ?? clientKind, url: detail.url },
+   735→            ],
+   736→          }));
+   737→          toast.success(`${file.name} uploaded.`);
+   738→        } else {
+   739→          const err = await res.json().catch(() => ({}));
+   740→          toast.error(err?.error ?? `Failed to upload ${file.name}`);
+   741→        }
+   742→      } catch {
+   743→        toast.error(`Failed to upload ${file.name}`);
+   744→      }
+   745→    }
+   746→  }
+   747→
+   748→  function removeMedia(idx: number) {
+   749→    setForm((f: any) => ({
+   750→      ...f,
+   751→      uploadedMedia: f.uploadedMedia.filter((_: any, i: number) => i !== idx),
+   752→    }));
+   753→  }
+   754→
+   755→  function setMediaCaption(idx: number, caption: string) {
+   756→    setForm((f: any) => ({
+   757→      ...f,
+   758→      uploadedMedia: f.uploadedMedia.map((m: any, i: number) =>
+   759→        i === idx ? { ...m, caption } : m,
+   760→      ),
+   761→    }));
+   762→  }
+   763→
+   764→  function setMediaTimeframe(idx: number, timeframe: string) {
+   765→    setForm((f: any) => ({
+   766→      ...f,
+   767→      uploadedMedia: f.uploadedMedia.map((m: any, i: number) =>
+   768→        i === idx ? { ...m, timeframe } : m,
+   769→      ),
+   770→    }));
+   771→  }
+   772→
+   773→  function setMediaAnnotations(idx: number, annotations: ImageAnnotation[]) {
+   774→    setForm((f: any) => ({
+   775→      ...f,
+   776→      uploadedMedia: f.uploadedMedia.map((m: any, i: number) =>
+   777→        i === idx ? { ...m, annotations } : m,
+   778→      ),
+   779→    }));
+   780→  }
+   781→
+   782→  /* ---------- Partial exits ---------- */
+   783→
+   784→  function addExit() {
+   785→    setForm((f: any) => ({
+   786→      ...f,
+   787→      partialExits: [
+   788→        ...f.partialExits,
+   789→        { id: uid(), name: `TP${f.partialExits.length + 1}`, price: "" },
+   790→      ],
+   791→    }));
+   792→  }
+   793→
+   794→  function updateExit(id: string, field: "name" | "price", value: string) {
+   795→    setForm((f: any) => ({
+   796→      ...f,
+   797→      partialExits: f.partialExits.map((e: any) =>
+   798→        e.id === id ? { ...e, [field]: value } : e,
+   799→      ),
+   800→    }));
+   801→  }
+   802→
+   803→  function removeExit(id: string) {
+   804→    setForm((f: any) => ({
+   805→      ...f,
+   806→      partialExits: f.partialExits.filter((e: any) => e.id !== id),
+   807→    }));
+   808→  }
+   809→
+   810→  /* ---------- Risk & sizing calculations ---------- */
+   811→
+   812→  const account = accounts.find((a: any) => a.id === form.accountId);
+   813→  const accountCurrency = account?.currency ?? "USD";
+   814→  const balanceCents = account?.currentBalanceCents ?? account?.startingBalanceCents ?? 0;
+   815→
+   816→  const entryNum = Number(form.plannedEntryPrice);
+   817→  const stopNum = Number(form.plannedStopPrice);
+   818→  const targetNum = Number(form.plannedTargetPrice);
+   819→  const lotNum = Number(form.lotSize) || 1;
+   820→  const riskPctNum = Number(form.riskPct);
+   821→
+   822→  const hasEntry = Number.isFinite(entryNum) && form.plannedEntryPrice !== "";
+   823→  const hasStop = Number.isFinite(stopNum) && form.plannedStopPrice !== "";
+   824→  const hasTarget = Number.isFinite(targetNum) && form.plannedTargetPrice !== "";
+   825→
+   826→  // Stop distance (always positive).
+   827→  const stopDistance = hasEntry && hasStop ? Math.abs(entryNum - stopNum) : null;
+   828→
+   829→  // Risk per unit / reward per unit (per 1 lot).
+   830→  const riskPerUnit = hasEntry && hasStop ? Math.abs(entryNum - stopNum) : null;
+   831→  const rewardPerUnit =
+   832→    hasEntry && hasTarget ? Math.abs(targetNum - entryNum) : null;
+   833→
+   834→  // Planned R:R = reward / risk (1.0 = breakeven, 2.0 = 2R for 1R).
+   835→  const plannedRR =
+   836→    riskPerUnit && rewardPerUnit && riskPerUnit > 0
+   837→      ? rewardPerUnit / riskPerUnit
+   838→      : null;
+   839→
+   840→  // Risk amount ($) = balance * riskPct.
+   841→  const riskAmountDollars =
+   842→    Number.isFinite(riskPctNum) && balanceCents > 0
+   843→      ? (balanceCents / 100) * riskPctNum
+   844→      : null;
+   845→
+   846→  // Planned profit ($) = riskAmount * RR (if RR is known).
+   847→  const plannedProfitDollars =
+   848→    riskAmountDollars != null && plannedRR != null
+   849→      ? riskAmountDollars * plannedRR
+   850→      : null;
+   851→
+   852→  /* ---------- Instrument-aware risk preview ---------- */
+   853→  // Uses pipSize, contractSize, and pointValueCents from the catalog to
+   854→  // express the stop distance in the instrument's native unit (pips /
+   855→  // ticks / points) and to derive a per-instrument dollar risk that is
+   856→  // consistent with the server-side calculateTradePnl formula:
+   857→  //   risk$ = stopDistance × qty × contractSize × (pointValueCents/100)
+   858→  // (See computePointValueCents in src/lib/calculations.ts for the
+   859→  // convention used to derive pointValueCents from cs × tickSize.)
+   860→  const stopDistanceUnits = stopDistance != null
+   861→    ? distanceInUnits(stopDistance, selectedInstrument.pipSize)
+   862→    : 0;
+   863→  const contractSizeNum = Number(selectedInstrument.contractSize) || 1;
+   864→  const pointValueCents = selectedInstrument.pointValueCents;
+   865→  const instrumentRiskDollars =
+   866→    stopDistance != null
+   867→      ? stopDistance * lotNum * contractSizeNum * (pointValueCents / 100)
+   868→      : null;
+   869→
+   870→  /* ---------- Partial exits calculations ---------- */
+   871→
+   872→  const validExits = form.partialExits.filter(
+   873→    (e: any) => e.price !== "" && Number.isFinite(Number(e.price)),
+   874→  );
+   875→  const weightedExitPrice =
+   876→    validExits.length > 0
+   877→      ? validExits.reduce((sum: number, e: any) => sum + Number(e.price), 0) /
+   878→        validExits.length
+   879→      : null;
+   880→  const totalRExits =
+   881→    weightedExitPrice != null && riskPerUnit != null && riskPerUnit > 0
+   882→      ? form.direction === "long"
+   883→        ? (weightedExitPrice - entryNum) / riskPerUnit
+   884→        : (entryNum - weightedExitPrice) / riskPerUnit
+   885→      : null;
+   886→
+   887→  /* ---------- Evidence grouping (by chart timeframe) ---------- */
+   888→
+   889→  // Bucket each uploaded media item into a timeframe group so the user can
+   890→  // see at a glance whether their HTF context, execution chart, and entry
+   891→  // trigger are all captured. Items with no timeframe selected land in an
+   892→  // "Unassigned" bucket first to nudge the user toward picking one.
+   893→  const groupedMedia = useMemo(() => {
+   894→    const items: Array<{ m: any; i: number }> = (form.uploadedMedia ?? []).map(
+   895→      (m: any, i: number) => ({ m, i }),
+   896→    );
+   897→    const buckets: Record<string, Array<{ m: any; i: number }>> = {};
+   898→    for (const entry of items) {
+   899→      const g = entry.m.timeframe ? getTimeframeGroup(entry.m.timeframe) : null;
+   900→      const key = g ?? "__unassigned";
+   901→      if (!buckets[key]) buckets[key] = [];
+   902→      buckets[key].push(entry);
+   903→    }
+   904→    const ordered: Array<{ group: string; items: Array<{ m: any; i: number }> }> = [];
+   905→    if (buckets["__unassigned"]) {
+   906→      ordered.push({ group: "Unassigned", items: buckets["__unassigned"] });
+   907→    }
+   908→    for (const g of TIMEFRAME_GROUPS) {
+   909→      if (buckets[g]) ordered.push({ group: g, items: buckets[g] });
+   910→    }
+   911→    // Any leftover custom groups (shouldn't normally happen, but defensive).
+   912→    for (const key of Object.keys(buckets)) {
+   913→      if (key === "__unassigned") continue;
+   914→      if (TIMEFRAME_GROUPS.includes(key)) continue;
+   915→      ordered.push({ group: key, items: buckets[key] });
+   916→    }
+   917→    return ordered;
+   918→  }, [form.uploadedMedia]);
+   919→
+   920→  /* ---------- Submit ---------- */
+   921→
+   922→  async function submit(asDraft: boolean = false) {
+   923→    if (!form.accountId) {
+   924→      toast.error("Please select an account.");
+   925→      setActiveStep("trade-info");
+   926→      setTimeout(
+   927→        () => document.getElementById("field-account")?.scrollIntoView({ behavior: "smooth", block: "center" }),
+   928→        80,
+   929→      );
+   930→      return;
+   931→    }
+   932→    if (!form.instrumentSymbol) {
+   933→      toast.error("Please enter a symbol / pair.");
+   934→      setActiveStep("trade-info");
+   935→      setTimeout(
+   936→        () => document.getElementById("field-symbol")?.scrollIntoView({ behavior: "smooth", block: "center" }),
+   937→        80,
+   938→      );
+   939→      return;
+   940→    }
+   941→    if (!hasEntry || !hasStop || !hasTarget) {
+   942→      toast.error("Planned entry, stop, and target are required.");
+   943→      setActiveStep("risk");
+   944→      setTimeout(
+   945→        () => document.getElementById("field-entry")?.scrollIntoView({ behavior: "smooth", block: "center" }),
+   946→        80,
+   947→      );
+   948→      return;
+   949→    }
+   950→
+   951→    setSaving(true);
+   952→    try {
+   953→      const entryDateTime = new Date(`${form.tradeDate}T${form.tradeTime || "09:00"}`);
+   954→      const executions: any[] = [
+   955→        {
+   956→          kind: "entry",
+   957→          price: String(form.plannedEntryPrice),
+   958→          quantity: String(form.lotSize || "1"),
+   959→          timestamp: entryDateTime.toISOString(),
+   960→        },
+   961→      ];
+   962→
+   963→      const payload: any = {
+   964→        accountId: form.accountId,
+   965→        instrumentSymbol: normalizeSymbol(form.instrumentSymbol),
+   966→        // Derive market from the static catalog when possible (covers
+   967→        // forex / gold / indices / futures / crypto). Falls back to
+   968→        // "custom" so unknown symbols still get persisted with a sane
+   969→        // market tag rather than a null.
+   970→        market: selectedInstrument.market ?? "custom",
+   971→        direction: form.direction,
+   972→        status: asDraft ? "open" : form.status,
+   973→        session: form.session,
+   974→        newsEvent: form.newsEvent ?? "none",
+   975→        strategyId: form.strategyId || null,
+   976→        strategyVersionId: form.strategyId ? (form.strategyVersionId || null) : null,
+   977→        checklistVersionId: form.strategyId ? (form.strategyVersionId || null) : null,
+   978→        checklistAnswers:
+   979→          form.strategyId && form.strategyVersionId ? form.checklistAnswers : null,
+   980→        setupGrade:
+   981→          form.strategyId && checklistItems.length > 0 ? evaluation.grade : null,
+   982→        setupScore:
+   983→          form.strategyId && checklistItems.length > 0 ? String(evaluation.score) : null,
+   984→        tags: form.tags,
+   985→        plannedEntryPrice: form.plannedEntryPrice || null,
+   986→        plannedStopPrice: form.plannedStopPrice || null,
+   987→        plannedTargetPrice: form.plannedTargetPrice || null,
+   988→        plannedRiskPct: form.riskPct || null,
+   989→        executions,
+   990→        feesCents: 0,
+   991→        commissionCents: 0,
+   992→        swapCents: 0,
+   993→        slippageCents: 0,
+   994→        entryTime: entryDateTime.toISOString(),
+   995→        exitTime: null,
+   996→        tradingTimezone: "UTC",
+   997→        setup: {
+   998→          ...form.setup,
+   999→          session: form.session,
+  1000→          timeframe: form.timeframe,
+  1001→        },
+  1002→        thesis: {
+  1003→          ...form.thesis,
+  1004→          why: form.thesisWhy,
+  1005→        },
+  1006→        notes: form.notes || null,
+  1007→        lessons: form.lessons || null,
+  1008→        psychBefore: form.psychBefore,
+  1009→        psychAfter: form.psychAfter,
+  1010→        behaviorFlags: form.behaviorFlags,
+  1011→        partialExits: form.partialExits,
+  1012→        isDraft: asDraft,
+  1013→      };
+  1014→
+  1015→      const url = editingId ? `/api/trades/${editingId}` : "/api/trades";
+  1016→      const method = editingId ? "PATCH" : "POST";
+  1017→      const res = await fetch(url, {
+  1018→        method,
+  1019→        headers: { "Content-Type": "application/json" },
+  1020→        body: JSON.stringify(payload),
+  1021→      });
+  1022→      const data = await res.json();
+  1023→      if (!res.ok) {
+  1024→        toast.error(data?.error ?? "Failed to save trade.");
+  1025→        setSaving(false);
+  1026→        return;
+  1027→      }
+  1028→
+  1029→      // Attach orphaned uploaded media to the newly created trade + save captions.
+  1030→      if (form.uploadedMedia?.length > 0) {
+  1031→        for (const m of form.uploadedMedia) {
+  1032→          if (m.id) {
+  1033→            const patchBody: any = {};
+  1034→            if (!editingId) patchBody.tradeId = data.id;
+  1035→            // Caption is the form's "Description" textarea value (see Evidence section).
+  1036→            if (m.caption !== undefined && m.caption !== null) patchBody.caption = m.caption;
+  1037→            // Per-screenshot timeframe (5m / 1H / 1D / ...) for chart screenshots.
+  1038→            if (m.timeframe) patchBody.timeframe = m.timeframe;
+  1039→            if (Object.keys(patchBody).length > 0) {
+  1040→              await fetch(`/api/media/${m.id}`, {
+  1041→                method: "PATCH",
+  1042→                headers: { "Content-Type": "application/json" },
+  1043→                body: JSON.stringify(patchBody),
+  1044→              }).catch(() => {});
+  1045→            }
+  1046→
+  1047→            // Persist non-destructive SVG annotations (lines, arrows, rects,
+  1048→            // circles, text) to the MediaAnnotation table via the PUT
+  1049→            // "setAnnotations" action. Without this, drawings made in the
+  1050→            // ImageAnnotator were lost on save because they only lived in
+  1051→            // client state (`m.annotations`). The API stores each annotation
+  1052→            // as `{ kind, payloadJson }`; we follow the same payload shape
+  1053→            // used by the ImageViewer (x1/y1/x2/y2/text/color) so the two
+  1054→            // viewers can read each other's drawings.
+  1055→            if (Array.isArray(m.annotations) && m.annotations.length > 0) {
+  1056→              await fetch(`/api/media/${m.id}`, {
+  1057→                method: "PUT",
+  1058→                headers: { "Content-Type": "application/json" },
+  1059→                body: JSON.stringify({
+  1060→                  action: "setAnnotations",
+  1061→                  annotations: m.annotations.map((a: ImageAnnotation) => ({
+  1062→                    kind: a.kind,
+  1063→                    payload: {
+  1064→                      x1: a.x1,
+  1065→                      y1: a.y1,
+  1066→                      x2: a.x2,
+  1067→                      y2: a.y2,
+  1068→                      text: a.text,
+  1069→                      color: a.color,
+  1070→                    },
+  1071→                  })),
+  1072→                }),
+  1073→              }).catch(() => {});
+  1074→            }
+  1075→          }
+  1076→        }
+  1077→      }
+  1078→
+  1079→      toast.success(asDraft ? "Draft saved." : "Trade saved.");
+  1080→      try { localStorage.removeItem(DRAFT_KEY); } catch {}
+  1081→      qc.invalidateQueries({ queryKey: ["trades"] });
+  1082→      qc.invalidateQueries({ queryKey: ["dashboard"] });
+  1083→      navigate("tradesLog");
+  1084→    } catch {
+  1085→      toast.error("Network error");
+  1086→      setSaving(false);
+  1087→    }
+  1088→  }
+  1089→
+  1090→  /* ---------- Step navigation ---------- */
+  1091→
+  1092→  function goPrev() {
+  1093→    const idx = STEP_ORDER.indexOf(activeStep);
+  1094→    if (idx > 0) setActiveStep(STEP_ORDER[idx - 1]);
+  1095→  }
+  1096→  function goNext() {
+  1097→    const idx = STEP_ORDER.indexOf(activeStep);
+  1098→    if (idx < STEP_ORDER.length - 1) setActiveStep(STEP_ORDER[idx + 1]);
+  1099→  }
+  1100→
+  1101→  const checkedCount = checklistItems.filter(
+  1102→    (it) => form.checklistAnswers?.[it.id]?.checked === true,
+  1103→  ).length;
+  1104→  const adherencePct =
+  1105→    checklistItems.length > 0
+  1106→      ? Math.round((checkedCount / checklistItems.length) * 100)
+  1107→      : 0;
+  1108→
+  1109→  /* ------------------------------------------------------------------ */
+  1110→  /* Render                                                              */
+  1111→  /* ------------------------------------------------------------------ */
+  1112→
+  1113→  return (
+  1114→    <div className="p-4 md:p-6 max-w-4xl mx-auto space-y-4">
+  1115→      {/* Header */}
+  1116→      <div className="flex items-center gap-3">
+  1117→        <Button variant="ghost" size="icon" onClick={() => navigate("tradesLog")}>
+  1118→          <ArrowLeft className="h-4 w-4" />
+  1119→        </Button>
+  1120→        <div>
+  1121→          <h1 className="text-2xl font-semibold tracking-tight">
+  1122→            {editingId ? "Edit Trade" : "New Trade"}
+  1123→          </h1>
+  1124→          <p className="text-sm text-muted-foreground">
+  1125→            Walk through the 5 steps to log a structured trade with checklist
+  1126→            scoring, risk sizing, and partial exits.
+  1127→          </p>
+  1128→        </div>
+  1129→      </div>
+  1130→
+  1131→      <Tabs value={activeStep} onValueChange={(v) => setActiveStep(v as StepKey)} className="w-full">
+  1132→        <TabsList className="w-full justify-start overflow-x-auto no-scrollbar h-auto">
+  1133→          <TabsTrigger value="trade-info">1. Trade Info</TabsTrigger>
+  1134→          <TabsTrigger value="checklist">2. Setup Checklist</TabsTrigger>
+  1135→          <TabsTrigger value="risk">3. Risk &amp; Sizing</TabsTrigger>
+  1136→          <TabsTrigger value="exits">4. Partial Exits</TabsTrigger>
+  1137→          <TabsTrigger value="review">5. Review &amp; Save</TabsTrigger>
+  1138→        </TabsList>
+  1139→
+  1140→        {/* ─────────────────────────────────────────────────────────── */}
+  1141→        {/* STEP 1 — Trade Info                                          */}
+  1142→        {/* ─────────────────────────────────────────────────────────── */}
+  1143→        <TabsContent value="trade-info" className="space-y-4 mt-3">
+  1144→          <Card className="p-4 md:p-6 space-y-4 bg-background">
+  1145→            <div>
+  1146→              <h2 className="text-lg font-medium">Trade Basics</h2>
+  1147→              <p className="text-sm text-muted-foreground">
+  1148→                The who/what/when of the trade. Required fields are marked{" "}
+  1149→                <span className="text-loss">*</span>.
+  1150→              </p>
+  1151→            </div>
+  1152→            <div className="grid sm:grid-cols-2 gap-4">
+  1153→              <div className="space-y-2" id="field-account">
+  1154→                <FieldLabel required>Trading Account</FieldLabel>
+  1155→                <Select value={form.accountId || "__none"} onValueChange={(v) => setField("accountId", v === "__none" ? "" : v)}>
+  1156→                  <SelectTrigger><SelectValue placeholder="Select an account" /></SelectTrigger>
+  1157→                  <SelectContent>
+  1158→                    <SelectItem value="__none">—</SelectItem>
+  1159→                    {accounts.map((a: any) => (
+  1160→                      <SelectItem key={a.id} value={a.id}>
+  1161→                        {a.name} ({a.currency})
+  1162→                      </SelectItem>
+  1163→                    ))}
+  1164→                  </SelectContent>
+  1165→                </Select>
+  1166→              </div>
+  1167→
+  1168→              <div className="space-y-2">
+  1169→                <FieldLabel hint="The strategy this trade follows (optional).">Trading Setup</FieldLabel>
+  1170→                <Select
+  1171→                  value={form.strategyId || "__none"}
+  1172→                  onValueChange={(v) => setField("strategyId", v === "__none" ? "" : v)}
+  1173→                >
+  1174→                  <SelectTrigger><SelectValue placeholder="No strategy" /></SelectTrigger>
+  1175→                  <SelectContent>
+  1176→                    <SelectItem value="__none">None</SelectItem>
+  1177→                    {strategies.map((s: any) => (
+  1178→                      <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>
+  1179→                    ))}
+  1180→                  </SelectContent>
+  1181→                </Select>
+  1182→              </div>
+  1183→
+  1184→              <div className="space-y-2" id="field-symbol">
+  1185→                <FieldLabel
+  1186→                  required
+  1187→                  hint="Search by symbol (EURUSD) or name (Euro / US Dollar). Symbols not in the catalog can be used as custom instruments."
+  1188→                >
+  1189→                  Symbol / Pair
+  1190→                </FieldLabel>
+  1191→                <InstrumentSelector
+  1192→                  value={form.instrumentSymbol}
+  1193→                  onChange={(sym) => setField("instrumentSymbol", sym)}
+  1194→                  placeholder="Select instrument…"
+  1195→                />
+  1196→                {/* Instrument metadata preview — helps the user confirm the
+  1197→                    catalog hit and shows the spec that will drive price
+  1198→                    precision / unit labels / risk calc downstream. */}
+  1199→                {form.instrumentSymbol && (
+  1200→                  <div className="flex items-center flex-wrap gap-1.5 text-[11px] text-muted-foreground">
+  1201→                    <Badge
+  1202→                      variant="outline"
+  1203→                      className="text-[10px] uppercase px-1.5 py-0"
+  1204→                    >
+  1205→                      {selectedInstrument.market}
+  1206→                    </Badge>
+  1207→                    {isKnownInstrument ? (
+  1208→                      <>
+  1209→                        <span className="truncate">
+  1210→                          {selectedInstrument.displayName}
+  1211→                        </span>
+  1212→                        <span className="text-muted-foreground/60">·</span>
+  1213→                        <span className="tnum">
+  1214→                          {selectedInstrument.contractSize} units/lot
+  1215→                        </span>
+  1216→                        <span className="text-muted-foreground/60">·</span>
+  1217→                        <span className="tnum">
+  1218→                          {selectedInstrument.pipSize} pip
+  1219→                        </span>
+  1220→                        <span className="text-muted-foreground/60">·</span>
+  1221→                        <span className="tnum">{pricePrecision} dp</span>
+  1222→                      </>
+  1223→                    ) : (
+  1224→                      <span className="italic">
+  1225→                        Custom instrument — defaults applied (0.01 pip, 1 unit,
+  1226→                        2 dp).
+  1227→                      </span>
+  1228→                    )}
+  1229→                  </div>
+  1230→                )}
+  1231→              </div>
+  1232→
+  1233→              <div className="space-y-2">
+  1234→                <FieldLabel required>Direction</FieldLabel>
+  1235→                <RadioGroup
+  1236→                  className="grid grid-cols-2 gap-2"
+  1237→                  value={form.direction}
+  1238→                  onValueChange={(v) => setField("direction", v)}
+  1239→                >
+  1240→                  <label className={cn(
+  1241→                    "flex items-center gap-2 px-3 py-2 rounded-md border cursor-pointer transition-colors",
+  1242→                    form.direction === "long"
+  1243→                      ? "border-profit bg-profit/10"
+  1244→                      : "border-border hover:bg-muted/50",
+  1245→                  )}>
+  1246→                    <RadioGroupItem value="long" id="dir-long" />
+  1247→                    <span className="text-sm font-medium">Long</span>
+  1248→                  </label>
+  1249→                  <label className={cn(
+  1250→                    "flex items-center gap-2 px-3 py-2 rounded-md border cursor-pointer transition-colors",
+  1251→                    form.direction === "short"
+  1252→                      ? "border-loss bg-loss/10"
+  1253→                      : "border-border hover:bg-muted/50",
+  1254→                  )}>
+  1255→                    <RadioGroupItem value="short" id="dir-short" />
+  1256→                    <span className="text-sm font-medium">Short</span>
+  1257→                  </label>
+  1258→                </RadioGroup>
+  1259→              </div>
+  1260→
+  1261→              <div className="space-y-2">
+  1262→                <FieldLabel required hint="Draft, open, closed, or planned.">Trade Status</FieldLabel>
+  1263→                <Select value={form.status} onValueChange={(v) => setField("status", v)}>
+  1264→                  <SelectTrigger><SelectValue /></SelectTrigger>
+  1265→                  <SelectContent>
+  1266→                    {STATUSES.map((s) => (
+  1267→                      <SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>
+  1268→                    ))}
+  1269→                  </SelectContent>
+  1270→                </Select>
+  1271→              </div>
+  1272→
+  1273→              <div className="space-y-2">
+  1274→                <FieldLabel hint="Trading session (asian_range, london_open, ny_am, ny_lunch, ny_pm, off_hours).">Session</FieldLabel>
+  1275→                <Select value={form.session} onValueChange={(v) => setField("session", v)}>
+  1276→                  <SelectTrigger><SelectValue /></SelectTrigger>
+  1277→                  <SelectContent>
+  1278→                    {SESSIONS.map((s) => (
+  1279→                      <SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>
+  1280→                    ))}
+  1281→                  </SelectContent>
+  1282→                </Select>
+  1283→              </div>
+  1284→
+  1285→              <div className="space-y-2">
+  1286→                <FieldLabel hint="Chart timeframe used for the entry.">Timeframe</FieldLabel>
+  1287→                <Select value={form.timeframe} onValueChange={(v) => setField("timeframe", v)}>
+  1288→                  <SelectTrigger><SelectValue /></SelectTrigger>
+  1289→                  <SelectContent>
+  1290→                    {TIMEFRAMES.map((tf) => (
+  1291→                      <SelectItem key={tf} value={tf}>{tf}</SelectItem>
+  1292→                    ))}
+  1293→                  </SelectContent>
+  1294→                </Select>
+  1295→              </div>
+  1296→
+  1297→              <div className="space-y-2">
+  1298→                <FieldLabel hint="Specific news event the trade was taken around (none for no news / non-news setups).">News Event</FieldLabel>
+  1299→                <Select value={form.newsEvent ?? "none"} onValueChange={(v) => setField("newsEvent", v)}>
+  1300→                  <SelectTrigger><SelectValue placeholder="Select a news event" /></SelectTrigger>
+  1301→                  <SelectContent className="max-h-72">
+  1302→                    {NEWS_EVENTS.map((n) => (
+  1303→                      <SelectItem key={n.value} value={n.value}>{n.label}</SelectItem>
+  1304→                    ))}
+  1305→                  </SelectContent>
+  1306→                </Select>
+  1307→              </div>
+  1308→
+  1309→              <div className="space-y-2">
+  1310→                <FieldLabel required>Date</FieldLabel>
+  1311→                <Input
+  1312→                  type="date"
+  1313→                  value={form.tradeDate}
+  1314→                  onChange={(e) => setField("tradeDate", e.target.value)}
+  1315→                />
+  1316→              </div>
+  1317→
+  1318→              <div className="space-y-2">
+  1319→                <FieldLabel required>Time</FieldLabel>
+  1320→                <Input
+  1321→                  type="time"
+  1322→                  value={form.tradeTime}
+  1323→                  onChange={(e) => setField("tradeTime", e.target.value)}
+  1324→                />
+  1325→              </div>
+  1326→            </div>
+  1327→
+  1328→            <div className="space-y-2">
+  1329→              <FieldLabel hint="Why are you taking this trade? What's the core thesis?">Trade Thesis</FieldLabel>
+  1330→              <Textarea
+  1331→                value={form.thesisWhy}
+  1332→                onChange={(e) => setField("thesisWhy", e.target.value)}
+  1333→                rows={4}
+  1334→                placeholder="Bias, structure, liquidity target, entry trigger…"
+  1335→              />
+  1336→            </div>
+  1337→          </Card>
+  1338→
+  1339→          {/* Trade Evidence */}
+  1340→          <Card className="p-4 md:p-6 space-y-4 bg-background">
+  1341→            <div className="flex items-start justify-between gap-3 flex-wrap">
+  1342→              <div>
+  1343→                <h2 className="text-lg font-medium">Trade Evidence</h2>
+  1344→                <p className="text-sm text-muted-foreground">
+  1345→                  Upload screenshots, annotated charts, or video clips.
+  1346→                </p>
+  1347→              </div>
+  1348→              <div>
+  1349→                <input
+  1350→                  ref={fileInputRef}
+  1351→                  type="file"
+  1352→                  accept={ACCEPTED_MEDIA}
+  1353→                  multiple
+  1354→                  className="hidden"
+  1355→                  onChange={(e) => {
+  1356→                    if (e.target.files) handleFileUpload(e.target.files);
+  1357→                    e.target.value = "";
+  1358→                  }}
+  1359→                />
+  1360→                <Button variant="outline" onClick={() => fileInputRef.current?.click()}>
+  1361→                  <Upload className="h-4 w-4" /> Upload
+  1362→                </Button>
+  1363→              </div>
+  1364→            </div>
+  1365→
+  1366→            {form.uploadedMedia.length === 0 && (
+  1367→              <div className="rounded-md border border-dashed border-border p-8 text-center">
+  1368→                <ImageIcon className="h-8 w-8 mx-auto text-muted-foreground mb-2" />
+  1369→                <p className="text-sm text-muted-foreground">No evidence uploaded yet.</p>
+  1370→                <p className="text-xs text-muted-foreground mt-1">
+  1371→                  Click Upload to add screenshots or video clips.
+  1372→                </p>
+  1373→              </div>
+  1374→            )}
+  1375→
+  1376→            {form.uploadedMedia.length > 0 && (
+  1377→              <div className="space-y-4 max-h-[28rem] overflow-y-auto pr-1">
+  1378→                <p className="text-xs text-muted-foreground">
+  1379→                  Group each screenshot by the chart timeframe it captures. A
+  1380→                  complete trade record usually has at least one Higher
+  1381→                  Timeframe chart, one Execution Timeframe chart, and the Entry
+  1382→                  / Trigger chart.
+  1383→                </p>
+  1384→                {groupedMedia.map(({ group, items }) => (
+  1385→                  <div key={group} className="space-y-2">
+  1386→                    <div className="flex items-center justify-between gap-2 sticky top-0 z-10 bg-background/95 backdrop-blur px-1 py-1 border-b border-border">
+  1387→                      <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+  1388→                        {group}
+  1389→                      </h3>
+  1390→                      <span className="text-[10px] text-muted-foreground tnum">
+  1391→                        {items.length} {items.length === 1 ? "item" : "items"}
+  1392→                      </span>
+  1393→                    </div>
+  1394→                    {items.map(({ m, i }) => (
+  1395→                      <div key={m.id ?? i} className="rounded-lg border border-border overflow-hidden bg-background">
+  1396→                        <div className="flex items-center justify-between gap-2 px-3 py-2 border-b border-border bg-muted/30">
+  1397→                          <div className="min-w-0">
+  1398→                            <div className="text-xs font-medium truncate">{m.originalName ?? m.filename ?? `Media ${i + 1}`}</div>
+  1399→                            <div className="text-[10px] text-muted-foreground">
+  1400→                              {(m.kind ?? "image").toUpperCase()}
+  1401→                              {m.sizeBytes ? ` · ${(m.sizeBytes / 1024).toFixed(0)} KB` : ""}
+  1402→                            </div>
+  1403→                          </div>
+  1404→                          <Button
+  1405→                            variant="ghost"
+  1406→                            size="icon"
+  1407→                            className="text-muted-foreground hover:text-loss"
+  1408→                            onClick={() => removeMedia(i)}
+  1409→                            aria-label="Delete evidence"
+  1410→                          >
+  1411→                            <Trash2 className="h-4 w-4" />
+  1412→                          </Button>
+  1413→                        </div>
+  1414→
+  1415→                        {m.kind === "video" ? (
+  1416→                          <video
+  1417→                            src={m.url}
+  1418→                            controls
+  1419→                            className="w-full max-h-80 bg-black"
+  1420→                          />
+  1421→                        ) : (
+  1422→                          <ImageAnnotator
+  1423→                            src={m.url}
+  1424→                            alt={m.originalName ?? `Evidence ${i + 1}`}
+  1425→                            annotations={m.annotations ?? []}
+  1426→                            onChange={(next) => setMediaAnnotations(i, next)}
+  1427→                          />
+  1428→                        )}
+  1429→
+  1430→                        <div className="p-3 space-y-2">
+  1431→                          <div className="grid sm:grid-cols-2 gap-2">
+  1432→                            <div className="space-y-1">
+  1433→                              <Label className="text-xs text-muted-foreground">
+  1434→                                Timeframe {group === "Unassigned" && <span className="text-warning">*</span>}
+  1435→                              </Label>
+  1436→                              <Select
+  1437→                                value={m.timeframe ?? "__none"}
+  1438→                                onValueChange={(v) => setMediaTimeframe(i, v === "__none" ? "" : v)}
+  1439→                              >
+  1440→                                <SelectTrigger className="h-8 text-xs">
+  1441→                                  <SelectValue placeholder="Select timeframe" />
+  1442→                                </SelectTrigger>
+  1443→                                <SelectContent className="max-h-72">
+  1444→                                  <SelectItem value="__none">— None —</SelectItem>
+  1445→                                  {TIMEFRAME_GROUPS.map((g) => {
+  1446→                                    const groupOptions = MEDIA_TIMEFRAMES.filter((t) => t.group === g);
+  1447→                                    if (groupOptions.length === 0) return null;
+  1448→                                    return (
+  1449→                                      <SelectGroup key={g}>
+  1450→                                        <SelectLabel className="text-[10px] uppercase tracking-wide text-muted-foreground">
+  1451→                                          {g}
+  1452→                                        </SelectLabel>
+  1453→                                        {groupOptions.map((t) => (
+  1454→                                          <SelectItem key={t.value} value={t.value}>
+  1455→                                            {t.label}
+  1456→                                          </SelectItem>
+  1457→                                        ))}
+  1458→                                      </SelectGroup>
+  1459→                                    );
+  1460→                                  })}
+  1461→                                </SelectContent>
+  1462→                              </Select>
+  1463→                            </div>
+  1464→                            <div className="space-y-1">
+  1465→                              <Label className="text-xs text-muted-foreground">
+  1466→                                Caption (optional)
+  1467→                              </Label>
+  1468→                              <Input
+  1469→                                value={m.caption ?? ""}
+  1470→                                onChange={(e) => setMediaCaption(i, e.target.value)}
+  1471→                                placeholder="What does this evidence show?"
+  1472→                                className="h-8 text-xs"
+  1473→                              />
+  1474→                            </div>
+  1475→                          </div>
+  1476→                          {m.timeframe && (
+  1477→                            <p className="text-[10px] text-muted-foreground">
+  1478→                              {getTimeframeLabel(m.timeframe)} · {getTimeframeGroup(m.timeframe)}
+  1479→                            </p>
+  1480→                          )}
+  1481→                        </div>
+  1482→                      </div>
+  1483→                    ))}
+  1484→                  </div>
+  1485→                ))}
+  1486→              </div>
+  1487→            )}
+  1488→          </Card>
+  1489→
+  1490→          {/* Advanced — collapsible */}
+  1491→          <Collapsible open={advancedOpen} onOpenChange={setAdvancedOpen}>
+  1492→            <Card className="p-4 md:p-6 space-y-4 bg-background">
+  1493→              <CollapsibleTrigger asChild>
+  1494→                <button
+  1495→                  type="button"
+  1496→                  className="flex items-center justify-between w-full text-left"
+  1497→                >
+  1498→                  <div>
+  1499→                    <h2 className="text-lg font-medium">Advanced</h2>
+  1500→                    <p className="text-sm text-muted-foreground">
+  1501→                      ICT setup, psychology, behavior flags, tags.
+  1502→                    </p>
+  1503→                  </div>
+  1504→                  <ChevronDown
+  1505→                    className={cn(
+  1506→                      "h-5 w-5 text-muted-foreground transition-transform",
+  1507→                      advancedOpen && "rotate-180",
+  1508→                    )}
+  1509→                  />
+  1510→                </button>
+  1511→              </CollapsibleTrigger>
+  1512→
+  1513→              <CollapsibleContent className="space-y-4">
+  1514→                {/* ICT Setup */}
+  1515→                <div className="rounded-md border border-border p-3 space-y-3">
+  1516→                  <h3 className="text-sm font-medium">ICT Setup</h3>
+  1517→                  <div className="grid sm:grid-cols-2 gap-3">
+  1518→                    <div className="space-y-2">
+  1519→                      <Label>Weekly Bias</Label>
+  1520→                      <Select
+  1521→                        value={form.setup.htfContext.weeklyBias}
+  1522→                        onValueChange={(v) => setField("setup.htfContext.weeklyBias", v)}
+  1523→                      >
+  1524→                        <SelectTrigger><SelectValue /></SelectTrigger>
+  1525→                        <SelectContent>
+  1526→                          <SelectItem value="bullish">Bullish</SelectItem>
+  1527→                          <SelectItem value="bearish">Bearish</SelectItem>
+  1528→                          <SelectItem value="neutral">Neutral</SelectItem>
+  1529→                        </SelectContent>
+  1530→                      </Select>
+  1531→                    </div>
+  1532→                    <div className="space-y-2">
+  1533→                      <Label>Daily Bias</Label>
+  1534→                      <Select
+  1535→                        value={form.setup.htfContext.dailyBias}
+  1536→                        onValueChange={(v) => setField("setup.htfContext.dailyBias", v)}
+  1537→                      >
+  1538→                        <SelectTrigger><SelectValue /></SelectTrigger>
+  1539→                        <SelectContent>
+  1540→                          <SelectItem value="bullish">Bullish</SelectItem>
+  1541→                          <SelectItem value="bearish">Bearish</SelectItem>
+  1542→                          <SelectItem value="neutral">Neutral</SelectItem>
+  1543→                        </SelectContent>
+  1544→                      </Select>
+  1545→                    </div>
+  1546→                  </div>
+  1547→                  <div className="space-y-2">
+  1548→                    <Label>Liquidity Targets</Label>
+  1549→                    <div className="flex flex-wrap gap-2">
+  1550→                      {["PDH", "PDL", "PWH", "PWL", "equal highs", "equal lows", "buy-side", "sell-side", "session liquidity"].map((opt) => {
+  1551→                        const active = (form.setup.liquidity ?? []).includes(opt);
+  1552→                        return (
+  1553→                          <button
+  1554→                            key={opt}
+  1555→                            type="button"
+  1556→                            onClick={() => toggleArrayField("setup.liquidity", opt)}
+  1557→                            className={cn(
+  1558→                              "px-2 py-1 rounded-md text-xs border transition-colors",
+  1559→                              active
+  1560→                                ? "bg-primary text-primary-foreground border-primary"
+  1561→                                : "border-border hover:bg-muted",
+  1562→                            )}
+  1563→                          >
+  1564→                            {opt}
+  1565→                          </button>
+  1566→                        );
+  1567→                      })}
+  1568→                    </div>
+  1569→                  </div>
+  1570→                  <div className="space-y-2">
+  1571→                    <Label>Market Structure</Label>
+  1572→                    <div className="flex flex-wrap gap-2">
+  1573→                      {["BOS", "MSS", "displacement", "protected high", "protected low", "structure shift"].map((opt) => {
+  1574→                        const active = (form.setup.structure ?? []).includes(opt);
+  1575→                        return (
+  1576→                          <button
+  1577→                            key={opt}
+  1578→                            type="button"
+  1579→                            onClick={() => toggleArrayField("setup.structure", opt)}
+  1580→                            className={cn(
+  1581→                              "px-2 py-1 rounded-md text-xs border transition-colors",
+  1582→                              active
+  1583→                                ? "bg-primary text-primary-foreground border-primary"
+  1584→                                : "border-border hover:bg-muted",
+  1585→                            )}
+  1586→                          >
+  1587→                            {opt}
+  1588→                          </button>
+  1589→                        );
+  1590→                      })}
+  1591→                    </div>
+  1592→                  </div>
+  1593→                  <div className="space-y-2">
+  1594→                    <Label>Entry Model</Label>
+  1595→                    <Select
+  1596→                      value={form.setup.entryModel}
+  1597→                      onValueChange={(v) => setField("setup.entryModel", v)}
+  1598→                    >
+  1599→                      <SelectTrigger><SelectValue /></SelectTrigger>
+  1600→                      <SelectContent>
+  1601→                        {["liquidity sweep", "displacement", "FVG", "Order Block", "Breaker", "Mitigation", "SMT", "retracement"].map((o) => (
+  1602→                          <SelectItem key={o} value={o}>{o}</SelectItem>
+  1603→                        ))}
+  1604→                      </SelectContent>
+  1605→                    </Select>
+  1606→                  </div>
+  1607→                </div>
+  1608→
+  1609→                {/* Psychology — before */}
+  1610→                <div className="rounded-md border border-border p-3 space-y-3">
+  1611→                  <h3 className="text-sm font-medium">Psychology — Before</h3>
+  1612→                  <div className="space-y-2">
+  1613→                    <Label>Mood Before</Label>
+  1614→                    <div className="flex flex-wrap gap-2">
+  1615→                      {PSYCH_BEFORE.map((opt) => {
+  1616→                        const active = (form.psychBefore.moodTags ?? []).includes(opt);
+  1617→                        return (
+  1618→                          <button
+  1619→                            key={opt}
+  1620→                            type="button"
+  1621→                            onClick={() => toggleArrayField("psychBefore.moodTags", opt)}
+  1622→                            className={cn(
+  1623→                              "px-2 py-1 rounded-md text-xs border transition-colors",
+  1624→                              active
+  1625→                                ? "bg-primary text-primary-foreground border-primary"
+  1626→                                : "border-border hover:bg-muted",
+  1627→                            )}
+  1628→                          >
+  1629→                            {opt}
+  1630→                          </button>
+  1631→                        );
+  1632→                      })}
+  1633→                    </div>
+  1634→                  </div>
+  1635→                  <div className="grid sm:grid-cols-2 gap-3">
+  1636→                    <div className="space-y-2">
+  1637→                      <Label>Confidence (1-5)</Label>
+  1638→                      <Input
+  1639→                        type="number"
+  1640→                        min={1}
+  1641→                        max={5}
+  1642→                        value={form.psychBefore.confidence}
+  1643→                        onChange={(e) => setField("psychBefore.confidence", Number(e.target.value))}
+  1644→                      />
+  1645→                    </div>
+  1646→                    <div className="space-y-2">
+  1647→                      <Label>Energy (1-5)</Label>
+  1648→                      <Input
+  1649→                        type="number"
+  1650→                        min={1}
+  1651→                        max={5}
+  1652→                        value={form.psychBefore.energy}
+  1653→                        onChange={(e) => setField("psychBefore.energy", Number(e.target.value))}
+  1654→                      />
+  1655→                    </div>
+  1656→                  </div>
+  1657→                </div>
+  1658→
+  1659→                {/* Psychology — after */}
+  1660→                <div className="rounded-md border border-border p-3 space-y-3">
+  1661→                  <h3 className="text-sm font-medium">Psychology — After</h3>
+  1662→                  <div className="space-y-2">
+  1663→                    <Label>Mood After</Label>
+  1664→                    <div className="flex flex-wrap gap-2">
+  1665→                      {PSYCH_AFTER.map((opt) => {
+  1666→                        const active = (form.psychAfter.moodTags ?? []).includes(opt);
+  1667→                        return (
+  1668→                          <button
+  1669→                            key={opt}
+  1670→                            type="button"
+  1671→                            onClick={() => toggleArrayField("psychAfter.moodTags", opt)}
+  1672→                            className={cn(
+  1673→                              "px-2 py-1 rounded-md text-xs border transition-colors",
+  1674→                              active
+  1675→                                ? "bg-primary text-primary-foreground border-primary"
+  1676→                                : "border-border hover:bg-muted",
+  1677→                            )}
+  1678→                          >
+  1679→                            {opt}
+  1680→                          </button>
+  1681→                        );
+  1682→                      })}
+  1683→                    </div>
+  1684→                  </div>
+  1685→                </div>
+  1686→
+  1687→                {/* Behavior flags */}
+  1688→                <div className="rounded-md border border-border p-3 space-y-3">
+  1689→                  <h3 className="text-sm font-medium">Behavior Flags</h3>
+  1690→                  <div className="flex flex-wrap gap-2">
+  1691→                    {BEHAVIOR_FLAGS.map((opt) => {
+  1692→                      const active = (form.behaviorFlags ?? []).includes(opt);
+  1693→                      return (
+  1694→                        <button
+  1695→                          key={opt}
+  1696→                          type="button"
+  1697→                          onClick={() => toggleArrayField("behaviorFlags", opt)}
+  1698→                          className={cn(
+  1699→                            "px-2 py-1 rounded-md text-xs border transition-colors",
+  1700→                            active
+  1701→                              ? "bg-loss text-white border-loss"
+  1702→                              : "border-border hover:bg-muted",
+  1703→                          )}
+  1704→                        >
+  1705→                          {opt.replace(/_/g, " ")}
+  1706→                        </button>
+  1707→                      );
+  1708→                    })}
+  1709→                  </div>
+  1710→                </div>
+  1711→
+  1712→                {/* Tags */}
+  1713→                <div className="rounded-md border border-border p-3 space-y-3">
+  1714→                  <h3 className="text-sm font-medium">Tags</h3>
+  1715→                  <div className="flex flex-wrap gap-2">
+  1716→                    {tags.length === 0 && (
+  1717→                      <p className="text-xs text-muted-foreground">
+  1718→                        No tags configured. Add some in the Tags view.
+  1719→                      </p>
+  1720→                    )}
+  1721→                    {tags.map((t: any) => {
+  1722→                      const name = typeof t === "string" ? t : (t.name ?? t.label);
+  1723→                      const active = (form.tags ?? []).includes(name);
+  1724→                      return (
+  1725→                        <button
+  1726→                          key={typeof t === "string" ? t : t.id}
+  1727→                          type="button"
+  1728→                          onClick={() => toggleArrayField("tags", name)}
+  1729→                          className={cn(
+  1730→                            "px-2 py-1 rounded-md text-xs border transition-colors",
+  1731→                            active
+  1732→                              ? "bg-primary text-primary-foreground border-primary"
+  1733→                              : "border-border hover:bg-muted",
+  1734→                          )}
+  1735→                        >
+  1736→                          {name}
+  1737→                        </button>
+  1738→                      );
+  1739→                    })}
+  1740→                  </div>
+  1741→                </div>
+  1742→
+  1743→                {/* Notes / Lessons */}
+  1744→                <div className="grid sm:grid-cols-2 gap-3">
+  1745→                  <div className="space-y-2">
+  1746→                    <Label>Notes</Label>
+  1747→                    <Textarea
+  1748→                      value={form.notes}
+  1749→                      onChange={(e) => setField("notes", e.target.value)}
+  1750→                      rows={3}
+  1751→                    />
+  1752→                  </div>
+  1753→                  <div className="space-y-2">
+  1754→                    <Label>Lessons</Label>
+  1755→                    <Textarea
+  1756→                      value={form.lessons}
+  1757→                      onChange={(e) => setField("lessons", e.target.value)}
+  1758→                      rows={3}
+  1759→                    />
+  1760→                  </div>
+  1761→                </div>
+  1762→              </CollapsibleContent>
+  1763→            </Card>
+  1764→          </Collapsible>
+  1765→        </TabsContent>
+  1766→
+  1767→        {/* ─────────────────────────────────────────────────────────── */}
+  1768→        {/* STEP 2 — Setup Checklist                                      */}
+  1769→        {/* ─────────────────────────────────────────────────────────── */}
+  1770→        <TabsContent value="checklist" className="space-y-4 mt-3">
+  1771→          <Card className="p-4 md:p-6 space-y-4 bg-background">
+  1772→            <div className="flex items-start justify-between gap-3 flex-wrap">
+  1773→              <div>
+  1774→                <h2 className="text-lg font-medium flex items-center gap-2">
+  1775→                  Setup Checklist
+  1776→                  <Sparkles className="h-4 w-4 text-primary" />
+  1777→                </h2>
+  1778→                <p className="text-sm text-muted-foreground">
+  1779→                  {form.strategyId && selectedStrategyVersion
+  1780→                    ? `${strategyDetail?.name ?? "Strategy"} · v${selectedStrategyVersion.versionLabel}`
+  1781→                    : "Select a strategy in Step 1 to load its checklist."}
+  1782→                </p>
+  1783→              </div>
+  1784→              {checklistItems.length > 0 && (
+  1785→                <div className="text-right">
+  1786→                  <div className={cn(
+  1787→                    "text-2xl font-bold tnum",
+  1788→                    evaluation.grade === "A+" || evaluation.grade === "A"
+  1789→                      ? "text-profit"
+  1790→                      : evaluation.grade === "B"
+  1791→                        ? "text-warning"
+  1792→                        : evaluation.grade === "C"
+  1793→                          ? "text-muted-foreground"
+  1794→                          : "text-loss",
+  1795→                  )}>
+  1796→                    {evaluation.grade}
+  1797→                  </div>
+  1798→                  <div className="text-xs text-muted-foreground tnum">
+  1799→                    {(evaluation.score * 100).toFixed(1)}% score
+  1800→                  </div>
+  1801→                </div>
+  1802→              )}
+  1803→            </div>
+  1804→
+  1805→            {/* Immutable snapshot banner */}
+  1806→            <div className="flex items-start gap-2 rounded-md border border-border bg-muted/40 p-3">
+  1807→              <Lock className="h-4 w-4 text-muted-foreground mt-0.5 shrink-0" />
+  1808→              <p className="text-xs text-muted-foreground">
+  1809→                <span className="font-medium text-foreground">Immutable historical snapshot.</span>{" "}
+  1810→                Checklist answers are stored once on save and never silently
+  1811→                re-evaluated. Future edits to this strategy's rules will not
+  1812→                change this trade's recorded grade.
+  1813→              </p>
+  1814→            </div>
+  1815→
+  1816→            {checklistItems.length > 0 ? (
+  1817→              <>
+  1818→                {/* Adherence summary */}
+  1819→                <div className="space-y-2">
+  1820→                  <div className="flex items-center justify-between text-sm">
+  1821→                    <span className="text-muted-foreground">
+  1822→                      {checkedCount}/{checklistItems.length} Checked
+  1823→                    </span>
+  1824→                    <span className="font-medium tnum">{adherencePct}% Adherence</span>
+  1825→                  </div>
+  1826→                  <div className="h-2 rounded-full bg-muted overflow-hidden">
+  1827→                    <div
+  1828→                      className={cn(
+  1829→                        "h-full rounded-full transition-all",
+  1830→                        adherencePct >= 90
+  1831→                          ? "bg-profit"
+  1832→                          : adherencePct >= 75
+  1833→                            ? "bg-profit"
+  1834→                            : adherencePct >= 60
+  1835→                              ? "bg-warning"
+  1836→                              : adherencePct >= 40
+  1837→                                ? "bg-muted-foreground"
+  1838→                                : "bg-loss",
+  1839→                      )}
+  1840→                      style={{ width: `${adherencePct}%` }}
+  1841→                    />
+  1842→                  </div>
+  1843→                  <div className="flex items-center justify-between text-xs text-muted-foreground">
+  1844→                    <span>
+  1845→                      Required: {evaluation.requiredCheckedCount}/{evaluation.requiredTotalCount} met
+  1846→                    </span>
+  1847→                    <span>× weight applies to score</span>
+  1848→                  </div>
+  1849→                </div>
+  1850→
+  1851→                {/* Items */}
+  1852→                <div className="space-y-2 max-h-[28rem] overflow-y-auto pr-1">
+  1853→                  {checklistItems.map((item) => {
+  1854→                    const ans = form.checklistAnswers?.[item.id] ?? { checked: false };
+  1855→                    return (
+  1856→                      <label
+  1857→                        key={item.id}
+  1858→                        className={cn(
+  1859→                          "flex items-center gap-3 p-3 rounded-md border cursor-pointer transition-colors",
+  1860→                          ans.checked
+  1861→                            ? "bg-profit/10 border-profit/30"
+  1862→                            : "border-border hover:bg-muted/40",
+  1863→                        )}
+  1864→                      >
+  1865→                        <Checkbox
+  1866→                          checked={ans.checked}
+  1867→                          onCheckedChange={(v) => updateChecklistAnswer(item.id, !!v)}
+  1868→                        />
+  1869→                        <span className={cn(
+  1870→                          "text-sm flex-1",
+  1871→                          ans.checked && "text-profit font-medium",
+  1872→                        )}>
+  1873→                          {item.text}
+  1874→                        </span>
+  1875→                        {item.required && (
+  1876→                          <Badge variant="destructive" className="text-[10px] uppercase">
+  1877→                            Required
+  1878→                          </Badge>
+  1879→                        )}
+  1880→                        <span className="text-[10px] text-muted-foreground tnum">
+  1881→                          ×{item.weight}
+  1882→                        </span>
+  1883→                      </label>
+  1884→                    );
+  1885→                  })}
+  1886→                </div>
+  1887→
+  1888→                <p className="text-xs text-muted-foreground">
+  1889→                  Score = sum(weights of checked items) / sum(weights of all
+  1890→                  items). If any required item is unchecked, the grade is
+  1891→                  capped at C.
+  1892→                </p>
+  1893→              </>
+  1894→            ) : (
+  1895→              <div className="rounded-md border border-dashed border-border p-8 text-center">
+  1896→                {form.strategyId ? (
+  1897→                  <>
+  1898→                    <AlertTriangle className="h-8 w-8 mx-auto text-muted-foreground mb-2" />
+  1899→                    <p className="text-sm text-muted-foreground">
+  1900→                      No setup checklist configured for this strategy version.
+  1901→                    </p>
+  1902→                    <p className="text-xs text-muted-foreground mt-1">
+  1903→                      Add rules with weights when creating or versioning the
+  1904→                      strategy to enable setup-grade scoring.
+  1905→                    </p>
+  1906→                  </>
+  1907→                ) : (
+  1908→                  <>
+  1909→                    <Sparkles className="h-8 w-8 mx-auto text-muted-foreground mb-2" />
+  1910→                    <p className="text-sm text-muted-foreground">
+  1911→                      Select a strategy in Step 1 to load its setup checklist.
+  1912→                    </p>
+  1913→                    <p className="text-xs text-muted-foreground mt-1">
+  1914→                      The checklist is derived from the strategy's versioned
+  1915→                      rules and stored as an immutable snapshot when the trade
+  1916→                      is saved.
+  1917→                    </p>
+  1918→                  </>
+  1919→                )}
+  1920→              </div>
+  1921→            )}
+  1922→          </Card>
+  1923→        </TabsContent>
+  1924→
+  1925→        {/* ─────────────────────────────────────────────────────────── */}
+  1926→        {/* STEP 3 — Risk & Sizing                                       */}
+  1927→        {/* ─────────────────────────────────────────────────────────── */}
+  1928→        <TabsContent value="risk" className="space-y-4 mt-3">
+  1929→          <Card className="p-4 md:p-6 space-y-4 bg-background">
+  1930→            <div>
+  1931→              <h2 className="text-lg font-medium">Risk &amp; Sizing</h2>
+  1932→              <p className="text-sm text-muted-foreground">
+  1933→                Planned entry, stop, and target are required. The rest is
+  1934→                auto-derived from your account balance and risk %.
+  1935→              </p>
+  1936→            </div>
+  1937→
+  1938→            <div className="grid sm:grid-cols-3 gap-4">
+  1939→              <div className="space-y-2" id="field-entry">
+  1940→                <FieldLabel required hint="The price you planned to enter at.">Planned Entry</FieldLabel>
+  1941→                <Input
+  1942→                  type="number"
+  1943→                  step="any"
+  1944→                  inputMode="decimal"
+  1945→                  value={form.plannedEntryPrice}
+  1946→                  onChange={(e) => setField("plannedEntryPrice", e.target.value)}
+  1947→                />
+  1948→              </div>
+  1949→              <div className="space-y-2" id="field-stop">
+  1950→                <FieldLabel required hint="The stop loss you planned.">Planned Stop</FieldLabel>
+  1951→                <Input
+  1952→                  type="number"
+  1953→                  step="any"
+  1954→                  inputMode="decimal"
+  1955→                  value={form.plannedStopPrice}
+  1956→                  onChange={(e) => setField("plannedStopPrice", e.target.value)}
+  1957→                />
+  1958→              </div>
+  1959→              <div className="space-y-2" id="field-target">
+  1960→                <FieldLabel required hint="The take profit you planned.">Planned Target</FieldLabel>
+  1961→                <Input
+  1962→                  type="number"
+  1963→                  step="any"
+  1964→                  inputMode="decimal"
+  1965→                  value={form.plannedTargetPrice}
+  1966→                  onChange={(e) => setField("plannedTargetPrice", e.target.value)}
+  1967→                />
+  1968→              </div>
+  1969→            </div>
+  1970→
+  1971→            <div className="grid sm:grid-cols-2 gap-4">
+  1972→              <div className="space-y-2">
+  1973→                <FieldLabel hint="Position size (e.g. 0.5 lots, 1 contract).">Lot Size</FieldLabel>
+  1974→                <Input
+  1975→                  type="number"
+  1976→                  step="any"
+  1977→                  inputMode="decimal"
+  1978→                  value={form.lotSize}
+  1979→                  onChange={(e) => setField("lotSize", e.target.value)}
+  1980→                />
+  1981→              </div>
+  1982→              <div className="space-y-2">
+  1983→                <FieldLabel hint="Risk as a decimal (0.005 = 0.5% of account balance).">Risk %</FieldLabel>
+  1984→                <Input
+  1985→                  type="number"
+  1986→                  step="any"
+  1987→                  inputMode="decimal"
+  1988→                  value={form.riskPct}
+  1989→                  onChange={(e) => setField("riskPct", e.target.value)}
+  1990→                />
+  1991→              </div>
+  1992→            </div>
+  1993→
+  1994→            {/* Auto-calculated panel */}
+  1995→            <div className="rounded-md border border-border bg-muted/30 p-4">
+  1996→              <h3 className="text-sm font-medium mb-3">Auto-calculated</h3>
+  1997→              <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
+  1998→                <div>
+  1999→                  <div className="text-xs text-muted-foreground">
+  2000→                    Stop Distance
+
+[showing lines 1-2000 of 2424; use offset=2001 with limit to continue reading]

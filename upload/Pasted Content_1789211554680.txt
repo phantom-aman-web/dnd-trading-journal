@@ -1,0 +1,2124 @@
+DnD BACKEND + DATABASE REBUILD
+AUTHORITATIVE FINANCIAL ENGINE + ANALYTICS ENGINE SPECIFICATION
+
+You are rebuilding the DnD backend, database, persistence layer, calculation engine, and analytics layer from scratch.
+
+The current frontend/product is valuable and should remain the product-facing source.
+
+The old backend implementation is REFERENCE ONLY.
+
+Do NOT blindly copy its database model, calculation formulas, API logic, or analytics implementation.
+
+I have identified multiple conceptual problems in the old implementation, especially around instrument monetary semantics, partial exits, aggregation scope, checklist adherence, and analytics definitions.
+
+The purpose of this task is to establish ONE authoritative data model, ONE authoritative financial calculation model, and ONE authoritative analytics model.
+
+============================================================
+0. NON-NEGOTIABLE PRINCIPLES
+============================================================
+
+1. The backend is authoritative.
+2. The database is authoritative for persisted state.
+3. The client never supplies authoritative calculations.
+4. The client never supplies authoritative status.
+5. The client never supplies authoritative analytics.
+6. Every financial value must have an explicit unit.
+7. Every calculation must have one canonical implementation.
+8. Every analytics metric must have one canonical definition.
+9. Every persisted field must survive:
+   form
+   -> request
+   -> validation
+   -> backend
+   -> database
+   -> GET
+   -> reload
+   -> login again
+10. No calculation should be duplicated across frontend, backend, and analytics code with subtly different formulas.
+11. Historical trade results must remain stable.
+12. Instrument metadata changes must never silently rewrite historical P&L.
+13. Partial trades must never be silently counted as fully closed trades.
+14. Checklist adherence must never be inferred from win rate.
+15. A successful API response is NOT proof of correctness.
+16. A successful database write is NOT proof of correct semantics.
+17. Every metric must be testable from known input data.
+
+============================================================
+1. PRESERVE CURRENT FRONTEND / PRODUCT
+============================================================
+
+Do not redesign the current UI.
+
+Preserve the current DnD product behavior and visual language.
+
+The frontend should continue supporting the current workflows:
+
+- landing
+- authentication
+- onboarding
+- accounts
+- strategies
+- strategy versions
+- new trade
+- checklist
+- risk/sizing
+- partial exits
+- trade execution
+- trade closing
+- trade detail
+- dashboard
+- analytics
+- calendar
+- settings
+- media
+- legal
+
+Do not reintroduce intentionally removed modules such as:
+
+- Daily Plans
+- Reviews
+- separate Media Library module
+- CSV Import UI
+- Notifications UI
+- Audit UI
+- server-side backup restore UI
+
+unless explicitly requested later.
+
+The backend must be designed to serve the current frontend cleanly.
+
+============================================================
+2. CREATE A CLEAN DOMAIN MODEL
+============================================================
+
+Before coding, define the domain model.
+
+Core entities should cover the actual product concepts:
+
+User
+UserSettings
+TradingAccount
+Instrument
+Strategy
+StrategyVersion
+ChecklistConfig
+ChecklistVersion
+Trade
+TradeExecution
+TradeTarget
+TradeChecklistEvaluation
+TradeMedia
+MediaAnnotation
+LegalAcceptance
+and only other entities actually needed by the current product.
+
+Every entity must clearly define:
+
+- owner
+- identity
+- lifecycle
+- mutable fields
+- immutable fields
+- derived fields
+- relationships
+- deletion semantics
+
+============================================================
+3. TRADE MUST HAVE ONE SOURCE OF TRUTH
+============================================================
+
+The trade should distinguish clearly between:
+
+A. PLANNING DATA
+B. EXECUTION DATA
+C. DERIVED FINANCIAL DATA
+D. DOCUMENTATION DATA
+E. PSYCHOLOGY DATA
+F. CHECKLIST DATA
+G. MEDIA DATA
+
+Do not mix these concepts.
+
+Planning fields:
+
+planned entry
+planned stop
+planned target
+planned risk percentage
+planned quantity
+planned R:R
+
+Execution ledger:
+
+entry fills
+exit fills
+
+Derived:
+
+entry average
+exit average
+matched quantity
+gross P&L
+costs
+net P&L
+planned risk
+actual R
+status
+
+Documentation:
+
+thesis
+notes
+lessons
+setup
+plan adherence
+
+Psychology:
+
+before
+after
+behavior flags
+
+Checklist:
+
+strategy version
+checklist version
+answers
+weighted score
+grade
+evaluation snapshot
+
+============================================================
+4. FINANCIAL UNIT MODEL
+============================================================
+
+This is CRITICAL.
+
+Every financial calculation must declare its unit.
+
+Canonical storage:
+
+Money:
+integer minor units, normally cents.
+
+Price:
+decimal, stored exactly enough for the instrument.
+
+Quantity:
+decimal string where fractional quantity is allowed.
+
+Ratios:
+decimal string.
+
+Percentage:
+decimal representation with explicit convention.
+
+============================================================
+5. FIX INSTRUMENT SEMANTICS
+============================================================
+
+The previous implementation mixed:
+
+- tick value
+- point value
+- contract size
+
+This must not happen again.
+
+Choose a single authoritative model.
+
+Recommended model:
+
+contractSize:
+underlying units represented by one quantity unit OR the contract multiplier.
+
+pointValue:
+monetary value of ONE FULL PRICE UNIT for ONE contract/quantity unit, expressed in account/base calculation currency.
+
+tickSize:
+minimum price increment.
+
+tickValue:
+derived value of one tick.
+
+DO NOT use a field named pointValueCents to secretly mean tick value.
+
+If a value represents tick value, call it tickValueCents.
+
+If it represents full-point monetary value, call it pointValueCents.
+
+Never mix them.
+
+============================================================
+6. FUTURES EXAMPLES
+============================================================
+
+Use actual futures economics.
+
+NQ:
+
+1 contract
+= $20 per full index point
+
+Therefore:
+
+pointValueCents = 2000 cents per point per contract
+
+tickSize = 0.25
+
+tickValue = $5
+
+Do NOT multiply $20/point by another $20 contract multiplier.
+
+ES:
+
+1 contract
+= $50 per full index point
+
+pointValueCents = 5000 cents per point
+
+tickSize = 0.25
+
+tickValue = $12.50
+
+YM:
+
+$5 per point
+
+CL:
+
+$1000 per $1 move per contract
+
+GC:
+
+$100 per $1 move per contract
+
+Use one coherent representation.
+
+============================================================
+7. FOREX MODEL
+============================================================
+
+Forex requires special attention.
+
+EURUSD:
+
+1 standard lot = 100,000 EUR
+
+A 1.0 price move corresponds to 100,000 USD.
+
+Therefore:
+
+P&L in USD
+=
+price difference
+× quantity
+× contractSize
+
+For:
+
+EURUSD
+entry 1.1000
+exit 1.1080
+quantity 1 standard lot
+
+difference = 0.0080
+
+P&L = 0.0080 × 100000
+= $800
+
+= 80,000 cents.
+
+For non-USD quote currencies, explicitly define how conversion occurs.
+
+Do not pretend USDJPY can be treated identically to EURUSD without a conversion rule.
+
+Define:
+
+- quote currency
+- base currency
+- account currency
+- conversion source
+- conversion timing
+- historical conversion behavior
+
+Historical P&L must remain reproducible.
+
+============================================================
+8. GOLD
+============================================================
+
+For XAUUSD:
+
+Assuming:
+
+1 contract/lot = 100 oz
+
+$1 move in gold
+= $100 per contract
+
+Therefore:
+
+entry 2000
+exit 1990
+qty 1
+
+difference = 10
+
+P&L = 10 × $100
+= $1,000
+= 100,000 cents.
+
+Do not multiply the $100 contract value twice.
+
+============================================================
+9. CANONICAL P&L FORMULA
+============================================================
+
+Define the canonical formula mathematically before implementation.
+
+Conceptually:
+
+directionalMove
+=
+LONG ? exit - entry : entry - exit
+
+grossPnl
+=
+directionalMove
+× matchedQuantity
+× monetaryValuePerPriceUnit
+
+Where monetaryValuePerPriceUnit is already authoritative.
+
+Do not multiply unrelated monetary multipliers twice.
+
+If the instrument model uses:
+
+contractSize
+× pointValue
+
+then pointValue must represent value per price unit per underlying unit.
+
+If the instrument model uses direct pointValue per contract:
+
+do NOT multiply contractSize again.
+
+Choose one model and enforce it throughout the system.
+
+============================================================
+10. COST MODEL
+============================================================
+
+Costs:
+
+fees
+commission
+swap
+slippage
+
+All stored as integer cents.
+
+Total:
+
+totalCosts
+=
+fees
++
+commission
++
+swap
++
+slippage
+
+Net:
+
+netPnl
+=
+grossPnl
+-
+totalCosts
+
+Costs must never be double-counted.
+
+Do not subtract slippage from both execution price and costs unless explicitly modeled that way.
+
+============================================================
+11. RISK
+============================================================
+
+Planned risk must be based on:
+
+planned stop distance
+planned quantity
+instrument monetary value per price unit
+
+Risk is not:
+
+balance × risk percentage
+
+unless the user is explicitly using percentage-based position sizing.
+
+When risk percentage is used:
+
+riskAmount
+=
+accountBalance
+× riskPct
+
+Then position size can be derived from:
+
+positionSize
+=
+riskAmount
+/
+riskPerUnit
+
+Keep:
+
+risk budget
+
+separate from:
+
+trade's planned monetary stop risk
+
+and clearly document the relationship.
+
+============================================================
+12. POSITION SIZE
+============================================================
+
+Position sizing must be derived consistently.
+
+Inputs:
+
+account balance
+risk percentage
+entry
+stop
+instrument metadata
+
+Calculate:
+
+risk budget
+stop distance
+risk per unit
+position size
+
+Handle:
+
+zero stop distance
+negative quantities
+invalid prices
+unsupported precision
+fractional quantity constraints
+
+Do not silently default invalid quantities to 1.
+
+============================================================
+13. ENTRY / EXIT LEDGER
+============================================================
+
+Trade execution history is authoritative.
+
+Support multiple entry fills.
+
+Do NOT use:
+
+first entry quantity
+
+as total quantity.
+
+Total entry quantity must equal:
+
+sum(all entry fill quantities)
+
+Total exit quantity:
+
+sum(all exit fill quantities)
+
+VWAP entry:
+
+Σ(price × quantity) / Σ(quantity)
+
+VWAP exit:
+
+Σ(price × quantity) / Σ(quantity)
+
+Matched quantity:
+
+min(totalEntryQty, totalExitQty)
+
+============================================================
+14. PARTIAL EXITS MUST ACTUALLY SAVE
+============================================================
+
+The current implementation incorrectly stores target quantity allocation as zero.
+
+Fix the data model.
+
+Each planned target should support:
+
+- id
+- label
+- price
+- allocation quantity or percentage
+- order/index
+- optional notes
+
+If allocation is percentage:
+
+quantityPct must be persisted exactly.
+
+Example:
+
+TP1 = 25%
+TP2 = 25%
+TP3 = 50%
+
+After:
+
+save
+reload
+logout
+login
+edit
+
+the values must remain:
+
+25%
+25%
+50%
+
+Do not replace them with zero.
+
+Validate allocations.
+
+Explicitly define whether:
+
+- allocation may total exactly 100%
+- allocation may be below 100%
+- allocation may exceed 100%
+
+Recommended:
+
+must not exceed 100%.
+
+============================================================
+15. PARTIAL EXECUTION
+============================================================
+
+When actual exits are recorded:
+
+Realized P&L only belongs to matched/closed quantity.
+
+Unclosed quantity remains open.
+
+Example:
+
+Entry = 4 contracts
+
+Exit 1 = 1
+Exit 2 = 1
+
+Realized quantity = 2
+
+Open quantity = 2
+
+Do not treat the trade as fully closed.
+
+============================================================
+16. STATUS DERIVATION
+============================================================
+
+Never accept authoritative status from client.
+
+Derive from execution ledger.
+
+Rules:
+
+DRAFT:
+isDraft=true
+
+PLANNED:
+no entry execution
+
+OPEN:
+entry exists but not fully exited
+
+PARTIAL_WIN:
+0 < exitQty < entryQty and realized P&L > 0
+
+PARTIAL_LOSS:
+0 < exitQty < entryQty and realized P&L < 0
+
+WIN:
+exitQty >= entryQty and realized P&L > 0
+
+LOSS:
+exitQty >= entryQty and realized P&L < 0
+
+BREAKEVEN:
+exitQty >= entryQty and realized P&L = 0
+
+"closed" is not a canonical persisted status.
+
+============================================================
+17. IMPORTANT PARTIAL ANALYTICS RULE
+============================================================
+
+Partial trades must NOT be treated as closed trades.
+
+Define:
+
+closedSet
+=
+WIN
++
+LOSS
++
+BREAKEVEN
+
+partialSet
+=
+PARTIAL_WIN
++
+PARTIAL_LOSS
+
+openSet
+=
+OPEN
++
+PLANNED/DRAFT as appropriate
+
+Closed analytics must use ONLY:
+
+WIN
+LOSS
+BREAKEVEN
+
+Never:
+
+status != open
+
+because that accidentally includes partial trades.
+
+============================================================
+18. ANALYTICS MUST HAVE A CANONICAL SCOPE
+============================================================
+
+Every analytics endpoint must explicitly declare:
+
+population
+
+For example:
+
+closedTradePopulation
+openTradePopulation
+partialTradePopulation
+allTradePopulation
+
+Do not let a generic `computeAggregateMetrics()` silently decide scope.
+
+============================================================
+19. TOTAL TRADE COUNT
+============================================================
+
+Stop using ambiguous:
+
+totalTrades
+
+Define explicit metrics:
+
+allTrades
+closedTrades
+openTrades
+partialTrades
+plannedTrades
+draftTrades
+wins
+losses
+breakevens
+
+The UI label must match the actual population.
+
+============================================================
+20. WIN RATE
+============================================================
+
+Win rate:
+
+wins / closedTrades
+
+where closedTrades includes:
+
+wins
++
+losses
++
+breakevens
+
+Partial trades excluded.
+
+If no closed trades:
+
+null
+
+Do not return 0 unless product design explicitly wants 0.
+
+============================================================
+21. PROFIT FACTOR
+============================================================
+
+Profit factor:
+
+sum(winning net P&L)
+/
+absolute(sum(losing net P&L))
+
+Only closed trades.
+
+If no losses:
+
+use a defined display-safe representation.
+
+Do NOT serialize Infinity into JSON.
+
+Use:
+
+null + UI "∞"
+
+or an explicit state.
+
+============================================================
+22. EXPECTANCY
+============================================================
+
+Define expectancy clearly.
+
+For R-based expectancy:
+
+avg of valid realized R values across closed trades.
+
+Exclude trades where:
+
+R is null.
+
+Do not count missing-R trades as zero.
+
+============================================================
+23. DRAW DOWN
+============================================================
+
+This is important.
+
+Drawdown must be based on realized equity.
+
+Order trades by:
+
+EXIT TIMESTAMP
+
+not entry timestamp.
+
+Build:
+
+equity_t
+=
+startingBalance
++
+cumulative realized net P&L
+
+peak_t
+=
+maximum equity so far
+
+drawdown_t
+=
+peak_t - equity_t
+
+maxDrawdown
+=
+maximum drawdown_t
+
+Also define:
+
+currentDrawdown
+
+and:
+
+drawdown percentage
+
+relative to peak equity.
+
+Never calculate drawdown using entry-time ordering when exit ordering is available.
+
+============================================================
+24. EQUITY CURVE
+============================================================
+
+Equity curve points must contain:
+
+timestamp
+tradeId
+netPnl
+cumulative realized P&L
+absolute equity
+drawdown
+drawdown percentage
+
+Use the account's actual starting balance.
+
+If multiple accounts are selected:
+
+explicitly define whether the dashboard combines account balances.
+
+Do not silently add unrelated account starting balances.
+
+============================================================
+25. DAILY P&L
+============================================================
+
+Define daily P&L using:
+
+exit timestamp
+
+because it represents realized outcome.
+
+Group by the user's selected reporting timezone.
+
+Do NOT use raw server local date.
+
+Provide:
+
+date
+pnl
+trade count
+wins
+losses
+average R
+
+where appropriate.
+
+============================================================
+26. MONTHLY P&L
+============================================================
+
+Add proper monthly aggregation.
+
+Group realized closed trades by:
+
+exit timestamp converted into reporting timezone.
+
+Return:
+
+month
+net P&L
+trades
+wins
+losses
+win rate
+avg R
+
+============================================================
+27. R DISTRIBUTION
+============================================================
+
+Use only closed trades with valid R.
+
+Define non-overlapping buckets.
+
+For example:
+
+<= -2R
+-2R to -1R
+-1R to 0R
+0R
+0R to +1R
++1R to +2R
+>= +2R
+
+Define exact boundary ownership once and use it everywhere.
+
+Test every boundary.
+
+============================================================
+28. STREAKS
+============================================================
+
+Define two different concepts:
+
+Current win streak
+Maximum historical win streak
+
+Current loss streak
+Maximum historical loss streak
+
+Do not return maximum streak as "current streak."
+
+Break-even behavior must be explicitly defined.
+
+Recommended:
+
+BE resets win/loss streak.
+
+Test:
+
+W W L W
+
+current win streak = 1
+max win streak = 2
+
+============================================================
+29. RECOVERY PERIOD
+============================================================
+
+Define recovery period precisely.
+
+From the timestamp of drawdown entry
+to the first point where equity returns to or exceeds the prior peak.
+
+Specify whether output is:
+
+- number of trades
+- elapsed calendar time
+- both
+
+Do not use an ambiguous integer named recoveryPeriod.
+
+============================================================
+30. SETUP ANALYTICS
+============================================================
+
+The current UI calls something "By Setup" but currently groups by strategy.
+
+Fix the semantic model.
+
+If setup is stored inside structured `setupJson`, define a canonical setup identifier/name.
+
+Then provide actual:
+
+bySetup
+
+and separately:
+
+byStrategy
+
+Each can report:
+
+trades
+closedTrades
+wins
+losses
+winRate
+netPnl
+avgR
+expectancy
+profitFactor
+maxDrawdown where meaningful
+
+Do not rename strategy analytics as setup analytics.
+
+============================================================
+31. ACCOUNT ANALYTICS
+============================================================
+
+Provide real account-level analytics.
+
+For each account:
+
+starting balance
+current balance
+realized P&L
+return %
+closed trades
+win rate
+avg R
+profit factor
+max drawdown
+current drawdown
+largest win
+largest loss
+current streak
+
+All values must be based on that account only.
+
+============================================================
+32. INSTRUMENT ANALYTICS
+============================================================
+
+For each instrument:
+
+trades
+closed trades
+wins
+losses
+win rate
+net P&L
+avg R
+expectancy
+profit factor
+largest win
+largest loss
+max drawdown
+
+Do not mix instruments with incompatible currencies without conversion.
+
+============================================================
+33. STRATEGY ANALYTICS
+============================================================
+
+For each strategy:
+
+trades
+closed trades
+wins
+losses
+win rate
+net P&L
+avg R
+expectancy
+profit factor
+largest win
+largest loss
+max drawdown
+
+Optionally include:
+
+strategy version breakdown
+
+but historical trades must remain linked to the strategy version used at the time.
+
+============================================================
+34. STRATEGY VERSION ANALYTICS
+============================================================
+
+Because strategy versions are immutable:
+
+report performance by version.
+
+Example:
+
+Strategy A
+v1.0
+v1.1
+v2.0
+
+Each version gets independent metrics.
+
+Never recalculate historical trades using the latest strategy rules.
+
+============================================================
+35. CHECKLIST ANALYTICS
+============================================================
+
+This MUST be redesigned.
+
+Do NOT define checklist adherence as win rate.
+
+Real adherence comes from checklist evaluation data.
+
+For each evaluation:
+
+actualScore
+requiredRulesPassed
+requiredRulesFailed
+optionalRulesPassed
+weightedScore
+finalGrade
+
+Aggregate:
+
+average checklist score
+median checklist score if useful
+distribution by grade
+required-rule compliance rate
+average R by score band
+win rate by score band
+P&L by score band
+
+Example score bands:
+
+0.00-0.39
+0.40-0.59
+0.60-0.74
+0.75-0.89
+0.90-1.00
+
+These are analytical bands, not grading rules.
+
+============================================================
+36. CHECKLIST GRADE ANALYTICS
+============================================================
+
+Provide:
+
+A+
+A
+B
+C
+Invalid
+
+with:
+
+count
+percentage
+win rate
+avg R
+net P&L
+
+Grade thresholds:
+
+A+ >= 0.90
+A >= 0.75
+B >= 0.60
+C >= 0.40
+Invalid < 0.40
+
+At exactly:
+
+0.90 -> A+
+0.75 -> A
+0.60 -> B
+0.40 -> C
+
+Server-derived only.
+
+============================================================
+37. RULE-LEVEL ANALYTICS
+============================================================
+
+For each checklist rule:
+
+times shown
+times passed
+times failed
+pass rate
+average R when passed
+average R when failed
+win rate when passed
+win rate when failed
+P&L when passed
+P&L when failed
+
+This is actual rule analytics.
+
+Do not infer rule performance from behavior flags.
+
+============================================================
+38. BEHAVIOR ANALYTICS
+============================================================
+
+Keep behavior flags separate from checklist compliance.
+
+For each behavior flag:
+
+count
+percentage of trades
+win rate
+avg R
+net P&L
+average loss
+average win
+
+Example:
+
+entered_early
+broke_rules
+revenge_trade
+
+Do not call this checklist adherence.
+
+============================================================
+39. PSYCHOLOGY ANALYTICS
+============================================================
+
+Use actual stored psychology data.
+
+Provide meaningful breakdowns:
+
+mood tag
+confidence
+energy
+before vs after
+
+For example:
+
+average R by confidence level
+win rate by confidence level
+P&L by mood
+performance by energy level
+
+Always display sample size.
+
+Do not make causal claims.
+
+============================================================
+40. SESSION ANALYTICS
+============================================================
+
+Use canonical session derived from New York time.
+
+Provide:
+
+Asia
+London
+NY AM
+NY PM
+Custom where applicable
+
+For each:
+
+closed trades
+win rate
+avg R
+net P&L
+profit factor
+sample size
+
+Do not infer session from display timezone.
+
+============================================================
+41. TIME ANALYTICS
+============================================================
+
+Provide:
+
+weekday
+hour
+session
+date
+
+Use the user's reporting timezone for display/time analysis.
+
+Session attribution itself remains based on America/New_York.
+
+Clearly distinguish:
+
+session timezone
+reporting timezone
+
+============================================================
+42. DIRECTION ANALYTICS
+============================================================
+
+Add:
+
+LONG
+SHORT
+
+For each:
+
+trades
+closed
+win rate
+net P&L
+avg R
+profit factor
+max drawdown
+
+This is especially useful for identifying directional bias.
+
+============================================================
+43. TIMEFRAME ANALYTICS
+============================================================
+
+If timeframe is persisted reliably, provide:
+
+1m
+5m
+15m
+1h
+4h
+Daily
+etc.
+
+Only include actual supported values.
+
+============================================================
+44. NEWS ANALYTICS
+============================================================
+
+If news event is persisted, allow analysis by:
+
+news event
+no news
+
+Metrics:
+
+trades
+win rate
+avg R
+net P&L
+
+Do not claim news caused performance differences.
+
+============================================================
+45. FILTER COMPOSITION
+============================================================
+
+Analytics must support combinations.
+
+Example:
+
+Account A
++
+NQ
++
+NY AM
++
+Strategy X
++
+LONG
++
+September
+
+Every metric must recalculate from the filtered population.
+
+Do not apply filters only visually.
+
+============================================================
+46. DATE RANGE SEMANTICS
+============================================================
+
+Define date filtering once.
+
+Use the actual analytics reporting timezone.
+
+Handle:
+
+inclusive start
+exclusive end
+
+or another explicit consistent convention.
+
+Avoid:
+
+to = 23:59:59.999
+
+as the primary design.
+
+Test:
+
+midnight
+DST transitions
+month boundaries
+year boundaries
+
+============================================================
+47. ANALYTICS API
+============================================================
+
+Create a clean analytics service.
+
+Conceptually:
+
+AnalyticsQuery
+AnalyticsPopulation
+AnalyticsFilters
+AnalyticsMetricService
+AnalyticsAggregationService
+
+Do not have each route independently reinvent calculations.
+
+All analytics should use shared server-side services.
+
+============================================================
+48. CALCULATION ENGINE
+============================================================
+
+Create one authoritative module/service:
+
+financial-calculator
+
+It must expose clearly defined operations:
+
+calculateExecutionPnl
+calculateTradePnl
+calculateRisk
+calculatePositionSize
+calculatePlannedRR
+calculateActualR
+deriveTradeStatus
+calculatePartialState
+
+No duplicated formulas in:
+
+frontend
+API routes
+dashboard
+analytics
+calendar
+
+Frontend calculations may exist for previews, but backend remains authoritative.
+
+============================================================
+49. FINANCIAL SNAPSHOT
+============================================================
+
+When a trade becomes realized/closed, snapshot the necessary instrument economics.
+
+Possible snapshot:
+
+contractSize
+pointValue
+tickSize
+tickValue
+currency
+conversion information where needed
+
+Purpose:
+
+future instrument metadata changes must not rewrite historical economics.
+
+============================================================
+50. DATABASE PRECISION
+============================================================
+
+Use appropriate PostgreSQL types.
+
+Prefer:
+
+NUMERIC/DECIMAL
+
+for:
+
+prices
+quantities
+ratios
+
+Use:
+
+BIGINT
+
+for monetary minor units if scale can exceed 32-bit integer.
+
+Do not use JavaScript Number as the authoritative precision layer for money.
+
+Do not build a fake "decimal" library that immediately converts everything back to Number.
+
+Use a real decimal-capable server implementation or PostgreSQL NUMERIC where appropriate.
+
+============================================================
+51. TRANSACTIONAL SAVE
+============================================================
+
+Trade save should be atomic where it creates/updates:
+
+Trade
+Executions
+Targets
+Checklist evaluation
+related records
+
+A failure must not leave:
+
+trade without required execution
+execution without trade
+targets with incorrect allocations
+checklist snapshot missing when required
+
+Use database transactions appropriately.
+
+============================================================
+52. PATCH SEMANTICS
+============================================================
+
+PATCH must distinguish:
+
+field not supplied
+from
+field supplied as null
+
+Changing:
+
+notes
+
+must not delete:
+
+thesis
+psychology
+targets
+executions
+checklist
+
+Changing:
+
+one target
+
+must not erase all target allocations unless the request explicitly replaces the entire collection.
+
+Define collection update semantics clearly.
+
+============================================================
+53. DATA PERSISTENCE CONTRACT
+============================================================
+
+For every persisted field prove:
+
+UI
+=
+request
+=
+validated server value
+=
+Neon
+=
+GET
+=
+reloaded UI
+
+Create automated tests for this.
+
+============================================================
+54. GOLDEN FINANCIAL TESTS
+============================================================
+
+Use these as sanity checks.
+
+TEST 1 NQ
+
+Entry = 20000
+Exit = 20080
+Quantity = 2
+
+Expected:
+
+80 points
+× 2 contracts
+× $20/point
+=
+$3,200
+=
+320,000 cents
+
+If costs = 575:
+
+Net =
+319,425 cents
+
+Do NOT accept $16,000 for this case.
+
+TEST 2 NQ RISK
+
+Entry = 20000
+Stop = 19950
+Quantity = 2
+
+Risk:
+
+50
+× 2
+× $20
+
+=
+$2,000
+=
+200,000 cents
+
+Actual R with net 319,425:
+
+319425 / 200000
+=
+1.597125R
+
+TEST 3 ES
+
+Entry = 5000
+Exit = 4990
+Quantity = 1
+
+10 points
+× $50
+=
+$500
+=
+50,000 cents
+
+TEST 4 EURUSD
+
+Entry = 1.1000
+Exit = 1.1080
+Qty = 1 standard lot
+
+=
+0.0080 × 100000
+=
+$800
+=
+80,000 cents
+
+TEST 5 XAUUSD
+
+Entry = 2000
+Exit = 1990
+Qty = 1
+
+=
+10 × $100
+=
+$1,000
+=
+100,000 cents
+
+These are economic reference checks.
+
+If the project intentionally uses another instrument convention, document it explicitly and mathematically.
+
+============================================================
+55. ANALYTICS GOLDEN DATASET
+============================================================
+
+Create a controlled test dataset.
+
+Trade A:
++$100
++1R
+WIN
+
+Trade B:
+-$50
+-1R
+LOSS
+
+Trade C:
++$200
++2R
+WIN
+
+Trade D:
+$0
+0R
+BREAKEVEN
+
+Trade E:
++$300
++3R
+WIN
+
+Trade F:
+partial +$50
++0.5R
+PARTIAL_WIN
+
+Expected closed population:
+
+A B C D E
+
+5 closed trades
+
+wins = 3
+losses = 1
+breakevens = 1
+
+win rate:
+3 / 5
+=
+60%
+
+closed P&L:
+100 - 50 + 200 + 0 + 300
+=
+$550
+
+Partial trade F must NOT enter closed metrics.
+
+Therefore:
+
+all trades = 6
+closed trades = 5
+partial trades = 1
+
+Net closed P&L = $550
+
+Average R:
+(1 - 1 + 2 + 0 + 3) / 5
+=
+1.0R
+
+Profit factor:
+(100 + 200 + 300) / 50
+=
+12.0
+
+Test every analytics screen against this.
+
+============================================================
+56. DRAW DOWN TEST
+============================================================
+
+Use closed P&L sequence:
+
++100
++200
+-150
++50
+-100
+
+Starting balance:
+
+$10,000
+
+Equity:
+
+10100
+10300
+10150
+10200
+10100
+
+Peak:
+
+10300
+
+Maximum drawdown:
+
+200
+
+Verify:
+
+maxDrawdown = $200
+
+Then repeat using exit timestamps out of entry order to prove ordering uses exitTime.
+
+============================================================
+57. CHECKLIST TEST
+============================================================
+
+Create rules producing:
+
+score 0.99 -> A+
+score 0.90 -> A+
+score 0.899999 -> A
+score 0.75 -> A
+score 0.749999 -> B
+score 0.60 -> B
+score 0.599999 -> C
+score 0.40 -> C
+score 0.399999 -> Invalid
+
+Send malicious client grades.
+
+Server must ignore them.
+
+============================================================
+58. PARTIAL TARGET TEST
+============================================================
+
+Create:
+
+TP1 = 20025, 25%
+TP2 = 20050, 25%
+TP3 = 20100, 50%
+
+Save.
+
+Verify Neon.
+
+Reload.
+
+Verify.
+
+Logout/login.
+
+Verify:
+
+TP1 25
+TP2 25
+TP3 50
+
+Execute:
+
+1 contract at TP1
+1 contract at TP2
+2 contracts at TP3
+
+Verify exact realized P&L.
+
+============================================================
+59. CROSS-SCREEN CONSISTENCY
+============================================================
+
+For one controlled trade:
+
+Trade detail
+Trade log
+Dashboard
+Analytics
+Calendar
+
+must agree on:
+
+P&L
+R
+status
+date
+instrument
+account
+strategy
+
+No screen may independently recalculate the result differently.
+
+============================================================
+60. ACCOUNT COMBINATION TEST
+============================================================
+
+Create two accounts.
+
+Trade A in Account A:
++$100
+
+Trade B in Account B:
+-$50
+
+All accounts:
++$50
+
+Account A:
++$100
+
+Account B:
+-$50
+
+Verify every account filter.
+
+Do not accidentally add both starting balances into one account's equity curve.
+
+============================================================
+61. HISTORICAL IMMUTABILITY
+============================================================
+
+Create trade under:
+
+Strategy Version 1
+
+Then create:
+
+Strategy Version 2
+
+Verify old trade still references Version 1.
+
+Changing Version 2 must not alter:
+
+old checklist snapshot
+old score
+old grade
+old trade result
+
+============================================================
+62. AUTOMATED TEST SUITE
+============================================================
+
+Create a real automated suite covering:
+
+financial formulas
+instrument metadata
+P&L
+risk
+position sizing
+R
+status
+partials
+checklist
+grade boundaries
+analytics
+drawdown
+streaks
+daily/monthly grouping
+timezone
+filters
+persistence
+PATCH behavior
+authorization
+
+Do not rely on manual assertions.
+
+Every previously discovered bug gets a regression test.
+
+============================================================
+63. FRONTEND PREVIEW CALCULATIONS
+============================================================
+
+The frontend may show live previews.
+
+However:
+
+frontend preview
+!= authoritative financial result
+
+The UI should ideally consume shared contracts/constants or calculate using the same domain specification.
+
+When the final trade is saved, server values override preview values.
+
+Do not allow the preview to disagree silently.
+
+============================================================
+64. API RESPONSE CONTRACT
+============================================================
+
+Return explicit units in field names where ambiguity exists.
+
+Examples:
+
+grossPnlCents
+netPnlCents
+riskAmountCents
+pointValueCents
+
+For ratios:
+
+actualR
+
+For quantities:
+
+quantity
+
+For price:
+
+entryPrice
+
+Document each.
+
+============================================================
+65. DATABASE MIGRATIONS
+============================================================
+
+Do not use destructive:
+
+db push --accept-data-loss
+
+as the normal production evolution strategy.
+
+Create proper migrations.
+
+Never silently drop data.
+
+============================================================
+66. OBSERVABILITY
+============================================================
+
+When a calculation/save operation fails:
+
+- log structured server-side error
+- return safe client error
+- preserve transaction integrity
+- never report success when persistence failed
+
+============================================================
+67. FINAL ACCEPTANCE CRITERIA
+============================================================
+
+The backend is NOT considered complete until all of the following are true:
+
+A. Persistence
+Every important field survives save/reload/login.
+
+B. Financial calculations
+NQ, ES, EURUSD, XAUUSD golden tests pass.
+
+C. Partial exits
+Percentages/allocations persist correctly.
+
+D. Status
+Derived from execution ledger.
+
+E. Closed analytics
+Exclude partials.
+
+F. Checklist
+Uses actual evaluation data, not win rate proxy.
+
+G. Setup analytics
+Actually means setup.
+
+H. Strategy analytics
+Actually means strategy.
+
+I. Account analytics
+Correctly scoped by account.
+
+J. Drawdown
+Uses realized P&L ordered by exit time.
+
+K. Daily/monthly analytics
+Use realized close time and reporting timezone.
+
+L. R distribution
+Boundary tests pass.
+
+M. Streaks
+Current and maximum streaks are distinct.
+
+N. Historical versions
+Immutable.
+
+O. Cross-screen consistency
+Every number agrees.
+
+P. Authorization
+Users cannot see one another's data.
+
+Q. Automated tests
+All golden cases and regressions pass.
+
+============================================================
+68. DO NOT HIDE FAILURES
+============================================================
+
+At the end produce:
+
+PASS
+FAIL
+BLOCKED
+
+for every subsystem.
+
+For every FAIL:
+
+show:
+
+expected
+actual
+root cause
+affected files
+fix
+regression test
+
+Never redefine expected values merely to make the current implementation pass.
+
+The mathematical/product specification is authoritative.
+
+============================================================
+69. FINAL DELIVERABLE
+============================================================
+
+Deliver:
+
+1. New PostgreSQL schema
+2. Proper migrations
+3. Backend architecture
+4. Financial calculation engine
+5. Instrument domain model
+6. Trade service
+7. Execution service
+8. Partial-exit service
+9. Checklist evaluation service
+10. Analytics service
+11. API routes/contracts
+12. Authentication/authorization
+13. Automated tests
+14. Frontend API integration
+15. Documentation of formulas and metric definitions
+
+The previous backend is not the target architecture.
+
+The frontend is the product interface.
+
+The documented domain rules are the product truth.
+
+The mathematical calculation engine is the financial truth.
+
+The database is the persistence truth.
+
+The analytics service is the reporting truth.
+
+Build the new backend so these truths cannot silently diverge.

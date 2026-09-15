@@ -1,0 +1,1307 @@
+     1→     1→"use client";
+     2→     2→
+     3→     3→import { useQuery, useQueryClient } from "@tanstack/react-query";
+     4→     4→import { useState, useEffect, useRef, useMemo } from "react";
+     5→     5→import { useNav } from "@/lib/nav-store";
+     6→     6→import {
+     7→     7→  evaluateChecklist,
+     8→     8→  parseChecklistItems,
+     9→     9→  parseGradingThresholds,
+    10→    10→  parseAnswers,
+    11→    11→  type ChecklistItem,
+    12→    12→  type ChecklistAnswerValue,
+    13→    13→  type GradingThresholds,
+    14→    14→} from "@/lib/checklist-evaluation";
+    15→    15→import { Button } from "@/components/ui/button";
+    16→    16→import { Input } from "@/components/ui/input";
+    17→    17→import { Label } from "@/components/ui/label";
+    18→    18→import { Textarea } from "@/components/ui/textarea";
+    19→    19→import { Card } from "@/components/ui/card";
+    20→    20→import { Badge } from "@/components/ui/badge";
+    21→    21→import { ArrowLeft, ArrowRight, Loader2, Save, Sparkles, Check, Tag as TagIcon, Upload, Image as ImageIcon, X, Pencil } from "lucide-react";
+    22→    22→import {
+    23→    23→  Select,
+    24→    24→  SelectContent,
+    25→    25→  SelectItem,
+    26→    26→  SelectTrigger,
+    27→    27→  SelectValue,
+    28→    28→} from "@/components/ui/select";
+    29→    29→import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+    30→    30→import { Checkbox } from "@/components/ui/checkbox";
+    31→    31→import { ImageViewer } from "@/components/trade/image-viewer";
+    32→    32→import { toast } from "sonner";
+    33→    33→import { cn } from "@/lib/utils";
+    34→    34→
+    35→    35→const DRAFT_KEY = "dnd-trade-draft";
+    36→    36→
+    37→    37→async function fetchMe() {
+    38→    38→  const res = await fetch("/api/me", { cache: "no-store" });
+    39→    39→  if (!res.ok) return null;
+    40→    40→  return res.json();
+    41→    41→}
+    42→    42→
+    43→    43→const PSYCH_BEFORE = ["calm", "confident", "hesitant", "fearful", "FOMO", "impatient", "distracted", "excited", "tired", "focused"];
+    44→    44→const PSYCH_AFTER = ["satisfied", "frustrated", "regret", "relief", "overconfident", "disappointed", "calm", "confused", "angry"];
+    45→    45→const BEHAVIOR_FLAGS = ["entered_early", "broke_rules", "moved_stop", "moved_target", "exited_early", "revenge_trade", "overtraded", "increased_size", "chased_price", "ignored_plan"];
+    46→    46→
+    47→    47→export function TradeFormView() {
+    48→    48→  const { params, navigate } = useNav();
+    49→    49→  const qc = useQueryClient();
+    50→    50→  const editingId = params.id;
+    51→    51→
+    52→    52→  const { data: meta } = useQuery({ queryKey: ["me"], queryFn: fetchMe });
+    53→    53→  const { data: existing } = useQuery({
+    54→    54→    queryKey: ["trade", editingId],
+    55→    55→    queryFn: async () => {
+    56→    56→      const res = await fetch(`/api/trades/${editingId}`, { cache: "no-store" });
+    57→    57→      if (!res.ok) return null;
+    58→    58→      return res.json();
+    59→    59→    },
+    60→    60→    enabled: !!editingId,
+    61→    61→  });
+    62→    62→
+    63→    63→  const [form, setForm] = useState<any>({
+    64→    64→    accountId: "",
+    65→    65→    instrumentSymbol: "",
+    66→    66→    direction: "long",
+    67→    67→    session: "ny_am",
+    68→    68→    strategyId: "",
+    69→    69→    checklistVersionId: "",
+    70→    70→    checklistAnswers: {} as Record<string, ChecklistAnswerValue>,
+    71→    71→    plannedEntryPrice: "",
+    72→    72→    plannedStopPrice: "",
+    73→    73→    plannedTargetPrice: "",
+    74→    74→    plannedRiskPct: "0.005",
+    75→    75→    entryPrice: "",
+    76→    76→    exitPrice: "",
+    77→    77→    quantity: "1",
+    78→    78→    feesCents: 0,
+    79→    79→    commissionCents: 0,
+    80→    80→    swapCents: 0,
+    81→    81→    slippageCents: 0,
+    82→    82→    entryTime: new Date().toISOString().slice(0, 16),
+    83→    83→    exitTime: "",
+    84→    84→    tradingTimezone: "UTC",
+    85→    85→    setup: { htfContext: { weeklyBias: "bullish", dailyBias: "bullish" }, liquidity: [], structure: [], entryModel: "FVG", session: "ny_am" },
+    86→    86→    thesis: { why: "", narrative: "", liquidityTarget: "", confirms: [], invalidates: [], target: "", earlyExit: "" },
+    87→    87→    notes: "",
+    88→    88→    lessons: "",
+    89→    89→    psychBefore: { moodTags: [], confidence: 3, energy: 3, impact: "moderate" },
+    90→    90→    psychAfter: { moodTags: [], confidence: 3, energy: 3, impact: "moderate" },
+    91→    91→    behaviorFlags: [],
+    92→    92→    tags: [],
+    93→    93→    ruleCompliance: {} as Record<string, boolean>,
+    94→    94→    uploadedMedia: [] as any[],
+    95→    95→    isDraft: false,
+    96→    96→  });
+    97→    97→
+    98→    98→  // Fetch the selected strategy's latest version rules when a strategy is selected
+    99→    99→  const { data: strategyDetail } = useQuery({
+   100→   100→    queryKey: ["strategy-for-form", form.strategyId],
+   101→   101→    queryFn: async () => {
+   102→   102→      if (!form.strategyId) return null;
+   103→   103→      const res = await fetch(`/api/strategies/${form.strategyId}`, { cache: "no-store" });
+   104→   104→      if (!res.ok) return null;
+   105→   105→      return res.json();
+   106→   106→    },
+   107→   107→    enabled: !!form.strategyId,
+   108→   108→  });
+   109→   109→
+   110→   110→  // Fetch the user's checklists (with versions) for the A+ Setup Checklist.
+   111→   111→  // The "active" version is whichever checklist version is referenced by
+   112→   112→  // `form.checklistVersionId` — set from an existing trade on edit, or defaulted
+   113→   113→  // to the first checklist's latest version on new trades.
+   114→   114→  const { data: checklistsData } = useQuery({
+   115→   115→    queryKey: ["checklists"],
+   116→   116→    queryFn: async () => {
+   117→   117→      const res = await fetch("/api/checklists", { cache: "no-store" });
+   118→   118→      if (!res.ok) return null;
+   119→   119→      return res.json();
+   120→   120→    },
+   121→   121→  });
+   122→   122→  const checklists: any[] = checklistsData?.items ?? [];
+   123→   123→
+   124→   124→  // The active checklist + version derived from `form.checklistVersionId`.
+   125→   125→  const activeChecklist = useMemo(() => {
+   126→   126→    if (!checklists.length || !form.checklistVersionId) return null;
+   127→   127→    const match = checklists
+   128→   128→      .map((c: any) => ({
+   129→   129→        checklist: c,
+   130→   130→        version: (c.versions ?? []).find((v: any) => v.id === form.checklistVersionId),
+   131→   131→      }))
+   132→   132→      .find((m: any) => !!m.version);
+   133→   133→    return match ?? null;
+   134→   134→  }, [checklists, form.checklistVersionId]);
+   135→   135→
+   136→   136→  // Parsed items + thresholds from the active version.
+   137→   137→  const itemsJson = activeChecklist?.version?.itemsJson ?? null;
+   138→   138→  const thresholdsJson = activeChecklist?.version?.gradingThresholdsJson ?? null;
+   139→   139→  const checklistItems: ChecklistItem[] = useMemo(
+   140→   140→    () => parseChecklistItems(itemsJson),
+   141→   141→    [itemsJson],
+   142→   142→  );
+   143→   143→  const checklistThresholds: GradingThresholds | null = useMemo(
+   144→   144→    () => parseGradingThresholds(thresholdsJson),
+   145→   145→    [thresholdsJson],
+   146→   146→  );
+   147→   147→
+   148→   148→  // Live evaluation of the answers — recalculated whenever items/answers/thresholds
+   149→   149→  // change. Drives both the on-screen score/grade and the payload sent on save.
+   150→   150→  const checklistAnswers = form.checklistAnswers ?? {};
+   151→   151→  const evaluation = useMemo(
+   152→   152→    () =>
+   153→   153→      evaluateChecklist(
+   154→   154→        checklistItems,
+   155→   155→        checklistAnswers as Record<string, ChecklistAnswerValue>,
+   156→   156→        checklistThresholds,
+   157→   157→      ),
+   158→   158→    [checklistItems, checklistAnswers, checklistThresholds],
+   159→   159→  );
+   160→   160→
+   161→   161→  // When the checklists first load and the form has no checklistVersionId
+   162→   162→  // (i.e. a new trade), default to the first checklist's latest version.
+   163→   163→  useEffect(() => {
+   164→   164→    if (form.checklistVersionId) return;
+   165→   165→    if (!checklists.length) return;
+   166→   166→    const first = checklists[0];
+   167→   167→    const latestVersion = first?.versions?.[0];
+   168→   168→    if (latestVersion?.id) {
+   169→   169→      setForm((f: any) => ({ ...f, checklistVersionId: latestVersion.id }));
+   170→   170→    }
+   171→   171→  }, [checklists, form.checklistVersionId]);
+   172→   172→
+   173→   173→  // Reset rule compliance when strategy changes
+   174→   174→  useEffect(() => {
+   175→   175→    setForm((f: any) => ({ ...f, ruleCompliance: {} }));
+   176→   176→  }, [form.strategyId]);
+   177→   177→
+   178→   178→  // Set default account
+   179→   179→  useEffect(() => {
+   180→   180→    if (meta?.accounts && !form.accountId) {
+   181→   181→      const def = meta.accounts.find((a: any) => a.isDefault) ?? meta.accounts[0];
+   182→   182→      if (def) setForm((f: any) => ({ ...f, accountId: def.id }));
+   183→   183→    }
+   184→   184→  }, [meta]);
+   185→   185→
+   186→   186→  // Load existing trade for editing
+   187→   187→  useEffect(() => {
+   188→   188→    if (existing) {
+   189→   189→      // Restore checklist answers from the latest TradeChecklistEvaluation
+   190→   190→      // (if any) so the A+ Setup Checklist re-renders with the saved state.
+   191→   191→      const evals = Array.isArray(existing.checklistEvaluations)
+   192→   192→        ? [...existing.checklistEvaluations].sort(
+   193→   193→            (a: any, b: any) =>
+   194→   194→              new Date(b.evaluatedAt).getTime() - new Date(a.evaluatedAt).getTime(),
+   195→   195→          )
+   196→   196→        : [];
+   197→   197→      const latestEval = evals[0];
+   198→   198→      const restoredAnswers = latestEval?.rawAnswersJson
+   199→   199→        ? parseAnswers(latestEval.rawAnswersJson)
+   200→   200→        : {};
+   201→   201→      setForm({
+   202→   202→        accountId: existing.accountId,
+   203→   203→        instrumentSymbol: existing.instrumentSymbol,
+   204→   204→        direction: existing.direction,
+   205→   205→        session: existing.session ?? "ny_am",
+   206→   206→        strategyId: existing.strategyId ?? "",
+   207→   207→        checklistVersionId: existing.checklistVersionId ?? "",
+   208→   208→        checklistAnswers: restoredAnswers,
+   209→   209→        plannedEntryPrice: existing.plannedEntryPrice ?? "",
+   210→   210→        plannedStopPrice: existing.plannedStopPrice ?? "",
+   211→   211→        plannedTargetPrice: existing.plannedTargetPrice ?? "",
+   212→   212→        plannedRiskPct: existing.plannedRiskPct ?? "0.005",
+   213→   213→        entryPrice: existing.executions?.find((e: any) => e.kind === "entry")?.price ?? existing.entryPriceAvg ?? "",
+   214→   214→        exitPrice: existing.executions?.find((e: any) => e.kind === "exit")?.price ?? existing.exitPriceAvg ?? "",
+   215→   215→        quantity: existing.executions?.[0]?.quantity ?? existing.positionSize ?? "1",
+   216→   216→        feesCents: existing.feesCents,
+   217→   217→        commissionCents: existing.commissionCents,
+   218→   218→        swapCents: existing.swapCents,
+   219→   219→        slippageCents: existing.slippageCents,
+   220→   220→        entryTime: existing.entryTime ? new Date(existing.entryTime).toISOString().slice(0, 16) : "",
+   221→   221→        exitTime: existing.exitTime ? new Date(existing.exitTime).toISOString().slice(0, 16) : "",
+   222→   222→        tradingTimezone: existing.tradingTimezone ?? "UTC",
+   223→   223→        setup: safeJson(existing.setupJson, form.setup),
+   224→   224→        thesis: safeJson(existing.thesisJson, form.thesis),
+   225→   225→        notes: existing.notes ?? "",
+   226→   226→        lessons: existing.lessons ?? "",
+   227→   227→        psychBefore: safeJson(existing.psychBeforeJson, form.psychBefore),
+   228→   228→        psychAfter: safeJson(existing.psychAfterJson, form.psychAfter),
+   229→   229→        behaviorFlags: safeJson(existing.behaviorFlagsJson, []),
+   230→   230→        tags: safeJson(existing.tagsJson, []),
+   231→   231→        isDraft: existing.isDraft ?? false,
+   232→   232→      });
+   233→   233→    }
+   234→   234→  }, [existing]);
+   235→   235→
+   236→   236→  // Autosave draft (spec section 27)
+   237→   237→  useEffect(() => {
+   238→   238→    if (editingId) return;
+   239→   239→    const t = setTimeout(() => {
+   240→   240→      localStorage.setItem(DRAFT_KEY, JSON.stringify(form));
+   241→   241→    }, 500);
+   242→   242→    return () => clearTimeout(t);
+   243→   243→  }, [form, editingId]);
+   244→   244→
+   245→   245→  // Restore draft on mount (only when not editing)
+   246→   246→  useEffect(() => {
+   247→   247→    if (editingId) return;
+   248→   248→    const saved = localStorage.getItem(DRAFT_KEY);
+   249→   249→    if (saved) {
+   250→   250→      try {
+   251→   251→        const parsed = JSON.parse(saved);
+   252→   252→        setForm((f: any) => ({ ...f, ...parsed }));
+   253→   253→        toast.info("Restored autosaved draft.");
+   254→   254→      } catch {}
+   255→   255→    }
+   256→   256→  }, [editingId]);
+   257→   257→
+   258→   258→  const [saving, setSaving] = useState(false);
+   259→   259→  const [activeTab, setActiveTab] = useState<string>("basics");
+   260→   260→  const fileInputRef = useRef<HTMLInputElement>(null);
+   261→   261→  const [viewerIndex, setViewerIndex] = useState<number | null>(null);
+   262→   262→
+   263→   263→  const TAB_ORDER = ["basics", "execution", "plan", "setup", "psychology", "review", "evidence"];
+   264→   264→
+   265→   265→  // Upload media files to the server immediately (before the trade is saved).
+   266→   266→  // The media is associated with this trade via the tradeId once the trade is created.
+   267→   267→  // For new trades (no editingId yet), we upload as "orphan" media and attach after save.
+   268→   268→  async function handleFileUpload(files: FileList | File[]) {
+   269→   269→    const fileList = Array.from(files);
+   270→   270→    for (const file of fileList) {
+   271→   271→      const formData = new FormData();
+   272→   272→      formData.append("file", file);
+   273→   273→      if (editingId) formData.append("tradeId", editingId);
+   274→   274→      try {
+   275→   275→        const res = await fetch("/api/media", { method: "POST", body: formData });
+   276→   276→        if (res.ok) {
+   277→   277→          const data = await res.json();
+   278→   278→          // Fetch signed URL
+   279→   279→          const detailRes = await fetch(`/api/media/${data.id}`);
+   280→   280→          const detail = await detailRes.json();
+   281→   281→          setForm((f: any) => ({
+   282→   282→            ...f,
+   283→   283→            uploadedMedia: [...(f.uploadedMedia ?? []), { ...data, url: detail.url }],
+   284→   284→          }));
+   285→   285→          toast.success(`${file.name} uploaded.`);
+   286→   286→        } else {
+   287→   287→          const err = await res.json().catch(() => ({}));
+   288→   288→          toast.error(err?.error ?? `Failed to upload ${file.name}`);
+   289→   289→        }
+   290→   290→      } catch {
+   291→   291→        toast.error(`Failed to upload ${file.name}`);
+   292→   292→      }
+   293→   293→    }
+   294→   294→  }
+   295→   295→
+   296→   296→  function setField(path: string, value: any) {
+   297→   297→    setForm((f: any) => {
+   298→   298→      const next = { ...f };
+   299→   299→      const parts = path.split(".");
+   300→   300→      let cur: any = next;
+   301→   301→      for (let i = 0; i < parts.length - 1; i++) {
+   302→   302→        cur[parts[i]] = { ...cur[parts[i]] };
+   303→   303→        cur = cur[parts[i]];
+   304→   304→      }
+   305→   305→      cur[parts[parts.length - 1]] = value;
+   306→   306→      return next;
+   307→   307→    });
+   308→   308→  }
+   309→   309→
+   310→   310→  function toggleArrayField(path: string, value: string) {
+   311→   311→    setForm((f: any) => {
+   312→   312→      const next = { ...f };
+   313→   313→      const parts = path.split(".");
+   314→   314→      let cur: any = next;
+   315→   315→      for (let i = 0; i < parts.length - 1; i++) {
+   316→   316→        cur[parts[i]] = { ...cur[parts[i]] };
+   317→   317→        cur = cur[parts[i]];
+   318→   318→      }
+   319→   319→      const key = parts[parts.length - 1];
+   320→   320→      const arr = Array.isArray(cur[key]) ? [...cur[key]] : [];
+   321→   321→      const idx = arr.indexOf(value);
+   322→   322→      if (idx >= 0) arr.splice(idx, 1); else arr.push(value);
+   323→   323→      cur[key] = arr;
+   324→   324→      return next;
+   325→   325→    });
+   326→   326→  }
+   327→   327→
+   328→   328→  // Update one A+ checklist answer field (`checked` or `note`) for the given
+   329→   329→  // item id. Used by the checkbox + evidence-note inputs in the ICT Setup tab.
+   330→   330→  function updateChecklistAnswer(
+   331→   331→    itemId: string,
+   332→   332→    field: "checked" | "note",
+   333→   333→    value: boolean | string,
+   334→   334→  ) {
+   335→   335→    setForm((f: any) => {
+   336→   336→      const current = f.checklistAnswers?.[itemId] ?? { checked: false };
+   337→   337→      const next = {
+   338→   338→        ...f.checklistAnswers,
+   339→   339→        [itemId]: {
+   340→   340→          ...current,
+   341→   341→          [field]: value,
+   342→   342→        },
+   343→   343→      };
+   344→   344→      // If a checked item is being unchecked, drop its note so storage stays clean.
+   345→   345→      if (field === "checked" && value === false && next[itemId].note) {
+   346→   346→        delete next[itemId].note;
+   347→   347→      }
+   348→   348→      return { ...f, checklistAnswers: next };
+   349→   349→    });
+   350→   350→  }
+   351→   351→
+   352→   352→  async function submit(isDraft: boolean = false) {
+   353→   353→    if (!form.accountId) {
+   354→   354→      toast.error("Please select an account.");
+   355→   355→      return;
+   356→   356→    }
+   357→   357→    if (!form.instrumentSymbol) {
+   358→   358→      toast.error("Please enter an instrument symbol.");
+   359→   359→      return;
+   360→   360→    }
+   361→   361→    setSaving(true);
+   362→   362→    try {
+   363→   363→      const executions = [];
+   364→   364→      if (form.entryPrice) {
+   365→   365→        executions.push({
+   366→   366→          kind: "entry",
+   367→   367→          price: form.entryPrice,
+   368→   368→          quantity: form.quantity || "1",
+   369→   369→          timestamp: form.entryTime ? new Date(form.entryTime).toISOString() : new Date().toISOString(),
+   370→   370→        });
+   371→   371→      }
+   372→   372→      if (form.exitPrice) {
+   373→   373→        executions.push({
+   374→   374→          kind: "exit",
+   375→   375→          price: form.exitPrice,
+   376→   376→          quantity: form.quantity || "1",
+   377→   377→          timestamp: form.exitTime ? new Date(form.exitTime).toISOString() : new Date().toISOString(),
+   378→   378→        });
+   379→   379→      }
+   380→   380→      const payload = {
+   381→   381→        accountId: form.accountId,
+   382→   382→        instrumentSymbol: form.instrumentSymbol.toUpperCase(),
+   383→   383→        market: meta?.instruments?.find((i: any) => i.symbol === form.instrumentSymbol.toUpperCase())?.market ?? "custom",
+   384→   384→        direction: form.direction,
+   385→   385→        session: form.session,
+   386→   386→        strategyId: form.strategyId || null,
+   387→   387→        // Setup grade/score are now derived from the A+ checklist evaluation,
+   388→   388→        // not a manual dropdown. The server re-computes and overrides these
+   389→   389→        // values from the answers to prevent client tampering (spec §102).
+   390→   390→        checklistVersionId: form.checklistVersionId || null,
+   391→   391→        checklistAnswers: form.checklistVersionId ? form.checklistAnswers : null,
+   392→   392→        setupGrade: form.checklistVersionId ? evaluation.grade : null,
+   393→   393→        setupScore: form.checklistVersionId ? String(evaluation.score) : null,
+   394→   394→        tags: form.tags,
+   395→   395→        plannedEntryPrice: form.plannedEntryPrice || null,
+   396→   396→        plannedStopPrice: form.plannedStopPrice || null,
+   397→   397→        plannedTargetPrice: form.plannedTargetPrice || null,
+   398→   398→        plannedRiskPct: form.plannedRiskPct || null,
+   399→   399→        executions,
+   400→   400→        feesCents: Number(form.feesCents) || 0,
+   401→   401→        commissionCents: Number(form.commissionCents) || 0,
+   402→   402→        swapCents: Number(form.swapCents) || 0,
+   403→   403→        slippageCents: Number(form.slippageCents) || 0,
+   404→   404→        entryTime: form.entryTime ? new Date(form.entryTime).toISOString() : null,
+   405→   405→        exitTime: form.exitTime ? new Date(form.exitTime).toISOString() : null,
+   406→   406→        tradingTimezone: form.tradingTimezone,
+   407→   407→        setup: form.setup,
+   408→   408→        thesis: form.thesis,
+   409→   409→        notes: form.notes || null,
+   410→   410→        lessons: form.lessons || null,
+   411→   411→        psychBefore: form.psychBefore,
+   412→   412→        psychAfter: form.psychAfter,
+   413→   413→        behaviorFlags: form.behaviorFlags,
+   414→   414→        ruleCompliance: form.ruleCompliance,
+   415→   415→        isDraft,
+   416→   416→      };
+   417→   417→      const url = editingId ? `/api/trades/${editingId}` : "/api/trades";
+   418→   418→      const method = editingId ? "PATCH" : "POST";
+   419→   419→      const res = await fetch(url, {
+   420→   420→        method,
+   421→   421→        headers: { "Content-Type": "application/json" },
+   422→   422→        body: JSON.stringify(payload),
+   423→   423→      });
+   424→   424→      const data = await res.json();
+   425→   425→      if (!res.ok) {
+   426→   426→        toast.error(data?.error ?? "Failed to save trade.");
+   427→   427→        setSaving(false);
+   428→   428→        return;
+   429→   429→      }
+   430→   430→      // Attach any orphaned uploaded media to the newly created trade and save captions
+   431→   431→      if (form.uploadedMedia?.length > 0) {
+   432→   432→        for (const m of form.uploadedMedia) {
+   433→   433→          if (m.id) {
+   434→   434→            const patchBody: any = {};
+   435→   435→            if (!editingId) patchBody.tradeId = data.id;
+   436→   436→            if (m.caption) patchBody.caption = m.caption;
+   437→   437→            if (Object.keys(patchBody).length > 0) {
+   438→   438→              await fetch(`/api/media/${m.id}`, {
+   439→   439→                method: "PATCH",
+   440→   440→                headers: { "Content-Type": "application/json" },
+   441→   441→                body: JSON.stringify(patchBody),
+   442→   442→              }).catch(() => {});
+   443→   443→            }
+   444→   444→          }
+   445→   445→        }
+   446→   446→      }
+   447→   447→      toast.success(isDraft ? "Draft saved." : "Trade saved.");
+   448→   448→      localStorage.removeItem(DRAFT_KEY);
+   449→   449→      qc.invalidateQueries({ queryKey: ["trades"] });
+   450→   450→      qc.invalidateQueries({ queryKey: ["dashboard"] });
+   451→   451→      navigate("tradeDetail", { id: data.id });
+   452→   452→    } catch (e) {
+   453→   453→      toast.error("Network error");
+   454→   454→      setSaving(false);
+   455→   455→    }
+   456→   456→  }
+   457→   457→
+   458→   458→  return (
+   459→   459→    <div className="p-4 md:p-6 max-w-4xl space-y-4">
+   460→   460→      <div className="flex items-center gap-3">
+   461→   461→        <Button variant="ghost" size="icon" onClick={() => navigate("journal")}>
+   462→   462→          <ArrowLeft className="h-4 w-4" />
+   463→   463→        </Button>
+   464→   464→        <h1 className="text-2xl font-semibold tracking-tight">
+   465→   465→          {editingId ? "Edit Trade" : "Add Trade"}
+   466→   466→        </h1>
+   467→   467→      </div>
+   468→   468→
+   469→   469→      <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
+   470→   470→        <TabsList className="w-full justify-start overflow-x-auto no-scrollbar">
+   471→   471→          <TabsTrigger value="basics">1. Basics</TabsTrigger>
+   472→   472→          <TabsTrigger value="execution">2. Execution</TabsTrigger>
+   473→   473→          <TabsTrigger value="plan">3. Trading Plan</TabsTrigger>
+   474→   474→          <TabsTrigger value="setup">4. ICT Setup</TabsTrigger>
+   475→   475→          <TabsTrigger value="psychology">5. Psychology</TabsTrigger>
+   476→   476→          <TabsTrigger value="review">6. Review</TabsTrigger>
+   477→   477→          <TabsTrigger value="evidence">7. Evidence</TabsTrigger>
+   478→   478→        </TabsList>
+   479→   479→
+   480→   480→        {/* Basics */}
+   481→   481→        <TabsContent value="basics" className="space-y-4 mt-3">
+   482→   482→          <Card className="p-4 space-y-4">
+   483→   483→            <div className="grid sm:grid-cols-2 gap-3">
+   484→   484→              <div className="space-y-2">
+   485→   485→                <Label>Account</Label>
+   486→   486→                <Select value={form.accountId} onValueChange={(v) => setField("accountId", v)}>
+   487→   487→                  <SelectTrigger><SelectValue placeholder="Select account" /></SelectTrigger>
+   488→   488→                  <SelectContent>
+   489→   489→                    {meta?.accounts?.map((a: any) => (
+   490→   490→                      <SelectItem key={a.id} value={a.id}>{a.name} ({a.currency})</SelectItem>
+   491→   491→                    ))}
+   492→   492→                  </SelectContent>
+   493→   493→                </Select>
+   494→   494→              </div>
+   495→   495→              <div className="space-y-2">
+   496→   496→                <Label>Instrument</Label>
+   497→   497→                <Input
+   498→   498→                  list="instruments"
+   499→   499→                  value={form.instrumentSymbol}
+   500→   500→                  onChange={(e) => setField("instrumentSymbol", e.target.value)}
+   501→   501→                  placeholder="XAUUSD"
+   502→   502→                />
+   503→   503→                <datalist id="instruments">
+   504→   504→                  {meta?.instruments?.map((i: any) => <option key={i.id} value={i.symbol} />)}
+   505→   505→                </datalist>
+   506→   506→              </div>
+   507→   507→              <div className="space-y-2">
+   508→   508→                <Label>Direction</Label>
+   509→   509→                <Select value={form.direction} onValueChange={(v) => setField("direction", v)}>
+   510→   510→                  <SelectTrigger><SelectValue /></SelectTrigger>
+   511→   511→                  <SelectContent>
+   512→   512→                    <SelectItem value="long">Long</SelectItem>
+   513→   513→                    <SelectItem value="short">Short</SelectItem>
+   514→   514→                  </SelectContent>
+   515→   515→                </Select>
+   516→   516→              </div>
+   517→   517→              <div className="space-y-2">
+   518→   518→                <Label>Session</Label>
+   519→   519→                <Select value={form.session} onValueChange={(v) => setField("session", v)}>
+   520→   520→                  <SelectTrigger><SelectValue /></SelectTrigger>
+   521→   521→                  <SelectContent>
+   522→   522→                    <SelectItem value="asia">Asia</SelectItem>
+   523→   523→                    <SelectItem value="london">London</SelectItem>
+   524→   524→                    <SelectItem value="ny_am">New York AM</SelectItem>
+   525→   525→                    <SelectItem value="ny_pm">New York PM</SelectItem>
+   526→   526→                    <SelectItem value="custom">Custom</SelectItem>
+   527→   527→                  </SelectContent>
+   528→   528→                </Select>
+   529→   529→              </div>
+   530→   530→              <div className="space-y-2">
+   531→   531→                <Label>Strategy</Label>
+   532→   532→                <Select value={form.strategyId || "__none"} onValueChange={(v) => setField("strategyId", v === "__none" ? "" : v)}>
+   533→   533→                  <SelectTrigger><SelectValue placeholder="None" /></SelectTrigger>
+   534→   534→                  <SelectContent>
+   535→   535→                    <SelectItem value="__none">None</SelectItem>
+   536→   536→                    {meta?.strategies?.map((s: any) => (
+   537→   537→                      <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>
+   538→   538→                    ))}
+   539→   539→                  </SelectContent>
+   540→   540→                </Select>
+   541→   541→              </div>
+   542→   542→              {/* Setup grade is now derived from the A+ checklist in the ICT Setup
+   543→   543→                  tab — no manual dropdown here. See the A+ Setup Checklist card. */}
+   544→   544→              <div className="space-y-2">
+   545→   545→                <Label>Entry Time</Label>
+   546→   546→                <Input
+   547→   547→                  type="datetime-local"
+   548→   548→                  value={form.entryTime}
+   549→   549→                  onChange={(e) => setField("entryTime", e.target.value)}
+   550→   550→                />
+   551→   551→              </div>
+   552→   552→              <div className="space-y-2">
+   553→   553→                <Label>Exit Time</Label>
+   554→   554→                <Input
+   555→   555→                  type="datetime-local"
+   556→   556→                  value={form.exitTime}
+   557→   557→                  onChange={(e) => setField("exitTime", e.target.value)}
+   558→   558→                />
+   559→   559→              </div>
+   560→   560→            </div>
+   561→   561→          </Card>
+   562→   562→        </TabsContent>
+   563→   563→
+   564→   564→        {/* Execution */}
+   565→   565→        <TabsContent value="execution" className="space-y-4 mt-3">
+   566→   566→          <Card className="p-4 space-y-4">
+   567→   567→            <div className="grid sm:grid-cols-2 gap-3">
+   568→   568→              <div className="space-y-2">
+   569→   569→                <Label>Entry Price</Label>
+   570→   570→                <Input value={form.entryPrice} onChange={(e) => setField("entryPrice", e.target.value)} placeholder="0.00000" />
+   571→   571→              </div>
+   572→   572→              <div className="space-y-2">
+   573→   573→                <Label>Exit Price</Label>
+   574→   574→                <Input value={form.exitPrice} onChange={(e) => setField("exitPrice", e.target.value)} placeholder="0.00000" />
+   575→   575→              </div>
+   576→   576→              <div className="space-y-2">
+   577→   577→                <Label>Quantity / Size</Label>
+   578→   578→                <Input value={form.quantity} onChange={(e) => setField("quantity", e.target.value)} placeholder="1.0" />
+   579→   579→              </div>
+   580→   580→              <div className="space-y-2">
+   581→   581→                <Label>Risk %</Label>
+   582→   582→                <Input value={form.plannedRiskPct} onChange={(e) => setField("plannedRiskPct", e.target.value)} placeholder="0.005" />
+   583→   583→              </div>
+   584→   584→            </div>
+   585→   585→            <Separator />
+   586→   586→            <div className="grid sm:grid-cols-2 gap-3">
+   587→   587→              <div className="space-y-2">
+   588→   588→                <Label>Fees (cents)</Label>
+   589→   589→                <Input type="number" value={form.feesCents} onChange={(e) => setField("feesCents", Number(e.target.value))} />
+   590→   590→              </div>
+   591→   591→              <div className="space-y-2">
+   592→   592→                <Label>Commission (cents)</Label>
+   593→   593→                <Input type="number" value={form.commissionCents} onChange={(e) => setField("commissionCents", Number(e.target.value))} />
+   594→   594→              </div>
+   595→   595→              <div className="space-y-2">
+   596→   596→                <Label>Swap (cents)</Label>
+   597→   597→                <Input type="number" value={form.swapCents} onChange={(e) => setField("swapCents", Number(e.target.value))} />
+   598→   598→              </div>
+   599→   599→              <div className="space-y-2">
+   600→   600→                <Label>Slippage (cents)</Label>
+   601→   601→                <Input type="number" value={form.slippageCents} onChange={(e) => setField("slippageCents", Number(e.target.value))} />
+   602→   602→              </div>
+   603→   603→            </div>
+   604→   604→            <p className="text-xs text-muted-foreground">
+   605→   605→              P&L and R are computed server-side. Values shown are computed from the execution ledger and validated before storage.
+   606→   606→            </p>
+   607→   607→          </Card>
+   608→   608→        </TabsContent>
+   609→   609→
+   610→   610→        {/* Plan */}
+   611→   611→        <TabsContent value="plan" className="space-y-4 mt-3">
+   612→   612→          <Card className="p-4 space-y-4">
+   613→   613→            <div className="grid sm:grid-cols-3 gap-3">
+   614→   614→              <div className="space-y-2">
+   615→   615→                <Label>Planned Entry</Label>
+   616→   616→                <Input value={form.plannedEntryPrice} onChange={(e) => setField("plannedEntryPrice", e.target.value)} placeholder="0.00000" />
+   617→   617→              </div>
+   618→   618→              <div className="space-y-2">
+   619→   619→                <Label>Planned Stop</Label>
+   620→   620→                <Input value={form.plannedStopPrice} onChange={(e) => setField("plannedStopPrice", e.target.value)} placeholder="0.00000" />
+   621→   621→              </div>
+   622→   622→              <div className="space-y-2">
+   623→   623→                <Label>Planned Target</Label>
+   624→   624→                <Input value={form.plannedTargetPrice} onChange={(e) => setField("plannedTargetPrice", e.target.value)} placeholder="0.00000" />
+   625→   625→              </div>
+   626→   626→            </div>
+   627→   627→            <Separator />
+   628→   628→            <div className="space-y-2">
+   629→   629→              <Label>Thesis: Why am I taking this trade?</Label>
+   630→   630→              <Textarea
+   631→   631→                value={form.thesis.why}
+   632→   632→                onChange={(e) => setField("thesis.why", e.target.value)}
+   633→   633→                rows={3}
+   634→   634→                placeholder="What is the market narrative? What liquidity am I targeting? What confirms the setup?"
+   635→   635→              />
+   636→   636→            </div>
+   637→   637→            <div className="grid sm:grid-cols-2 gap-3">
+   638→   638→              <div className="space-y-2">
+   639→   639→                <Label>What confirms the setup? (comma separated)</Label>
+   640→   640→                <Input
+   641→   641→                  value={(form.thesis.confirms ?? []).join(", ")}
+   642→   642→                  onChange={(e) => setField("thesis.confirms", e.target.value.split(",").map((s: string) => s.trim()).filter(Boolean))}
+   643→   643→                  placeholder="Displacement, MSS"
+   644→   644→                />
+   645→   645→              </div>
+   646→   646→              <div className="space-y-2">
+   647→   647→                <Label>What invalidates it? (comma separated)</Label>
+   648→   648→                <Input
+   649→   649→                  value={(form.thesis.invalidates ?? []).join(", ")}
+   650→   650→                  onChange={(e) => setField("thesis.invalidates", e.target.value.split(",").map((s: string) => s.trim()).filter(Boolean))}
+   651→   651→                  placeholder="No displacement, MSS fails"
+   652→   652→                />
+   653→   653→              </div>
+   654→   654→              <div className="space-y-2">
+   655→   655→                <Label>Target</Label>
+   656→   656→                <Input value={form.thesis.target} onChange={(e) => setField("thesis.target", e.target.value)} />
+   657→   657→              </div>
+   658→   658→              <div className="space-y-2">
+   659→   659→                <Label>What would make me exit early?</Label>
+   660→   660→                <Input value={form.thesis.earlyExit} onChange={(e) => setField("thesis.earlyExit", e.target.value)} />
+   661→   661→              </div>
+   662→   662→            </div>
+   663→   663→          </Card>
+   664→   664→        </TabsContent>
+   665→   665→
+   666→   666→        {/* Setup */}
+   667→   667→        <TabsContent value="setup" className="space-y-4 mt-3">
+   668→   668→          <Card className="p-4 space-y-4">
+   669→   669→            <div className="grid sm:grid-cols-2 gap-3">
+   670→   670→              <div className="space-y-2">
+   671→   671→                <Label>Weekly Bias</Label>
+   672→   672→                <Select value={form.setup.htfContext.weeklyBias} onValueChange={(v) => setField("setup.htfContext.weeklyBias", v)}>
+   673→   673→                  <SelectTrigger><SelectValue /></SelectTrigger>
+   674→   674→                  <SelectContent>
+   675→   675→                    <SelectItem value="bullish">Bullish</SelectItem>
+   676→   676→                    <SelectItem value="bearish">Bearish</SelectItem>
+   677→   677→                    <SelectItem value="neutral">Neutral</SelectItem>
+   678→   678→                  </SelectContent>
+   679→   679→                </Select>
+   680→   680→              </div>
+   681→   681→              <div className="space-y-2">
+   682→   682→                <Label>Daily Bias</Label>
+   683→   683→                <Select value={form.setup.htfContext.dailyBias} onValueChange={(v) => setField("setup.htfContext.dailyBias", v)}>
+   684→   684→                  <SelectTrigger><SelectValue /></SelectTrigger>
+   685→   685→                  <SelectContent>
+   686→   686→                    <SelectItem value="bullish">Bullish</SelectItem>
+   687→   687→                    <SelectItem value="bearish">Bearish</SelectItem>
+   688→   688→                    <SelectItem value="neutral">Neutral</SelectItem>
+   689→   689→                  </SelectContent>
+   690→   690→                </Select>
+   691→   691→              </div>
+   692→   692→            </div>
+   693→   693→            <Separator />
+   694→   694→            <div className="space-y-2">
+   695→   695→              <Label>Liquidity Targets</Label>
+   696→   696→              <div className="flex flex-wrap gap-2">
+   697→   697→                {["PDH", "PDL", "PWH", "PWL", "equal highs", "equal lows", "buy-side", "sell-side", "session liquidity"].map((opt) => {
+   698→   698→                  const active = (form.setup.liquidity ?? []).includes(opt);
+   699→   699→                  return (
+   700→   700→                    <button
+   701→   701→                      key={opt}
+   702→   702→                      type="button"
+   703→   703→                      onClick={() => toggleArrayField("setup.liquidity", opt)}
+   704→   704→                      className={cn("px-2 py-1 rounded-md text-xs border transition-colors", active ? "bg-primary text-primary-foreground border-primary" : "border-border hover:bg-muted")}
+   705→   705→                    >
+   706→   706→                      {opt}
+   707→   707→                    </button>
+   708→   708→                  );
+   709→   709→                })}
+   710→   710→              </div>
+   711→   711→            </div>
+   712→   712→            <div className="space-y-2">
+   713→   713→              <Label>Structure</Label>
+   714→   714→              <div className="flex flex-wrap gap-2">
+   715→   715→                {["BOS", "MSS", "displacement", "protected high", "protected low", "structure shift"].map((opt) => {
+   716→   716→                  const active = (form.setup.structure ?? []).includes(opt);
+   717→   717→                  return (
+   718→   718→                    <button
+   719→   719→                      key={opt}
+   720→   720→                      type="button"
+   721→   721→                      onClick={() => toggleArrayField("setup.structure", opt)}
+   722→   722→                      className={cn("px-2 py-1 rounded-md text-xs border transition-colors", active ? "bg-primary text-primary-foreground border-primary" : "border-border hover:bg-muted")}
+   723→   723→                    >
+   724→   724→                      {opt}
+   725→   725→                    </button>
+   726→   726→                  );
+   727→   727→                })}
+   728→   728→              </div>
+   729→   729→            </div>
+   730→   730→            <div className="space-y-2">
+   731→   731→              <Label>Entry Model</Label>
+   732→   732→              <Select value={form.setup.entryModel} onValueChange={(v) => setField("setup.entryModel", v)}>
+   733→   733→                <SelectTrigger><SelectValue /></SelectTrigger>
+   734→   734→                <SelectContent>
+   735→   735→                  {["liquidity sweep", "displacement", "FVG", "Order Block", "Breaker", "Mitigation", "SMT", "retracement"].map((o) => (
+   736→   736→                    <SelectItem key={o} value={o}>{o}</SelectItem>
+   737→   737→                  ))}
+   738→   738→                </SelectContent>
+   739→   739→              </Select>
+   740→   740→            </div>
+   741→   741→          </Card>
+   742→   742→
+   743→   743→          {/* A+ Setup Checklist — replaces the manual setupGrade dropdown.
+   744→   744→              The grade is calculated from the user's answers using the
+   745→   745→              evaluateChecklist domain module (see src/lib/checklist-evaluation.ts). */}
+   746→   746→          {activeChecklist ? (
+   747→   747→            <Card className="p-4 space-y-4">
+   748→   748→              <div className="flex items-start justify-between gap-3 flex-wrap">
+   749→   749→                <div className="min-w-0">
+   750→   750→                  <h3 className="font-medium flex items-center gap-2">
+   751→   751→                    A+ Setup Checklist
+   752→   752→                    <Sparkles className="h-4 w-4 text-primary" />
+   753→   753→                  </h3>
+   754→   754→                  <p className="text-xs text-muted-foreground mt-0.5">
+   755→   755→                    {activeChecklist.checklist.name} · v{activeChecklist.version.versionLabel}
+   756→   756→                    {checklists.length > 1 && (
+   757→   757→                      <Select
+   758→   758→                        value={form.checklistVersionId}
+   759→   759→                        onValueChange={(v) => {
+   760→   760→                          setForm((f: any) => ({
+   761→   761→                            ...f,
+   762→   762→                            checklistVersionId: v,
+   763→   763→                            // Reset answers when switching versions — items differ.
+   764→   764→                            checklistAnswers: {},
+   765→   765→                          }));
+   766→   766→                        }}
+   767→   767→                      >
+   768→   768→                        <SelectTrigger className="inline-flex w-auto h-6 ml-2 py-0 text-xs align-middle">
+   769→   769→                          <SelectValue />
+   770→   770→                        </SelectTrigger>
+   771→   771→                        <SelectContent>
+   772→   772→                          {checklists.flatMap((c: any) =>
+   773→   773→                            (c.versions ?? []).map((v: any) => (
+   774→   774→                              <SelectItem key={v.id} value={v.id}>
+   775→   775→                                {c.name} · v{v.versionLabel}
+   776→   776→                              </SelectItem>
+   777→   777→                            )),
+   778→   778→                          )}
+   779→   779→                        </SelectContent>
+   780→   780→                      </Select>
+   781→   781→                    )}
+   782→   782→                  </p>
+   783→   783→                </div>
+   784→   784→                <div className="flex items-center gap-2 shrink-0">
+   785→   785→                  <Badge
+   786→   786→                    variant={
+   787→   787→                      evaluation.grade === "A+" ? "default" :
+   788→   788→                      evaluation.grade === "A" ? "default" :
+   789→   789→                      evaluation.grade === "B" ? "secondary" :
+   790→   790→                      evaluation.grade === "C" ? "secondary" : "outline"
+   791→   791→                    }
+   792→   792→                    className={
+   793→   793→                      evaluation.grade === "A+" ? "bg-profit text-white" :
+   794→   794→                      evaluation.grade === "A" ? "bg-profit/80 text-white" :
+   795→   795→                      evaluation.grade === "B" ? "bg-warning text-white" :
+   796→   796→                      evaluation.grade === "C" ? "bg-muted-foreground text-white" :
+   797→   797→                      ""
+   798→   798→                    }
+   799→   799→                  >
+   800→   800→                    {evaluation.grade}
+   801→   801→                  </Badge>
+   802→   802→                  <span className="text-sm font-semibold tabular-nums">
+   803→   803→                    {(evaluation.score * 100).toFixed(1)}%
+   804→   804→                  </span>
+   805→   805→                </div>
+   806→   806→              </div>
+   807→   807→
+   808→   808→              {/* Score progress bar */}
+   809→   809→              <div className="space-y-1.5">
+   810→   810→                <div className="h-2 w-full rounded-full bg-muted overflow-hidden">
+   811→   811→                  <div
+   812→   812→                    className={cn(
+   813→   813→                      "h-full transition-all duration-300",
+   814→   814→                      evaluation.grade === "A+" ? "bg-profit" :
+   815→   815→                      evaluation.grade === "A" ? "bg-profit/80" :
+   816→   816→                      evaluation.grade === "B" ? "bg-warning" :
+   817→   817→                      evaluation.grade === "C" ? "bg-muted-foreground" :
+   818→   818→                      "bg-destructive",
+   819→   819→                    )}
+   820→   820→                    style={{ width: `${Math.round(evaluation.score * 100)}%` }}
+   821→   821→                  />
+   822→   822→                </div>
+   823→   823→                <div className="flex items-center justify-between text-xs text-muted-foreground">
+   824→   824→                  <span>
+   825→   825→                    Required: {evaluation.requiredCheckedCount}/{evaluation.requiredTotalCount} met
+   826→   826→                  </span>
+   827→   827→                  {evaluation.requiredItemsMissing ? (
+   828→   828→                    <span className="text-destructive">
+   829→   829→                      ⚠ Missing required item — grade capped at C
+   830→   830→                    </span>
+   831→   831→                  ) : (
+   832→   832→                    <span className="text-profit">All required items met</span>
+   833→   833→                  )}
+   834→   834→                </div>
+   835→   835→              </div>
+   836→   836→
+   837→   837→              {/* Checklist items */}
+   838→   838→              <div className="space-y-2">
+   839→   839→                {checklistItems.length === 0 && (
+   840→   840→                  <p className="text-sm text-muted-foreground text-center py-3">
+   841→   841→                    This checklist has no items defined.
+   842→   842→                  </p>
+   843→   843→                )}
+   844→   844→                {checklistItems.map((item) => {
+   845→   845→                  const ans = form.checklistAnswers?.[item.id] ?? { checked: false };
+   846→   846→                  const evidenceMissing =
+   847→   847→                    ans.checked && item.evidenceRequired &&
+   848→   848→                    !(typeof ans.note === "string" && ans.note.trim() !== "");
+   849→   849→                  return (
+   850→   850→                    <div key={item.id} className="space-y-1.5">
+   851→   851→                      <label
+   852→   852→                        className={cn(
+   853→   853→                          "flex items-start gap-3 p-2.5 rounded-md border cursor-pointer transition-colors",
+   854→   854→                          ans.checked
+   855→   855→                            ? "bg-profit/10 border-profit/30"
+   856→   856→                            : "border-border hover:bg-muted/40",
+   857→   857→                        )}
+   858→   858→                      >
+   859→   859→                        <Checkbox
+   860→   860→                          checked={ans.checked}
+   861→   861→                          onCheckedChange={(v) =>
+   862→   862→                            updateChecklistAnswer(item.id, "checked", !!v)
+   863→   863→                          }
+   864→   864→                          className="mt-0.5"
+   865→   865→                        />
+   866→   866→                        <div className="flex-1 min-w-0">
+   867→   867→                          <div className="flex items-start justify-between gap-2">
+   868→   868→                            <span
+   869→   869→                              className={cn(
+   870→   870→                                "text-sm leading-snug",
+   871→   871→                                ans.checked && "text-profit font-medium",
+   872→   872→                              )}
+   873→   873→                            >
+   874→   874→                              {item.text}
+   875→   875→                            </span>
+   876→   876→                            <div className="flex items-center gap-1 shrink-0">
+   877→   877→                              {item.required && (
+   878→   878→                                <Badge variant="outline" className="text-[10px] py-0 px-1">
+   879→   879→                                  Required
+   880→   880→                                </Badge>
+   881→   881→                              )}
+   882→   882→                              <Badge variant="secondary" className="text-[10px] py-0 px-1">
+   883→   883→                                ×{item.weight}
+   884→   884→                              </Badge>
+   885→   885→                            </div>
+   886→   886→                          </div>
+   887→   887→                          {item.evidenceRequired && (
+   888→   888→                            <p className="text-[10px] text-muted-foreground mt-0.5">
+   889→   889→                              Evidence required
+   890→   890→                            </p>
+   891→   891→                          )}
+   892→   892→                        </div>
+   893→   893→                        {ans.checked && <Check className="h-3.5 w-3.5 text-profit shrink-0 mt-1" />}
+   894→   894→                      </label>
+   895→   895→                      {ans.checked && item.evidenceRequired && (
+   896→   896→                        <div className="pl-9 pr-1 space-y-1">
+   897→   897→                          <Textarea
+   898→   898→                            value={typeof ans.note === "string" ? ans.note : ""}
+   899→   899→                            onChange={(e) =>
+   900→   900→                              updateChecklistAnswer(item.id, "note", e.target.value)
+   901→   901→                            }
+   902→   902→                            rows={2}
+   903→   903→                            placeholder="Describe the evidence (e.g., screenshot context, link, observation)"
+   904→   904→                            className={cn(
+   905→   905→                              "text-sm",
+   906→   906→                              evidenceMissing && "border-destructive/50 focus-visible:ring-destructive/30",
+   907→   907→                            )}
+   908→   908→                          />
+   909→   909→                          {evidenceMissing && (
+   910→   910→                            <p className="text-[10px] text-destructive">
+   911→   911→                              Evidence note recommended for this checked item.
+   912→   912→                            </p>
+   913→   913→                          )}
+   914→   914→                        </div>
+   915→   915→                      )}
+   916→   916→                    </div>
+   917→   917→                  );
+   918→   918→                })}
+   919→   919→              </div>
+   920→   920→
+   921→   921→              <p className="text-xs text-muted-foreground">
+   922→   922→                Score = sum(weights of checked) / sum(weights of all). Required items must all be checked to keep an A+/A/B grade; otherwise the grade is capped at C.
+   923→   923→              </p>
+   924→   924→            </Card>
+   925→   925→          ) : (
+   926→   926→            <Card className="p-4">
+   927→   927→              <div className="text-center py-4 space-y-1">
+   928→   928→                <p className="text-sm text-muted-foreground">No A+ checklist configured.</p>
+   929→   929→                <p className="text-xs text-muted-foreground">
+   930→   930→                  Create one in the Playbooks section to enable setup-grade scoring.
+   931→   931→                </p>
+   932→   932→              </div>
+   933→   933→            </Card>
+   934→   934→          )}
+   935→   935→
+   936→   936→          {/* Strategy Rules Checklist */}
+   937→   937→          {form.strategyId && strategyDetail?.versions?.[0] && (() => {
+   938→   938→            let rules: Record<string, string[]> = {};
+   939→   939→            try { rules = JSON.parse(strategyDetail.versions[0].rulesJson ?? "{}"); } catch {}
+   940→   940→            const sections = ["entry", "stop", "target", "management", "invalidation"];
+   941→   941→            const hasRules = sections.some(s => Array.isArray(rules[s]) && rules[s].length > 0);
+   942→   942→            if (!hasRules) return null;
+   943→   943→            const latestVersion = strategyDetail.versions[0];
+   944→   944→            return (
+   945→   945→              <Card className="p-4 space-y-4">
+   946→   946→                <div className="flex items-center justify-between">
+   947→   947→                  <div>
+   948→   948→                    <h3 className="font-medium">Strategy Rules Checklist</h3>
+   949→   949→                    <p className="text-xs text-muted-foreground mt-0.5">
+   950→   950→                      {strategyDetail.name} · v{latestVersion.versionLabel}
+   951→   951→                    </p>
+   952→   952→                  </div>
+   953→   953→                  <Badge variant="outline">v{latestVersion.versionLabel}</Badge>
+   954→   954→                </div>
+   955→   955→                <p className="text-sm text-muted-foreground">
+   956→   956→                  Check off each rule you followed on this trade. This becomes part of your behavior analytics.
+   957→   957→                </p>
+   958→   958→                <div className="space-y-4">
+   959→   959→                  {sections.map((section) => {
+   960→   960→                    const sectionRules = Array.isArray(rules[section]) ? rules[section] : [];
+   961→   961→                    if (sectionRules.length === 0) return null;
+   962→   962→                    const sectionLabel = section.charAt(0).toUpperCase() + section.slice(1);
+   963→   963→                    const followed = sectionRules.filter((r: string) => form.ruleCompliance?.[`${section}:${r}`]).length;
+   964→   964→                    return (
+   965→   965→                      <div key={section} className="space-y-2">
+   966→   966→                        <div className="flex items-center justify-between">
+   967→   967→                          <Label className="text-xs uppercase tracking-wide text-muted-foreground">{sectionLabel} Rules</Label>
+   968→   968→                          <Badge variant="secondary" className="text-xs">{followed}/{sectionRules.length} followed</Badge>
+   969→   969→                        </div>
+   970→   970→                        <div className="space-y-1.5">
+   971→   971→                          {sectionRules.map((rule: string, i: number) => {
+   972→   972→                            const key = `${section}:${rule}`;
+   973→   973→                            const checked = form.ruleCompliance?.[key] ?? false;
+   974→   974→                            return (
+   975→   975→                              <label
+   976→   976→                                key={i}
+   977→   977→                                className={cn(
+   978→   978→                                  "flex items-center gap-3 p-2 rounded-md border cursor-pointer transition-colors",
+   979→   979→                                  checked ? "bg-profit/10 border-profit/30" : "border-border hover:bg-muted/40",
+   980→   980→                                )}
+   981→   981→                              >
+   982→   982→                                <Checkbox
+   983→   983→                                  checked={checked}
+   984→   984→                                  onCheckedChange={(v) => {
+   985→   985→                                    setForm((f: any) => ({
+   986→   986→                                      ...f,
+   987→   987→                                      ruleCompliance: { ...f.ruleCompliance, [key]: !!v },
+   988→   988→                                    }));
+   989→   989→                                  }}
+   990→   990→                                />
+   991→   991→                                <span className={cn("text-sm", checked && "text-profit font-medium")}>{rule}</span>
+   992→   992→                                {checked && <Check className="h-3 w-3 text-profit ml-auto" />}
+   993→   993→                              </label>
+   994→   994→                            );
+   995→   995→                          })}
+   996→   996→                        </div>
+   997→   997→                      </div>
+   998→   998→                    );
+   999→   999→                  })}
+  1000→  1000→                </div>
+  1001→  1001→              </Card>
+  1002→  1002→            );
+  1003→  1003→          })()}
+  1004→  1004→        </TabsContent>
+  1005→  1005→
+  1006→  1006→        {/* Psychology */}
+  1007→  1007→        <TabsContent value="psychology" className="space-y-4 mt-3">
+  1008→  1008→          <Card className="p-4 space-y-4">
+  1009→  1009→            <div className="space-y-2">
+  1010→  1010→              <Label>Mood Before</Label>
+  1011→  1011→              <div className="flex flex-wrap gap-2">
+  1012→  1012→                {PSYCH_BEFORE.map((opt) => {
+  1013→  1013→                  const active = (form.psychBefore.moodTags ?? []).includes(opt);
+  1014→  1014→                  return (
+  1015→  1015→                    <button
+  1016→  1016→                      key={opt}
+  1017→  1017→                      type="button"
+  1018→  1018→                      onClick={() => toggleArrayField("psychBefore.moodTags", opt)}
+  1019→  1019→                      className={cn("px-2 py-1 rounded-md text-xs border transition-colors", active ? "bg-primary text-primary-foreground border-primary" : "border-border hover:bg-muted")}
+  1020→  1020→                    >
+  1021→  1021→                      {opt}
+  1022→  1022→                    </button>
+  1023→  1023→                  );
+  1024→  1024→                })}
+  1025→  1025→              </div>
+  1026→  1026→            </div>
+  1027→  1027→            <div className="grid sm:grid-cols-2 gap-3">
+  1028→  1028→              <div className="space-y-2">
+  1029→  1029→                <Label>Confidence Before (1-5)</Label>
+  1030→  1030→                <Input type="number" min={1} max={5} value={form.psychBefore.confidence} onChange={(e) => setField("psychBefore.confidence", Number(e.target.value))} />
+  1031→  1031→              </div>
+  1032→  1032→              <div className="space-y-2">
+  1033→  1033→                <Label>Energy/Focus Before (1-5)</Label>
+  1034→  1034→                <Input type="number" min={1} max={5} value={form.psychBefore.energy} onChange={(e) => setField("psychBefore.energy", Number(e.target.value))} />
+  1035→  1035→              </div>
+  1036→  1036→            </div>
+  1037→  1037→            <Separator />
+  1038→  1038→            <div className="space-y-2">
+  1039→  1039→              <Label>Mood After</Label>
+  1040→  1040→              <div className="flex flex-wrap gap-2">
+  1041→  1041→                {PSYCH_AFTER.map((opt) => {
+  1042→  1042→                  const active = (form.psychAfter.moodTags ?? []).includes(opt);
+  1043→  1043→                  return (
+  1044→  1044→                    <button
+  1045→  1045→                      key={opt}
+  1046→  1046→                      type="button"
+  1047→  1047→                      onClick={() => toggleArrayField("psychAfter.moodTags", opt)}
+  1048→  1048→                      className={cn("px-2 py-1 rounded-md text-xs border transition-colors", active ? "bg-primary text-primary-foreground border-primary" : "border-border hover:bg-muted")}
+  1049→  1049→                    >
+  1050→  1050→                      {opt}
+  1051→  1051→                    </button>
+  1052→  1052→                  );
+  1053→  1053→                })}
+  1054→  1054→              </div>
+  1055→  1055→            </div>
+  1056→  1056→            <Separator />
+  1057→  1057→            <div className="space-y-2">
+  1058→  1058→              <Label>Behavior Flags</Label>
+  1059→  1059→              <div className="flex flex-wrap gap-2">
+  1060→  1060→                {BEHAVIOR_FLAGS.map((opt) => {
+  1061→  1061→                  const active = (form.behaviorFlags ?? []).includes(opt);
+  1062→  1062→                  return (
+  1063→  1063→                    <button
+  1064→  1064→                      key={opt}
+  1065→  1065→                      type="button"
+  1066→  1066→                      onClick={() => toggleArrayField("behaviorFlags", opt)}
+  1067→  1067→                      className={cn("px-2 py-1 rounded-md text-xs border transition-colors", active ? "bg-warning text-white border-warning" : "border-border hover:bg-muted")}
+  1068→  1068→                    >
+  1069→  1069→                      {opt.split("_").map((w) => w.charAt(0).toUpperCase() + w.slice(1)).join(" ")}
+  1070→  1070→                    </button>
+  1071→  1071→                  );
+  1072→  1072→                })}
+  1073→  1073→              </div>
+  1074→  1074→            </div>
+  1075→  1075→          </Card>
+  1076→  1076→        </TabsContent>
+  1077→  1077→
+  1078→  1078→        {/* Review */}
+  1079→  1079→        <TabsContent value="review" className="space-y-4 mt-3">
+  1080→  1080→          <Card className="p-4 space-y-4">
+  1081→  1081→            <div className="space-y-2">
+  1082→  1082→              <Label>Notes</Label>
+  1083→  1083→              <Textarea value={form.notes} onChange={(e) => setField("notes", e.target.value)} rows={4} placeholder="Free-form notes about this trade" />
+  1084→  1084→            </div>
+  1085→  1085→            <div className="space-y-2">
+  1086→  1086→              <Label>Lessons</Label>
+  1087→  1087→              <Textarea value={form.lessons} onChange={(e) => setField("lessons", e.target.value)} rows={3} placeholder="What did you learn?" />
+  1088→  1088→            </div>
+  1089→  1089→            <div className="space-y-2">
+  1090→  1090→              <Label className="flex items-center gap-2"><TagIcon className="h-4 w-4" /> Tags</Label>
+  1091→  1091→              <div className="flex flex-wrap gap-2">
+  1092→  1092→                {(meta?.tags ?? []).map((tag: any) => {
+  1093→  1093→                  const active = (form.tags ?? []).includes(tag.name);
+  1094→  1094→                  return (
+  1095→  1095→                    <button
+  1096→  1096→                      key={tag.id}
+  1097→  1097→                      type="button"
+  1098→  1098→                      onClick={() => toggleArrayField("tags", tag.name)}
+  1099→  1099→                      className={cn("px-2 py-1 rounded-md text-xs border transition-colors", active ? "bg-primary text-primary-foreground border-primary" : "border-border hover:bg-muted")}
+  1100→  1100→                    >
+  1101→  1101→                      {tag.name}
+  1102→  1102→                    </button>
+  1103→  1103→                  );
+  1104→  1104→                })}
+  1105→  1105→              </div>
+  1106→  1106→            </div>
+  1107→  1107→          </Card>
+  1108→  1108→        </TabsContent>
+  1109→  1109→
+  1110→  1110→        {/* Evidence */}
+  1111→  1111→        <TabsContent value="evidence" className="space-y-4 mt-3">
+  1112→  1112→          <Card className="p-4 space-y-4">
+  1113→  1113→            <div className="flex items-center justify-between">
+  1114→  1114→              <div>
+  1115→  1115→                <h3 className="font-medium">Evidence</h3>
+  1116→  1116→                <p className="text-sm text-muted-foreground mt-0.5">
+  1117→  1117→                  Upload screenshots, chart recordings, or trade evidence. Files are stored privately.
+  1118→  1118→                </p>
+  1119→  1119→              </div>
+  1120→  1120→              <Button
+  1121→  1121→                type="button"
+  1122→  1122→                variant="outline"
+  1123→  1123→                size="sm"
+  1124→  1124→                onClick={() => fileInputRef.current?.click()}
+  1125→  1125→              >
+  1126→  1126→                <Upload className="h-4 w-4" /> Upload
+  1127→  1127→              </Button>
+  1128→  1128→              <input
+  1129→  1129→                ref={fileInputRef}
+  1130→  1130→                type="file"
+  1131→  1131→                accept="image/png,image/jpeg,image/webp,image/gif,video/mp4,video/webm,video/quicktime"
+  1132→  1132→                multiple
+  1133→  1133→                className="hidden"
+  1134→  1134→                onChange={(e) => {
+  1135→  1135→                  const files = e.target.files;
+  1136→  1136→                  if (!files) return;
+  1137→  1137→                  handleFileUpload(files);
+  1138→  1138→                  e.target.value = "";
+  1139→  1139→                }}
+  1140→  1140→              />
+  1141→  1141→            </div>
+  1142→  1142→
+  1143→  1143→            {/* Paste support */}
+  1144→  1144→            <div className="rounded-md border border-dashed border-border p-3 text-center text-sm text-muted-foreground">
+  1145→  1145→              You can also paste screenshots directly with Ctrl+V (click here first to focus).
+  1146→  1146→              <div
+  1147→  1147→                contentEditable
+  1148→  1148→                className="sr-only"
+  1149→  1149→                onPaste={(e) => {
+  1150→  1150→                  const items = e.clipboardData?.items;
+  1151→  1151→                  if (!items) return;
+  1152→  1152→                  const files: File[] = [];
+  1153→  1153→                  for (const item of items) {
+  1154→  1154→                    if (item.type.startsWith("image/")) {
+  1155→  1155→                      const file = item.getAsFile();
+  1156→  1156→                      if (file) files.push(file);
+  1157→  1157→                    }
+  1158→  1158→                  }
+  1159→  1159→                  if (files.length > 0) {
+  1160→  1160→                    handleFileUpload(files);
+  1161→  1161→                    e.preventDefault();
+  1162→  1162→                  }
+  1163→  1163→                }}
+  1164→  1164→                tabIndex={0}
+  1165→  1165→              />
+  1166→  1166→            </div>
+  1167→  1167→
+  1168→  1168→            {/* Uploaded media grid */}
+  1169→  1169→            {form.uploadedMedia.length > 0 && (
+  1170→  1170→              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+  1171→  1171→                {form.uploadedMedia.map((m: any, i: number) => (
+  1172→  1172→                  <div key={m.id || i} className="relative group rounded-md border border-border overflow-hidden">
+  1173→  1173→                    <div className="relative">
+  1174→  1174→                      {m.kind === "image" ? (
+  1175→  1175→                        <img src={m.url} alt={m.filename} className="w-full aspect-video object-cover" />
+  1176→  1176→                      ) : (
+  1177→  1177→                        <div className="aspect-video bg-muted flex items-center justify-center">
+  1178→  1178→                          <ImageIcon className="h-8 w-8 text-muted-foreground" />
+  1179→  1179→                        </div>
+  1180→  1180→                      )}
+  1181→  1181→                      {m.kind === "image" && (
+  1182→  1182→                        <button
+  1183→  1183→                          type="button"
+  1184→  1184→                          className="absolute top-2 right-2 h-7 px-2 rounded-full bg-black/60 text-white flex items-center gap-1 text-xs opacity-0 group-hover:opacity-100 transition-opacity"
+  1185→  1185→                          onClick={() => setViewerIndex(i)}
+  1186→  1186→                        >
+  1187→  1187→                          <Pencil className="h-3 w-3" /> Annotate
+  1188→  1188→                        </button>
+  1189→  1189→                      )}
+  1190→  1190→                      <button
+  1191→  1191→                        type="button"
+  1192→  1192→                        className="absolute top-2 left-2 h-7 w-7 rounded-full bg-black/60 text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+  1193→  1193→                        onClick={() => {
+  1194→  1194→                          setForm((f: any) => ({
+  1195→  1195→                            ...f,
+  1196→  1196→                            uploadedMedia: f.uploadedMedia.filter((_: any, idx: number) => idx !== i),
+  1197→  1197→                          }));
+  1198→  1198→                        }}
+  1199→  1199→                      >
+  1200→  1200→                        <X className="h-3 w-3" />
+  1201→  1201→                      </button>
+  1202→  1202→                    </div>
+  1203→  1203→                    <div className="p-3 space-y-2">
+  1204→  1204→                      <div className="flex items-center justify-between">
+  1205→  1205→                        <div className="text-xs font-medium truncate flex-1">{m.filename}</div>
+  1206→  1206→                        <div className="text-[10px] text-muted-foreground ml-2 shrink-0">
+  1207→  1207→                          {(m.sizeBytes / 1024).toFixed(0)} KB
+  1208→  1208→                        </div>
+  1209→  1209→                      </div>
+  1210→  1210→                      <div>
+  1211→  1211→                        <Label className="text-xs text-muted-foreground">Description (optional)</Label>
+  1212→  1212→                        <Textarea
+  1213→  1213→                          value={m.caption || ""}
+  1214→  1214→                          onChange={(e) => {
+  1215→  1215→                            const val = e.target.value;
+  1216→  1216→                            setForm((f: any) => ({
+  1217→  1217→                              ...f,
+  1218→  1218→                              uploadedMedia: f.uploadedMedia.map((item: any, idx: number) =>
+  1219→  1219→                                idx === i ? { ...item, caption: val } : item
+  1220→  1220→                              ),
+  1221→  1221→                            }));
+  1222→  1222→                          }}
+  1223→  1223→                          rows={2}
+  1224→  1224→                          placeholder="Describe what this screenshot shows..."
+  1225→  1225→                          className="text-sm mt-1"
+  1226→  1226→                        />
+  1227→  1227→                      </div>
+  1228→  1228→                    </div>
+  1229→  1229→                  </div>
+  1230→  1230→                ))}
+  1231→  1231→              </div>
+  1232→  1232→            )}
+  1233→  1233→
+  1234→  1234→            {form.uploadedMedia.length === 0 && (
+  1235→  1235→              <div className="rounded-md border border-dashed border-border p-8 text-center">
+  1236→  1236→                <ImageIcon className="h-8 w-8 mx-auto text-muted-foreground mb-2" />
+  1237→  1237→                <p className="text-sm text-muted-foreground">No evidence uploaded yet.</p>
+  1238→  1238→                <p className="text-xs text-muted-foreground mt-1">
+  1239→  1239→                  Click Upload above or paste a screenshot with Ctrl+V.
+  1240→  1240→                </p>
+  1241→  1241→              </div>
+  1242→  1242→            )}
+  1243→  1243→          </Card>
+  1244→  1244→        </TabsContent>
+  1245→  1245→      </Tabs>
+  1246→  1246→
+  1247→  1247→      {/* Navigation bar: Next/Back on intermediate tabs, Save on the final tab.
+  1248→  1248→          On mobile: fixed to bottom of viewport (below mobile nav). On desktop: sticky at bottom of scroll. */}
+  1249→  1249→      <div className="fixed bottom-16 md:static left-0 right-0 z-20 flex gap-2 justify-between bg-background/95 backdrop-blur p-2 border-t border-border md:rounded-md md:border">
+  1250→  1250→        <div className="flex gap-2">
+  1251→  1251→          <Button
+  1252→  1252→            variant="outline"
+  1253→  1253→            onClick={() => {
+  1254→  1254→              const idx = TAB_ORDER.indexOf(activeTab);
+  1255→  1255→              if (idx > 0) setActiveTab(TAB_ORDER[idx - 1]);
+  1256→  1256→            }}
+  1257→  1257→            disabled={activeTab === TAB_ORDER[0]}
+  1258→  1258→          >
+  1259→  1259→            <ArrowLeft className="h-4 w-4" /> Back
+  1260→  1260→          </Button>
+  1261→  1261→        </div>
+  1262→  1262→        <div className="flex gap-2">
+  1263→  1263→          {activeTab !== TAB_ORDER[TAB_ORDER.length - 1] ? (
+  1264→  1264→            <Button
+  1265→  1265→              onClick={() => {
+  1266→  1266→                const idx = TAB_ORDER.indexOf(activeTab);
+  1267→  1267→                if (idx < TAB_ORDER.length - 1) setActiveTab(TAB_ORDER[idx + 1]);
+  1268→  1268→              }}
+  1269→  1269→            >
+  1270→  1270→              Next <ArrowRight className="h-4 w-4" />
+  1271→  1271→            </Button>
+  1272→  1272→          ) : (
+  1273→  1273→            <>
+  1274→  1274→              <Button variant="outline" onClick={() => submit(true)} disabled={saving}>
+  1275→  1275→                {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+  1276→  1276→                Save as Draft
+  1277→  1277→              </Button>
+  1278→  1278→              <Button onClick={() => submit(false)} disabled={saving}>
+  1279→  1279→                {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
+  1280→  1280→                Save Trade
+  1281→  1281→              </Button>
+  1282→  1282→            </>
+  1283→  1283→          )}
+  1284→  1284→        </div>
+  1285→  1285→      </div>
+  1286→  1286→
+  1287→  1287→      {/* Image viewer with annotation support */}
+  1288→  1288→      {viewerIndex != null && form.uploadedMedia[viewerIndex] && (
+  1289→  1289→        <ImageViewer
+  1290→  1290→          mediaItems={form.uploadedMedia.filter((m: any) => m.kind === "image")}
+  1291→  1291→          initialIndex={form.uploadedMedia.filter((m: any) => m.kind === "image").findIndex((m: any) => m.id === form.uploadedMedia[viewerIndex].id)}
+  1292→  1292→          onClose={() => setViewerIndex(null)}
+  1293→  1293→        />
+  1294→  1294→      )}
+  1295→  1295→    </div>
+  1296→  1296→  );
+  1297→  1297→}
+  1298→  1298→
+  1299→  1299→function safeJson(json: string | null, fallback: any): any {
+  1300→  1300→  if (!json) return fallback;
+  1301→  1301→  try { return JSON.parse(json); } catch { return fallback; }
+  1302→  1302→}
+  1303→  1303→
+  1304→  1304→function Separator() {
+  1305→  1305→  return <div className="h-px bg-border" />;
+  1306→  1306→}
+  1307→  1307→

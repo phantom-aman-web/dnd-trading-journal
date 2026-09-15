@@ -1,0 +1,740 @@
+     1→     1→"use client";
+     2→     2→
+     3→     3→import { useQuery, useQueryClient } from "@tanstack/react-query";
+     4→     4→import { useState, useEffect } from "react";
+     5→     5→import { Card } from "@/components/ui/card";
+     6→     6→import { Button } from "@/components/ui/button";
+     7→     7→import { Input } from "@/components/ui/input";
+     8→     8→import { Label } from "@/components/ui/label";
+     9→     9→import { Switch } from "@/components/ui/switch";
+    10→    10→import { Badge } from "@/components/ui/badge";
+    11→    11→import { Separator } from "@/components/ui/separator";
+    12→    12→import { Skeleton } from "@/components/ui/skeleton";
+    13→    13→import {
+    14→    14→  Select,
+    15→    15→  SelectContent,
+    16→    16→  SelectItem,
+    17→    17→  SelectTrigger,
+    18→    18→  SelectValue,
+    19→    19→} from "@/components/ui/select";
+    20→    20→import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+    21→    21→import {
+    22→    22→  Dialog,
+    23→    23→  DialogContent,
+    24→    24→  DialogHeader,
+    25→    25→  DialogTitle,
+    26→    26→  DialogTrigger,
+    27→    27→} from "@/components/ui/dialog";
+    28→    28→import { setTheme, setDensity, setLargerText, setReducedMotion, useTheme } from "@/components/theme-provider";
+    29→    29→import { toast } from "sonner";
+    30→    30→import { Upload, Download, Database, Shield, Plus, Trash2 } from "lucide-react";
+    31→    31→import { cn } from "@/lib/utils";
+    32→    32→
+    33→    33→async function fetchSettings() {
+    34→    34→  const res = await fetch("/api/settings", { cache: "no-store" });
+    35→    35→  return res.json();
+    36→    36→}
+    37→    37→async function fetchAccounts() {
+    38→    38→  const res = await fetch("/api/accounts", { cache: "no-store" });
+    39→    39→  return res.json();
+    40→    40→}
+    41→    41→async function fetchInstruments() {
+    42→    42→  const res = await fetch("/api/instruments", { cache: "no-store" });
+    43→    43→  return res.json();
+    44→    44→}
+    45→    45→async function fetchBackups() {
+    46→    46→  const res = await fetch("/api/backups", { cache: "no-store" });
+    47→    47→  return res.json();
+    48→    48→}
+    49→    49→
+    50→    50→export function SettingsView() {
+    51→    51→  const qc = useQueryClient();
+    52→    52→  const { data, isLoading } = useQuery({ queryKey: ["settings"], queryFn: fetchSettings });
+    53→    53→  const { data: accountsData } = useQuery({ queryKey: ["accounts"], queryFn: fetchAccounts });
+    54→    54→  const { data: instrumentsData } = useQuery({ queryKey: ["instruments"], queryFn: fetchInstruments });
+    55→    55→  const { data: backupsData } = useQuery({ queryKey: ["backups"], queryFn: fetchBackups });
+    56→    56→
+    57→    57→  const [density, setDensityState] = useState("comfortable");
+    58→    58→  const [largerText, setLargerTextState] = useState(false);
+    59→    59→  const [reducedMotion, setReducedMotionState] = useState(false);
+    60→    60→  const [privacyMode, setPrivacyMode] = useState(false);
+    61→    61→  const [defaultRiskPct, setDefaultRiskPct] = useState("0.005");
+    62→    62→  const [defaultSession, setDefaultSession] = useState("ny_am");
+    63→    63→  const [timezone, setTimezone] = useState("UTC");
+    64→    64→  const [dailyLossLimitPct, setDailyLossLimitPct] = useState("");
+    65→    65→  const [dailyTradeLimit, setDailyTradeLimit] = useState<number | "">("");
+    66→    66→
+    67→    67→  // Reactive theme from the theme provider (tracks the actual current theme)
+    68→    68→  const { theme, setTheme: applyTheme } = useTheme();
+    69→    69→
+    70→    70→  useEffect(() => {
+    71→    71→    if (data?.settings) {
+    72→    72→      setDensityState(data.settings.density || "comfortable");
+    73→    73→      setLargerTextState(data.settings.largerText ?? false);
+    74→    74→      setReducedMotionState(data.settings.reducedMotion ?? false);
+    75→    75→      setPrivacyMode(data.settings.privacyModeEnabled ?? false);
+    76→    76→      setDefaultRiskPct(data.settings.defaultRiskPct ?? "0.005");
+    77→    77→      setDefaultSession(data.settings.defaultSession ?? "ny_am");
+    78→    78→      setTimezone(data.settings.timezone ?? "UTC");
+    79→    79→      setDailyLossLimitPct(data.settings.dailyLossLimitPct ?? "");
+    80→    80→      setDailyTradeLimit(data.settings.dailyTradeLimit ?? "");
+    81→    81→    }
+    82→    82→  }, [data]);
+    83→    83→
+    84→    84→  async function saveSettings() {
+    85→    85→    const res = await fetch("/api/settings", {
+    86→    86→      method: "PATCH",
+    87→    87→      headers: { "Content-Type": "application/json" },
+    88→    88→      body: JSON.stringify({
+    89→    89→        theme, density,
+    90→    90→        largerText: largerText,
+    91→    91→        reducedMotion: reducedMotion,
+    92→    92→        privacyModeEnabled: privacyMode,
+    93→    93→        defaultRiskPct, defaultSession, timezone,
+    94→    94→        dailyLossLimitPct,
+    95→    95→        dailyTradeLimit: dailyTradeLimit === "" ? null : dailyTradeLimit,
+    96→    96→      }),
+    97→    97→    });
+    98→    98→    if (res.ok) {
+    99→    99→      toast.success("Settings saved.");
+   100→   100→      setTheme(theme as any);
+   101→   101→      setDensity(density as any);
+   102→   102→      setLargerText(largerText);
+   103→   103→      setReducedMotion(reducedMotion);
+   104→   104→      qc.invalidateQueries({ queryKey: ["settings"] });
+   105→   105→    } else {
+   106→   106→      toast.error("Failed to save settings.");
+   107→   107→    }
+   108→   108→  }
+   109→   109→
+   110→   110→  if (isLoading) return <div className="p-4 md:p-6"><Skeleton className="h-96" /></div>;
+   111→   111→
+   112→   112→  return (
+   113→   113→    <div className="p-4 md:p-6 max-w-4xl space-y-4">
+   114→   114→      <h1 className="text-2xl font-semibold tracking-tight">Settings</h1>
+   115→   115→
+   116→   116→      <Tabs defaultValue="profile">
+   117→   117→        <TabsList className="w-full justify-start overflow-x-auto">
+   118→   118→          <TabsTrigger value="profile">Profile</TabsTrigger>
+   119→   119→          <TabsTrigger value="accounts">Accounts</TabsTrigger>
+   120→   120→          <TabsTrigger value="instruments">Instruments</TabsTrigger>
+   121→   121→          <TabsTrigger value="trading">Trading</TabsTrigger>
+   122→   122→          <TabsTrigger value="appearance">Appearance</TabsTrigger>
+   123→   123→          <TabsTrigger value="privacy">Privacy</TabsTrigger>
+   124→   124→          <TabsTrigger value="data">Data</TabsTrigger>
+   125→   125→          <TabsTrigger value="legal">Legal</TabsTrigger>
+   126→   126→        </TabsList>
+   127→   127→
+   128→   128→        {/* Profile */}
+   129→   129→        <TabsContent value="profile">
+   130→   130→          <Card className="p-4 space-y-4">
+   131→   131→            <div className="grid sm:grid-cols-2 gap-3">
+   132→   132→              <div className="space-y-2">
+   133→   133→                <Label>Name</Label>
+   134→   134→                <Input defaultValue={data?.settings?.userId ?? ""} placeholder="Trader name" disabled />
+   135→   135→              </div>
+   136→   136→              <div className="space-y-2">
+   137→   137→                <Label>Timezone</Label>
+   138→   138→                <Input value={timezone} onChange={(e) => setTimezone(e.target.value)} />
+   139→   139→              </div>
+   140→   140→            </div>
+   141→   141→            <Button onClick={saveSettings}>Save</Button>
+   142→   142→          </Card>
+   143→   143→        </TabsContent>
+   144→   144→
+   145→   145→        {/* Accounts */}
+   146→   146→        <TabsContent value="accounts">
+   147→   147→          <Card className="p-4 space-y-3">
+   148→   148→            <div className="flex items-center justify-between">
+   149→   149→              <h2 className="font-medium">Trading Accounts</h2>
+   150→   150→              <AccountCreateDialog onCreated={() => qc.invalidateQueries({ queryKey: ["accounts"] })} />
+   151→   151→            </div>
+   152→   152→            <div className="space-y-2">
+   153→   153→              {(accountsData?.items ?? []).map((a: any) => (
+   154→   154→                <div key={a.id} className="flex items-center gap-3 p-3 rounded-md border border-border">
+   155→   155→                  <div className="flex-1">
+   156→   156→                    <div className="font-medium text-sm flex items-center gap-2">
+   157→   157→                      {a.name}
+   158→   158→                      {a.isDefault && <Badge variant="outline" className="text-xs">Default</Badge>}
+   159→   159→                    </div>
+   160→   160→                    <div className="text-xs text-muted-foreground">
+   161→   161→                      {a.broker ?? "No broker"} · {a.currency} · {a.accountType}
+   162→   162→                    </div>
+   163→   163→                  </div>
+   164→   164→                  <Button
+   165→   165→                    variant="ghost"
+   166→   166→                    size="icon"
+   167→   167→                    className="h-7 w-7 text-muted-foreground hover:text-loss"
+   168→   168→                    onClick={async () => {
+   169→   169→                      if (!confirm("Delete this account?")) return;
+   170→   170→                      const res = await fetch(`/api/accounts/${a.id}`, { method: "DELETE" });
+   171→   171→                      if (res.ok) { toast.success("Deleted."); qc.invalidateQueries({ queryKey: ["accounts"] }); }
+   172→   172→                      else { const d = await res.json(); toast.error(d.error ?? "Failed."); }
+   173→   173→                    }}
+   174→   174→                  >
+   175→   175→                    <Trash2 className="h-3 w-3" />
+   176→   176→                  </Button>
+   177→   177→                </div>
+   178→   178→              ))}
+   179→   179→              {(accountsData?.items ?? []).length === 0 && (
+   180→   180→                <p className="text-sm text-muted-foreground">No accounts yet.</p>
+   181→   181→              )}
+   182→   182→            </div>
+   183→   183→          </Card>
+   184→   184→        </TabsContent>
+   185→   185→
+   186→   186→        {/* Instruments */}
+   187→   187→        <TabsContent value="instruments">
+   188→   188→          <Card className="p-4 space-y-3">
+   189→   189→            <div className="flex items-center justify-between">
+   190→   190→              <h2 className="font-medium">Instruments</h2>
+   191→   191→              <InstrumentCreateDialog onCreated={() => qc.invalidateQueries({ queryKey: ["instruments"] })} />
+   192→   192→            </div>
+   193→   193→            <div className="space-y-2 max-h-96 overflow-y-auto">
+   194→   194→              {(instrumentsData?.items ?? []).map((i: any) => (
+   195→   195→                <div key={i.id} className="flex items-center gap-3 p-2 rounded-md border border-border">
+   196→   196→                  <Badge variant="outline">{i.market}</Badge>
+   197→   197→                  <span className="font-medium text-sm">{i.symbol}</span>
+   198→   198→                  <span className="text-xs text-muted-foreground ml-auto tnum">
+   199→   199→                    pip {i.pipSize} · contract {i.contractSize}
+   200→   200→                  </span>
+   201→   201→                </div>
+   202→   202→              ))}
+   203→   203→            </div>
+   204→   204→          </Card>
+   205→   205→        </TabsContent>
+   206→   206→
+   207→   207→        {/* Trading */}
+   208→   208→        <TabsContent value="trading">
+   209→   209→          <Card className="p-4 space-y-4">
+   210→   210→            <div className="grid sm:grid-cols-2 gap-3">
+   211→   211→              <div className="space-y-2">
+   212→   212→                <Label>Default Risk %</Label>
+   213→   213→                <Input value={defaultRiskPct} onChange={(e) => setDefaultRiskPct(e.target.value)} placeholder="0.005" />
+   214→   214→              </div>
+   215→   215→              <div className="space-y-2">
+   216→   216→                <Label>Default Session</Label>
+   217→   217→                <Select value={defaultSession} onValueChange={setDefaultSession}>
+   218→   218→                  <SelectTrigger><SelectValue /></SelectTrigger>
+   219→   219→                  <SelectContent>
+   220→   220→                    <SelectItem value="asia">Asia</SelectItem>
+   221→   221→                    <SelectItem value="london">London</SelectItem>
+   222→   222→                    <SelectItem value="ny_am">New York AM</SelectItem>
+   223→   223→                    <SelectItem value="ny_pm">New York PM</SelectItem>
+   224→   224→                  </SelectContent>
+   225→   225→                </Select>
+   226→   226→              </div>
+   227→   227→              <div className="space-y-2">
+   228→   228→                <Label>Daily Trade Limit</Label>
+   229→   229→                <Input type="number" value={dailyTradeLimit} onChange={(e) => setDailyTradeLimit(e.target.value === "" ? "" : Number(e.target.value))} />
+   230→   230→              </div>
+   231→   231→              <div className="space-y-2">
+   232→   232→                <Label>Daily Loss Limit %</Label>
+   233→   233→                <Input value={dailyLossLimitPct} onChange={(e) => setDailyLossLimitPct(e.target.value)} placeholder="0.02" />
+   234→   234→              </div>
+   235→   235→            </div>
+   236→   236→            <Button onClick={saveSettings}>Save</Button>
+   237→   237→          </Card>
+   238→   238→        </TabsContent>
+   239→   239→
+   240→   240→        {/* Appearance */}
+   241→   241→        <TabsContent value="appearance">
+   242→   242→          <Card className="p-4 space-y-4">
+   243→   243→            <div className="space-y-2">
+   244→   244→              <Label>Theme</Label>
+   245→   245→              <div className="grid grid-cols-3 gap-2">
+   246→   246→                {[
+   247→   247→                  { key: "nordic", label: "Nordic Clean", desc: "Light, quiet, precise" },
+   248→   248→                  { key: "terminal", label: "Sleek Terminal", desc: "Dark, technical" },
+   249→   249→                  { key: "institutional", label: "Institutional", desc: "Premium, analytical" },
+   250→   250→                ].map((t) => (
+   251→   251→                  <button
+   252→   252→                    key={t.key}
+   253→   253→                    onClick={() => {
+   254→   254→                      applyTheme(t.key as any);
+   255→   255→                    }}
+   256→   256→                    className={cn(
+   257→   257→                      "p-3 rounded-md border text-left transition-colors",
+   258→   258→                      theme === t.key ? "border-primary ring-2 ring-primary/30" : "border-border hover:bg-muted",
+   259→   259→                    )}
+   260→   260→                  >
+   261→   261→                    <div className="font-medium text-sm">{t.label}</div>
+   262→   262→                    <div className="text-xs text-muted-foreground mt-1">{t.desc}</div>
+   263→   263→                  </button>
+   264→   264→                ))}
+   265→   265→              </div>
+   266→   266→            </div>
+   267→   267→            <Separator />
+   268→   268→            <div className="grid sm:grid-cols-2 gap-3">
+   269→   269→              <div className="space-y-2">
+   270→   270→                <Label>Density</Label>
+   271→   271→                <Select value={density} onValueChange={(v) => { setDensityState(v); setDensity(v as any); }}>
+   272→   272→                  <SelectTrigger><SelectValue /></SelectTrigger>
+   273→   273→                  <SelectContent>
+   274→   274→                    <SelectItem value="comfortable">Comfortable</SelectItem>
+   275→   275→                    <SelectItem value="compact">Compact</SelectItem>
+   276→   276→                  </SelectContent>
+   277→   277→                </Select>
+   278→   278→              </div>
+   279→   279→            </div>
+   280→   280→            <div className="flex items-center justify-between">
+   281→   281→              <div>
+   282→   282→                <div className="font-medium text-sm">Larger Text</div>
+   283→   283→                <div className="text-xs text-muted-foreground">Increase base font size.</div>
+   284→   284→              </div>
+   285→   285→              <Switch checked={largerText} onCheckedChange={(v) => { setLargerTextState(v); setLargerText(v); }} />
+   286→   286→            </div>
+   287→   287→            <div className="flex items-center justify-between">
+   288→   288→              <div>
+   289→   289→                <div className="font-medium text-sm">Reduced Motion</div>
+   290→   290→                <div className="text-xs text-muted-foreground">Minimize animations.</div>
+   291→   291→              </div>
+   292→   292→              <Switch checked={reducedMotion} onCheckedChange={(v) => { setReducedMotionState(v); setReducedMotion(v); }} />
+   293→   293→            </div>
+   294→   294→            <Button onClick={saveSettings}>Save Settings</Button>
+   295→   295→          </Card>
+   296→   296→        </TabsContent>
+   297→   297→
+   298→   298→        {/* Privacy */}
+   299→   299→        <TabsContent value="privacy">
+   300→   300→          <Card className="p-4 space-y-4">
+   301→   301→            <div className="flex items-start gap-3">
+   302→   302→              <Shield className="h-5 w-5 text-muted-foreground shrink-0 mt-0.5" />
+   303→   303→              <div>
+   304→   304→                <h2 className="font-medium">Local Privacy Mode</h2>
+   305→   305→                <p className="text-sm text-muted-foreground mt-1">
+   306→   306→                  When enabled, sensitive fields (private journal notes, psychology notes, strategy notes, review notes)
+   307→   307→                  are encrypted client-side using AES-GCM with a passphrase-derived key before persistence.
+   308→   308→                  Metadata remains available server-side for analytics and search.
+   309→   309→                </p>
+   310→   310→              </div>
+   311→   311→            </div>
+   312→   312→            <Separator />
+   313→   313→            <div className="flex items-center justify-between">
+   314→   314→              <div>
+   315→   315→                <div className="font-medium text-sm">Enable Privacy Mode</div>
+   316→   316→                <div className="text-xs text-muted-foreground">Encrypt sensitive fields before they leave your device.</div>
+   317→   317→              </div>
+   318→   318→              <Switch checked={privacyMode} onCheckedChange={setPrivacyMode} />
+   319→   319→            </div>
+   320→   320→            <p className="text-xs text-muted-foreground">
+   321→   321→              If you lose your passphrase, encrypted data cannot be recovered. We do not store the passphrase on the server.
+   322→   322→            </p>
+   323→   323→            <Button onClick={saveSettings}>Save</Button>
+   324→   324→          </Card>
+   325→   325→        </TabsContent>
+   326→   326→
+   327→   327→        {/* Data */}
+   328→   328→        <TabsContent value="data" className="space-y-4">
+   329→   329→          <Card className="p-4 space-y-3">
+   330→   330→            <h2 className="font-medium flex items-center gap-2"><Database className="h-4 w-4" /> Backup & Restore</h2>
+   331→   331→            <p className="text-sm text-muted-foreground">Backups include all structured data and a media manifest.</p>
+   332→   332→            <div className="flex flex-wrap gap-2">
+   333→   333→              <Button onClick={async () => {
+   334→   334→                const res = await fetch("/api/backups", { method: "POST" });
+   335→   335→                if (res.ok) { toast.success("Backup created."); qc.invalidateQueries({ queryKey: ["backups"] }); }
+   336→   336→                else toast.error("Failed to create backup.");
+   337→   337→              }}>
+   338→   338→                Create Backup
+   339→   339→              </Button>
+   340→   340→            </div>
+   341→   341→            <Separator />
+   342→   342→            <div className="space-y-2 max-h-64 overflow-y-auto">
+   343→   343→              {(backupsData?.items ?? []).map((b: any) => (
+   344→   344→                <div key={b.id} className="flex items-center gap-3 p-2 rounded-md border border-border">
+   345→   345→                  <div className="flex-1 min-w-0">
+   346→   346→                    <div className="text-sm font-medium truncate">{b.filename}</div>
+   347→   347→                    <div className="text-xs text-muted-foreground">
+   348→   348→                      {new Date(b.createdAt).toLocaleString()} · {(b.sizeBytes / 1024).toFixed(0)} KB
+   349→   349→                    </div>
+   350→   350→                  </div>
+   351→   351→                  <Button
+   352→   352→                    size="sm"
+   353→   353→                    variant="outline"
+   354→   354→                    onClick={async () => {
+   355→   355→                      const mode = confirm("OK to MERGE into existing data, Cancel to REPLACE (will delete current data)") ? "merge" : "replace";
+   356→   356→                      if (mode === "replace" && !confirm("This will DELETE all your current data and restore from backup. Are you sure?")) return;
+   357→   357→                      const res = await fetch("/api/backups", {
+   358→   358→                        method: "PUT",
+   359→   359→                        headers: { "Content-Type": "application/json" },
+   360→   360→                        body: JSON.stringify({ backupId: b.id, mode }),
+   361→   361→                      });
+   362→   362→                      if (res.ok) { toast.success("Restore complete."); qc.invalidateQueries(); }
+   363→   363→                      else toast.error("Restore failed.");
+   364→   364→                    }}
+   365→   365→                  >
+   366→   366→                    Restore
+   367→   367→                  </Button>
+   368→   368→                </div>
+   369→   369→              ))}
+   370→   370→              {(backupsData?.items ?? []).length === 0 && (
+   371→   371→                <p className="text-sm text-muted-foreground">No backups yet.</p>
+   372→   372→              )}
+   373→   373→            </div>
+   374→   374→          </Card>
+   375→   375→
+   376→   376→          <Card className="p-4 space-y-3">
+   377→   377→            <h2 className="font-medium flex items-center gap-2"><Download className="h-4 w-4" /> Export</h2>
+   378→   378→            <div className="flex flex-wrap gap-2">
+   379→   379→              <Button variant="outline" onClick={async () => {
+   380→   380→                const res = await fetch("/api/exports?format=csv&type=trades");
+   381→   381→                const text = await res.text();
+   382→   382→                const blob = new Blob([text], { type: "text/csv" });
+   383→   383→                const url = URL.createObjectURL(blob);
+   384→   384→                const a = document.createElement("a");
+   385→   385→                a.href = url; a.download = `dnd-trades-${Date.now()}.csv`; a.click();
+   386→   386→                URL.revokeObjectURL(url);
+   387→   387→                toast.success("CSV export ready.");
+   388→   388→              }}>
+   389→   389→                Trades (CSV)
+   390→   390→              </Button>
+   391→   391→              <Button variant="outline" onClick={async () => {
+   392→   392→                const res = await fetch("/api/exports?format=json&type=all");
+   393→   393→                const data = await res.json();
+   394→   394→                const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
+   395→   395→                const url = URL.createObjectURL(blob);
+   396→   396→                const a = document.createElement("a");
+   397→   397→                a.href = url; a.download = `dnd-export-${Date.now()}.json`; a.click();
+   398→   398→                URL.revokeObjectURL(url);
+   399→   399→                toast.success("JSON export ready.");
+   400→   400→              }}>
+   401→   401→                Everything (JSON)
+   402→   402→              </Button>
+   403→   403→            </div>
+   404→   404→          </Card>
+   405→   405→
+   406→   406→          <Card className="p-4 space-y-3">
+   407→   407→            <h2 className="font-medium flex items-center gap-2"><Upload className="h-4 w-4" /> Import (CSV)</h2>
+   408→   408→            <p className="text-sm text-muted-foreground">
+   409→   409→              Import trades from a CSV file. You will be able to map columns, preview, validate and confirm before any records are created.
+   410→   410→            </p>
+   411→   411→            <ImportCsvDialog onImported={() => qc.invalidateQueries({ queryKey: ["trades"] })} />
+   412→   412→          </Card>
+   413→   413→        </TabsContent>
+   414→   414→
+   415→   415→        {/* Legal */}
+   416→   416→        <TabsContent value="legal">
+   417→   417→          <Card className="p-4 space-y-3">
+   418→   418→            <h2 className="font-medium">Legal Documents</h2>
+   419→   419→            <LegalDoc doc="terms" label="Terms of Service" />
+   420→   420→            <LegalDoc doc="privacy" label="Privacy Policy" />
+   421→   421→            <LegalDoc doc="cookies" label="Cookie Policy" />
+   422→   422→            <Separator />
+   423→   423→            <p className="text-xs text-muted-foreground">
+   424→   424→              DnD is a trading journaling, analytics and performance-management product. It is not financial advice, not investment advice, and does not guarantee profit.
+   425→   425→            </p>
+   426→   426→          </Card>
+   427→   427→        </TabsContent>
+   428→   428→      </Tabs>
+   429→   429→    </div>
+   430→   430→  );
+   431→   431→}
+   432→   432→
+   433→   433→function AccountCreateDialog({ onCreated }: { onCreated: () => void }) {
+   434→   434→  const [open, setOpen] = useState(false);
+   435→   435→  const [name, setName] = useState("");
+   436→   436→  const [broker, setBroker] = useState("");
+   437→   437→  const [currency, setCurrency] = useState("USD");
+   438→   438→  const [balance, setBalance] = useState("10000");
+   439→   439→  const [isDefault, setIsDefault] = useState(false);
+   440→   440→
+   441→   441→  async function submit() {
+   442→   442→    const res = await fetch("/api/accounts", {
+   443→   443→      method: "POST",
+   444→   444→      headers: { "Content-Type": "application/json" },
+   445→   445→      body: JSON.stringify({ name, broker, currency, startingBalanceCents: Number(balance) * 100, isDefault }),
+   446→   446→    });
+   447→   447→    if (res.ok) { toast.success("Account created."); setOpen(false); onCreated(); setName(""); }
+   448→   448→    else toast.error("Failed to create account.");
+   449→   449→  }
+   450→   450→
+   451→   451→  return (
+   452→   452→    <Dialog open={open} onOpenChange={setOpen}>
+   453→   453→      <DialogTrigger asChild><Button size="sm" variant="outline"><Plus className="h-4 w-4" /> Add</Button></DialogTrigger>
+   454→   454→      <DialogContent>
+   455→   455→        <DialogHeader><DialogTitle>New Account</DialogTitle></DialogHeader>
+   456→   456→        <div className="space-y-3">
+   457→   457→          <div className="space-y-2">
+   458→   458→            <Label>Account Name</Label>
+   459→   459→            <Input value={name} onChange={(e) => setName(e.target.value)} />
+   460→   460→          </div>
+   461→   461→          <div className="grid grid-cols-2 gap-3">
+   462→   462→            <div className="space-y-2">
+   463→   463→              <Label>Broker</Label>
+   464→   464→              <Input value={broker} onChange={(e) => setBroker(e.target.value)} />
+   465→   465→            </div>
+   466→   466→            <div className="space-y-2">
+   467→   467→              <Label>Currency</Label>
+   468→   468→              <Select value={currency} onValueChange={setCurrency}>
+   469→   469→                <SelectTrigger><SelectValue /></SelectTrigger>
+   470→   470→                <SelectContent>
+   471→   471→                  <SelectItem value="USD">USD</SelectItem>
+   472→   472→                  <SelectItem value="EUR">EUR</SelectItem>
+   473→   473→                  <SelectItem value="GBP">GBP</SelectItem>
+   474→   474→                  <SelectItem value="JPY">JPY</SelectItem>
+   475→   475→                </SelectContent>
+   476→   476→              </Select>
+   477→   477→            </div>
+   478→   478→          </div>
+   479→   479→          <div className="grid grid-cols-2 gap-3">
+   480→   480→            <div className="space-y-2">
+   481→   481→              <Label>Starting Balance</Label>
+   482→   482→              <Input type="number" value={balance} onChange={(e) => setBalance(e.target.value)} />
+   483→   483→            </div>
+   484→   484→            <div className="space-y-2">
+   485→   485→              <Label>Default?</Label>
+   486→   486→              <Switch checked={isDefault} onCheckedChange={setIsDefault} />
+   487→   487→            </div>
+   488→   488→          </div>
+   489→   489→          <Button onClick={submit}>Create</Button>
+   490→   490→        </div>
+   491→   491→      </DialogContent>
+   492→   492→    </Dialog>
+   493→   493→  );
+   494→   494→}
+   495→   495→
+   496→   496→function InstrumentCreateDialog({ onCreated }: { onCreated: () => void }) {
+   497→   497→  const [open, setOpen] = useState(false);
+   498→   498→  const [symbol, setSymbol] = useState("");
+   499→   499→  const [market, setMarket] = useState("forex");
+   500→   500→  const [pipSize, setPipSize] = useState("0.0001");
+   501→   501→  const [contractSize, setContractSize] = useState("100000");
+   502→   502→  const [pricePrecision, setPricePrecision] = useState(5);
+   503→   503→
+   504→   504→  async function submit() {
+   505→   505→    const res = await fetch("/api/instruments", {
+   506→   506→      method: "POST",
+   507→   507→      headers: { "Content-Type": "application/json" },
+   508→   508→      body: JSON.stringify({ symbol, market, pipSize, contractSize, pricePrecision }),
+   509→   509→    });
+   510→   510→    if (res.ok) { toast.success("Instrument created."); setOpen(false); onCreated(); setSymbol(""); }
+   511→   511→    else toast.error("Failed to create instrument.");
+   512→   512→  }
+   513→   513→
+   514→   514→  return (
+   515→   515→    <Dialog open={open} onOpenChange={setOpen}>
+   516→   516→      <DialogTrigger asChild><Button size="sm" variant="outline"><Plus className="h-4 w-4" /> Add</Button></DialogTrigger>
+   517→   517→      <DialogContent>
+   518→   518→        <DialogHeader><DialogTitle>New Instrument</DialogTitle></DialogHeader>
+   519→   519→        <div className="space-y-3">
+   520→   520→          <div className="space-y-2">
+   521→   521→            <Label>Symbol</Label>
+   522→   522→            <Input value={symbol} onChange={(e) => setSymbol(e.target.value.toUpperCase())} placeholder="XAUUSD" />
+   523→   523→          </div>
+   524→   524→          <div className="grid grid-cols-2 gap-3">
+   525→   525→            <div className="space-y-2">
+   526→   526→              <Label>Market</Label>
+   527→   527→              <Select value={market} onValueChange={setMarket}>
+   528→   528→                <SelectTrigger><SelectValue /></SelectTrigger>
+   529→   529→                <SelectContent>
+   530→   530→                  <SelectItem value="forex">Forex</SelectItem>
+   531→   531→                  <SelectItem value="gold">Gold</SelectItem>
+   532→   532→                  <SelectItem value="indices">Indices</SelectItem>
+   533→   533→                  <SelectItem value="futures">Futures</SelectItem>
+   534→   534→                  <SelectItem value="crypto">Crypto</SelectItem>
+   535→   535→                  <SelectItem value="stocks">Stocks</SelectItem>
+   536→   536→                  <SelectItem value="custom">Custom</SelectItem>
+   537→   537→                </SelectContent>
+   538→   538→              </Select>
+   539→   539→            </div>
+   540→   540→            <div className="space-y-2">
+   541→   541→              <Label>Pip Size</Label>
+   542→   542→              <Input value={pipSize} onChange={(e) => setPipSize(e.target.value)} />
+   543→   543→            </div>
+   544→   544→            <div className="space-y-2">
+   545→   545→              <Label>Contract Size</Label>
+   546→   546→              <Input value={contractSize} onChange={(e) => setContractSize(e.target.value)} />
+   547→   547→            </div>
+   548→   548→            <div className="space-y-2">
+   549→   549→              <Label>Price Precision</Label>
+   550→   550→              <Input type="number" value={pricePrecision} onChange={(e) => setPricePrecision(Number(e.target.value))} />
+   551→   551→            </div>
+   552→   552→          </div>
+   553→   553→          <Button onClick={submit}>Create</Button>
+   554→   554→        </div>
+   555→   555→      </DialogContent>
+   556→   556→    </Dialog>
+   557→   557→  );
+   558→   558→}
+   559→   559→
+   560→   560→function ImportCsvDialog({ onImported }: { onImported: () => void }) {
+   561→   561→  const [open, setOpen] = useState(false);
+   562→   562→  const [step, setStep] = useState(1);
+   563→   563→  const [filename, setFilename] = useState("");
+   564→   564→  const [content, setContent] = useState("");
+   565→   565→  const [importId, setImportId] = useState<string | null>(null);
+   566→   566→  const [headers, setHeaders] = useState<string[]>([]);
+   567→   567→  const [sampleRows, setSampleRows] = useState<Record<string, string>[]>([]);
+   568→   568→  const [mapping, setMapping] = useState<Record<string, string>>({});
+   569→   569→  const [validation, setValidation] = useState<any>(null);
+   570→   570→
+   571→   571→  const FIELDS = ["instrumentSymbol", "direction", "entryPrice", "exitPrice", "stopPrice", "targetPrice", "quantity", "entryTime", "exitTime", "session", "setupGrade", "feesCents", "commissionCents", "swapCents"];
+   572→   572→
+   573→   573→  async function upload() {
+   574→   574→    const res = await fetch("/api/imports", {
+   575→   575→      method: "POST",
+   576→   576→      headers: { "Content-Type": "application/json" },
+   577→   577→      body: JSON.stringify({ filename, source: "csv", content }),
+   578→   578→    });
+   579→   579→    if (!res.ok) { toast.error("Upload failed."); return; }
+   580→   580→    const data = await res.json();
+   581→   581→    setImportId(data.id);
+   582→   582→    const summary = JSON.parse(data.summaryJson ?? "{}");
+   583→   583→    setHeaders(summary.headers ?? []);
+   584→   584→    setSampleRows(summary.sampleRows ?? []);
+   585→   585→    setStep(2);
+   586→   586→  }
+   587→   587→
+   588→   588→  async function validateImport() {
+   589→   589→    const res = await fetch(`/api/imports/${importId}`, {
+   590→   590→      method: "PATCH",
+   591→   591→      headers: { "Content-Type": "application/json" },
+   592→   592→      body: JSON.stringify({ action: "map", mapping }),
+   593→   593→    });
+   594→   594→    if (!res.ok) { toast.error("Validation failed."); return; }
+   595→   595→    const data = await res.json();
+   596→   596→    setValidation(data);
+   597→   597→    setStep(3);
+   598→   598→  }
+   599→   599→
+   600→   600→  async function confirmImport() {
+   601→   601→    const res = await fetch(`/api/imports/${importId}`, {
+   602→   602→      method: "PATCH",
+   603→   603→      headers: { "Content-Type": "application/json" },
+   604→   604→      body: JSON.stringify({ action: "confirm" }),
+   605→   605→    });
+   606→   606→    if (!res.ok) { toast.error("Import failed."); return; }
+   607→   607→    const data = await res.json();
+   608→   608→    toast.success(`Imported ${data.imported} trades.`);
+   609→   609→    setOpen(false);
+   610→   610→    setStep(1);
+   611→   611→    onImported();
+   612→   612→  }
+   613→   613→
+   614→   614→  function onFile(file: File) {
+   615→   615→    setFilename(file.name);
+   616→   616→    const reader = new FileReader();
+   617→   617→    reader.onload = () => setContent(String(reader.result));
+   618→   618→    reader.readAsText(file);
+   619→   619→  }
+   620→   620→
+   621→   621→  return (
+   622→   622→    <Dialog open={open} onOpenChange={(o) => { setOpen(o); if (!o) setStep(1); }}>
+   623→   623→      <DialogTrigger asChild><Button size="sm" variant="outline">Import CSV</Button></DialogTrigger>
+   624→   624→      <DialogContent className="max-w-3xl max-h-[85vh] overflow-y-auto">
+   625→   625→        <DialogHeader><DialogTitle>Import Trades from CSV</DialogTitle></DialogHeader>
+   626→   626→        {step === 1 && (
+   627→   627→          <div className="space-y-3">
+   628→   628→            <div className="space-y-2">
+   629→   629→              <Label>CSV File</Label>
+   630→   630→              <Input type="file" accept=".csv" onChange={(e) => e.target.files?.[0] && onFile(e.target.files[0])} />
+   631→   631→            </div>
+   632→   632→            <div className="rounded-md border border-border p-3 text-xs text-muted-foreground">
+   633→   633→              Expected columns: instrumentSymbol, direction (long/short), entryPrice, exitPrice, stopPrice, targetPrice, quantity, entryTime, exitTime, session, setupGrade, feesCents, commissionCents, swapCents.
+   634→   634→              A header row is required.
+   635→   635→            </div>
+   636→   636→            <Button onClick={upload} disabled={!content}>Upload & Detect</Button>
+   637→   637→          </div>
+   638→   638→        )}
+   639→   639→        {step === 2 && (
+   640→   640→          <div className="space-y-3">
+   641→   641→            <h3 className="font-medium text-sm">Map columns</h3>
+   642→   642→            <div className="space-y-1 max-h-48 overflow-y-auto">
+   643→   643→              {headers.map((h) => (
+   644→   644→                <div key={h} className="flex items-center gap-2">
+   645→   645→                  <span className="text-xs w-32 truncate">{h}</span>
+   646→   646→                  <span className="text-muted-foreground">→</span>
+   647→   647→                  <Select
+   648→   648→                    value={mapping[h] ?? ""}
+   649→   649→                    onValueChange={(v) => setMapping((m) => ({ ...m, [h]: v }))}
+   650→   650→                  >
+   651→   651→                    <SelectTrigger className="h-7 text-xs"><SelectValue placeholder="Skip" /></SelectTrigger>
+   652→   652→                    <SelectContent>
+   653→   653→                      {FIELDS.map((f) => <SelectItem key={f} value={f}>{f}</SelectItem>)}
+   654→   654→                    </SelectContent>
+   655→   655→                  </Select>
+   656→   656→                </div>
+   657→   657→              ))}
+   658→   658→            </div>
+   659→   659→            <Button onClick={validateImport}>Validate</Button>
+   660→   660→          </div>
+   661→   661→        )}
+   662→   662→        {step === 3 && validation && (
+   663→   663→          <div className="space-y-3">
+   664→   664→            <div className="grid grid-cols-3 gap-2 text-center">
+   665→   665→              <div className="rounded-md border border-border p-3">
+   666→   666→                <div className="text-2xl font-semibold text-profit tnum">{validation.valid}</div>
+   667→   667→                <div className="text-xs text-muted-foreground">Valid</div>
+   668→   668→              </div>
+   669→   669→              <div className="rounded-md border border-border p-3">
+   670→   670→                <div className="text-2xl font-semibold text-warning tnum">{validation.duplicates}</div>
+   671→   671→                <div className="text-xs text-muted-foreground">Duplicates (skipped)</div>
+   672→   672→              </div>
+   673→   673→              <div className="rounded-md border border-border p-3">
+   674→   674→                <div className="text-2xl font-semibold text-loss tnum">{validation.invalid}</div>
+   675→   675→                <div className="text-xs text-muted-foreground">Invalid (skipped)</div>
+   676→   676→              </div>
+   677→   677→            </div>
+   678→   678→            {validation.issues.length > 0 && (
+   679→   679→              <div className="rounded-md border border-warning/50 bg-warning/5 p-3 max-h-32 overflow-y-auto">
+   680→   680→                <div className="text-xs font-medium text-warning mb-1">Issues:</div>
+   681→   681→                <ul className="text-xs text-muted-foreground space-y-0.5">
+   682→   682→                  {validation.issues.slice(0, 10).map((iss: string, i: number) => <li key={i}>{iss}</li>)}
+   683→   683→                </ul>
+   684→   684→              </div>
+   685→   685→            )}
+   686→   686→            <Button onClick={confirmImport}>Confirm Import ({validation.valid} trades)</Button>
+   687→   687→          </div>
+   688→   688→        )}
+   689→   689→      </DialogContent>
+   690→   690→    </Dialog>
+   691→   691→  );
+   692→   692→}
+   693→   693→
+   694→   694→function LegalDoc({ doc, label }: { doc: string; label: string }) {
+   695→   695→  const [state, setState] = useState<any>(null);
+   696→   696→  const [open, setOpen] = useState(false);
+   697→   697→
+   698→   698→  useEffect(() => {
+   699→   699→    fetch(`/api/legal/${doc}`).then((r) => r.json()).then(setState);
+   700→   700→  }, [doc]);
+   701→   701→
+   702→   702→  async function accept() {
+   703→   703→    const res = await fetch(`/api/legal/${doc}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({}) });
+   704→   704→    if (res.ok) {
+   705→   705→      toast.success(`${label} accepted.`);
+   706→   706→      const data = await res.json();
+   707→   707→      setState({ ...state, accepted: true, acceptedAt: data.acceptedAt });
+   708→   708→    }
+   709→   709→  }
+   710→   710→
+   711→   711→  return (
+   712→   712→    <div className="flex items-center justify-between gap-3 py-2">
+   713→   713→      <div>
+   714→   714→        <div className="font-medium text-sm">{label}</div>
+   715→   715→        <div className="text-xs text-muted-foreground">
+   716→   716→          Version {state?.version ?? "1.0"} · {state?.accepted ? `Accepted ${new Date(state.acceptedAt).toLocaleDateString()}` : "Not yet accepted"}
+   717→   717→        </div>
+   718→   718→      </div>
+   719→   719→      <div className="flex gap-2">
+   720→   720→        <Button size="sm" variant="ghost" onClick={() => setOpen(true)}>View</Button>
+   721→   721→        {state && !state.accepted && <Button size="sm" onClick={accept}>Accept</Button>}
+   722→   722→      </div>
+   723→   723→      <Dialog open={open} onOpenChange={setOpen}>
+   724→   724→        <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
+   725→   725→          <DialogHeader><DialogTitle>{label}</DialogTitle></DialogHeader>
+   726→   726→          <div className="text-sm text-muted-foreground whitespace-pre-wrap leading-relaxed">
+   727→   727→            {LEGAL_DOCS[doc] ?? "Document text."}
+   728→   728→          </div>
+   729→   729→        </DialogContent>
+   730→   730→      </Dialog>
+   731→   731→    </div>
+   732→   732→  );
+   733→   733→}
+   734→   734→
+   735→   735→const LEGAL_DOCS: Record<string, string> = {
+   736→   736→  terms: `Terms of Service\n\nThis is a placeholder Terms of Service document for DnD. It should be reviewed by a legal professional before production use.\n\n1. Acceptance of Terms\nBy accessing DnD you agree to these terms.\n\n2. Description of Service\nDnD is a trading journaling, analytics and performance-management product. It is not financial advice.\n\n3. User Responsibilities\nYou are responsible for the accuracy of the data you enter and for maintaining the confidentiality of your account credentials.\n\n4. Limitation of Liability\nDnD is provided "as is" without warranties of any kind.\n\n5. Changes\nWe may update these terms from time to time.`,
+   737→   737→  privacy: `Privacy Policy\n\nThis is a placeholder Privacy Policy for DnD.\n\n1. Data We Collect\nWe store the trades, strategies, reviews, media and settings you create.\n\n2. How We Use Data\nTo provide journaling, analytics and review features.\n\n3. Data Security\nWe use hashed passwords, signed session cookies, and access controls. Privacy Mode encrypts sensitive fields client-side.\n\n4. Data Retention\nYour data is retained until you delete your account.\n\n5. Your Rights\nYou may export or delete your data at any time.`,
+   738→   738→  cookies: `Cookie Policy\n\nDnD uses only essential cookies:\n\n- Session cookie (httpOnly, signed) for authentication\n- LocalStorage for theme, density and navigation preferences\n\nWe do not use tracking or advertising cookies.`,
+   739→   739→};
+   740→   740→

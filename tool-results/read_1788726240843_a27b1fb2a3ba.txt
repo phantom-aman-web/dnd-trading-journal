@@ -1,0 +1,717 @@
+     1→/**
+     2→ * DnD — Financial calculation engine.
+     3→ * Pure functions. Authoritative server-side computation per spec section 31.
+     4→ * NEVER produces NaN or Infinity (spec section 110).
+     5→ */
+     6→
+     7→import {
+     8→  Decimal,
+     9→  dAdd, dSub, dMul, dDiv, dAbs, dCmp, dNormalize, dIsZero, dToNumber, dMax,
+    10→} from "./decimal";
+    11→import { Cents, toCents, addCents, subCents, negCents } from "./money";
+    12→
+    13→// ---------------------------------------------------------------------------
+    14→// Types
+    15→// ---------------------------------------------------------------------------
+    16→
+    17→export type Direction = "long" | "short";
+    18→export type TradeStatus = "open" | "win" | "loss" | "breakeven" | "partial_win" | "partial_loss" | "cancelled";
+    19→
+    20→export interface ExecutionFill {
+    21→  kind: "entry" | "exit";
+    22→  price: Decimal;
+    23→  quantity: Decimal;
+    24→  timestamp?: string;
+    25→  notes?: string;
+    26→}
+    27→
+    28→export interface TradeCalcInput {
+    29→  direction: Direction;
+    30→  plannedEntryPrice?: Decimal | null;
+    31→  plannedStopPrice?: Decimal | null;
+    32→  plannedTargetPrice?: Decimal | null;
+    33→  fills: ExecutionFill[];
+    34→  feesCents?: Cents;
+    35→  commissionCents?: Cents;
+    36→  swapCents?: Cents;
+    37→  slippageCents?: Cents;
+    38→  contractSize?: Decimal; // e.g. 100000 for standard forex lot
+    39→  pipSize?: Decimal; // e.g. 0.0001 for forex
+    40→  /**
+    41→   * Value per 1.0 price unit per 1.0 quantity, in cents.
+    42→   * Defaults to 100 (i.e. $1 per 1.0 price move per 1.0 qty) — backward compatible
+    43→   * with the original hardcoded behaviour for stocks/crypto where price * qty
+    44→   * directly equals the dollar P&L. Callers may override this with an
+    45→   * instrument-derived value (see `computePointValueCents` below) so that
+    46→   * forex/metals/indices/futures whose "1.0 price move" semantics differ from
+    47→   * a 1-share stock are scaled correctly.
+    48→   */
+    49→  pointValueCents?: Cents;
+    50→}
+    51→
+    52→/**
+    53→ * Compute an instrument-aware `pointValueCents` from the Instrument's stored
+    54→ * spec fields. The returned value represents the dollar value (in cents) of a
+    55→ * single tick (or pip, when no tickSize is set) per 1.0 contract.
+    56→ *
+    57→ * - Forex (e.g. 100000 * 0.0001 * 100 = 1000 cents = $10 per pip per lot)
+    58→ * - Gold/metals, indices, futures: contractSize * tickSize * 100
+    59→ * - Crypto/stocks (contractSize 1, tickSize 0.01): falls back to 100 to keep
+    60→ *   the 1:1 price-to-dollar semantics that the default 100 already provides.
+    61→ *
+    62→ * All inputs are decimal strings (per spec §7); non-numeric values are
+    63→ * coerced to 0 so the result is always a finite, non-NaN integer.
+    64→ */
+    65→export function computePointValueCents(
+    66→  contractSize: string | number | null | undefined,
+    67→  tickSize: string | number | null | undefined,
+    68→  pipSize: string | number | null | undefined,
+    69→): Cents {
+    70→  const cs = Number(contractSize ?? "1");
+    71→  const ts = Number(tickSize ?? pipSize ?? "0.01");
+    72→  if (!Number.isFinite(cs) || !Number.isFinite(ts)) return 100;
+    73→  const cents = Math.round(cs * ts * 100);
+    74→  // For instruments where contractSize * tickSize rounds to ≤1 cent (e.g.
+    75→  // 1-share stocks with a 0.01 tick → 1 cent), preserve the historical
+    76→  // 1:1-with-price default of 100 cents so existing stock/crypto P&L math is
+    77→  // unaffected. Only non-trivial contracts (forex/metals/indices/futures)
+    78→  // produce a derived value > 100 and therefore change behaviour.
+    79→  if (!Number.isFinite(cents) || cents <= 1) return 100;
+    80→  return cents;
+    81→}
+    82→
+    83→export interface TradeCalcResult {
+    84→  entryPriceAvg: Decimal | null;
+    85→  exitPriceAvg: Decimal | null;
+    86→  totalQuantity: Decimal | null;
+    87→  grossPnlCents: Cents;
+    88→  totalCostsCents: Cents;
+    89→  netPnlCents: Cents;
+    90→  stopDistance: Decimal | null;
+    91→  targetDistance: Decimal | null;
+    92→  plannedRR: Decimal | null;
+    93→  actualR: Decimal | null;
+    94→  riskAmountCents: Cents | null;
+    95→  rewardAmountCents: Cents | null;
+    96→  status: TradeStatus;
+    97→}
+    98→
+    99→// ---------------------------------------------------------------------------
+   100→// Psychology tag parsing (spec section 22 — psychBeforeJson shape)
+   101→// ---------------------------------------------------------------------------
+   102→
+   103→/**
+   104→ * Extract mood-tag strings from a `psychBeforeJson` (or `psychAfterJson`)
+   105→ * column. The column is stored as a JSON **object** whose `moodTags` field is
+   106→ * an array of strings (per spec section 38), but legacy rows may store a
+   107→ * bare array — both shapes are supported. Any other shape yields `[]`.
+   108→ *
+   109→ * Never throws: malformed JSON, null, or unexpected shapes degrade to `[]`.
+   110→ */
+   111→export function safeParsePsychTags(json: string | null | undefined): string[] {
+   112→  if (!json) return [];
+   113→  let v: unknown;
+   114→  try {
+   115→    v = JSON.parse(json);
+   116→  } catch {
+   117→    return [];
+   118→  }
+   119→  if (Array.isArray(v)) {
+   120→    // Backward-compat: legacy rows stored a bare array of tags.
+   121→    return v.filter((x): x is string => typeof x === "string");
+   122→  }
+   123→  if (v && typeof v === "object") {
+   124→    const tags = (v as { moodTags?: unknown }).moodTags;
+   125→    if (Array.isArray(tags)) {
+   126→      return tags.filter((x): x is string => typeof x === "string");
+   127→    }
+   128→  }
+   129→  return [];
+   130→}
+   131→
+   132→// ---------------------------------------------------------------------------
+   133→// Core: compute trade P&L from execution ledger (spec section 33)
+   134→// ---------------------------------------------------------------------------
+   135→
+   136→/**
+   137→ * Calculate the gross P&L in cents from a list of fills.
+   138→ * Method: volume-weighted average entry and exit prices, signed by direction.
+   139→ * gross = (exitAvg - entryAvg) * qty * contractSize * pointValue  (long)
+   140→ * gross = (entryAvg - exitAvg) * qty * contractSize * pointValue  (short)
+   141→ * Only matches qty between entries and exits.
+   142→ */
+   143→export function calculateTradePnl(input: TradeCalcInput): TradeCalcResult {
+   144→  const contractSize = input.contractSize ?? "1";
+   145→  const pointValueCents = input.pointValueCents ?? 100; // default 1.00 per 1.0 qty per 1.0 price
+   146→
+   147→  const entries = input.fills.filter((f) => f.kind === "entry");
+   148→  const exits = input.fills.filter((f) => f.kind === "exit");
+   149→
+   150→  // Volume-weighted average entry price
+   151→  const entryAvg = vwap(entries);
+   152→  const exitAvg = vwap(exits);
+   153→
+   154→  // Matched quantity (min of total entry qty and total exit qty)
+   155→  const entryQty = sumQty(entries);
+   156→  const exitQty = sumQty(exits);
+   157→  const matchedQty = dCmp(entryQty, exitQty) <= 0 ? entryQty : exitQty;
+   158→
+   159→  let grossPnlCents: Cents = 0;
+   160→  if (!dIsZero(matchedQty) && entryAvg && exitAvg) {
+   161→    // price diff * matchedQty * contractSize * pointValue
+   162→    const diff = input.direction === "long"
+   163→      ? dSub(exitAvg, entryAvg)
+   164→      : dSub(entryAvg, exitAvg);
+   165→    const grossDecimal = dMul(dMul(dMul(diff, matchedQty), contractSize), dNormalize(String(pointValueCents / 100)));
+   166→    // convert decimal dollars to cents
+   167→    grossPnlCents = toCents(dToNumber(grossDecimal));
+   168→  }
+   169→
+   170→  // Costs
+   171→  const fees = input.feesCents ?? 0;
+   172→  const commission = input.commissionCents ?? 0;
+   173→  const swap = input.swapCents ?? 0;
+   174→  const slippage = input.slippageCents ?? 0;
+   175→  const totalCostsCents = addCents(addCents(addCents(fees, commission), swap), slippage);
+   176→
+   177→  // Net = gross - costs (costs always reduce PnL)
+   178→  const netPnlCents = subCents(grossPnlCents, totalCostsCents);
+   179→
+   180→  // Stop & target distances
+   181→  const stopDistance = (input.plannedStopPrice && input.plannedEntryPrice && !dIsZero(dSub(input.plannedEntryPrice, input.plannedStopPrice)))
+   182→    ? dAbs(dSub(input.plannedEntryPrice, input.plannedStopPrice))
+   183→    : null;
+   184→  const targetDistance = (input.plannedTargetPrice && input.plannedEntryPrice && !dIsZero(dSub(input.plannedTargetPrice, input.plannedEntryPrice)))
+   185→    ? dAbs(dSub(input.plannedTargetPrice, input.plannedEntryPrice))
+   186→    : null;
+   187→
+   188→  // Planned R:R
+   189→  const plannedRR = (stopDistance && targetDistance)
+   190→    ? dDiv(targetDistance, stopDistance)
+   191→    : null;
+   192→
+   193→  // Risk amount: stopDistance * plannedQty * contractSize * pointValue
+   194→  // We use entryQty as plannedQty (or matchedQty fallback)
+   195→  const plannedQty = entryQty;
+   196→  let riskAmountCents: Cents | null = null;
+   197→  let rewardAmountCents: Cents | null = null;
+   198→  if (stopDistance && !dIsZero(plannedQty)) {
+   199→    const riskDecimal = dMul(dMul(dMul(stopDistance, plannedQty), contractSize), dNormalize(String(pointValueCents / 100)));
+   200→    riskAmountCents = toCents(dToNumber(riskDecimal));
+   201→  }
+   202→  if (targetDistance && !dIsZero(plannedQty)) {
+   203→    const rewardDecimal = dMul(dMul(dMul(targetDistance, plannedQty), contractSize), dNormalize(String(pointValueCents / 100)));
+   204→    rewardAmountCents = toCents(dToNumber(rewardDecimal));
+   205→  }
+   206→
+   207→  // Actual R: net / risk
+   208→  let actualR: Decimal | null = null;
+   209→  if (riskAmountCents && riskAmountCents > 0) {
+   210→    actualR = dDiv(String(netPnlCents / 100), String(riskAmountCents / 100));
+   211→  }
+   212→
+   213→  // Status
+   214→  const status = deriveStatus(netPnlCents, entryQty, exitQty);
+   215→
+   216→  return {
+   217→    entryPriceAvg: entryAvg,
+   218→    exitPriceAvg: exitAvg,
+   219→    totalQuantity: plannedQty,
+   220→    grossPnlCents,
+   221→    totalCostsCents,
+   222→    netPnlCents,
+   223→    stopDistance,
+   224→    targetDistance,
+   225→    plannedRR,
+   226→    actualR,
+   227→    riskAmountCents,
+   228→    rewardAmountCents,
+   229→    status,
+   230→  };
+   231→}
+   232→
+   233→function vwap(fills: ExecutionFill[]): Decimal | null {
+   234→  if (fills.length === 0) return null;
+   235→  let pq = 0; // sum of price*qty
+   236→  let q = 0;  // sum of qty
+   237→  for (const f of fills) {
+   238→    const p = dToNumber(f.price);
+   239→    const qt = dToNumber(f.quantity);
+   240→    if (!Number.isFinite(p) || !Number.isFinite(qt)) continue;
+   241→    pq += p * qt;
+   242→    q += qt;
+   243→  }
+   244→  if (q === 0) return null;
+   245→  return dNormalize(String(+(pq / q).toFixed(10)));
+   246→}
+   247→
+   248→function sumQty(fills: ExecutionFill[]): Decimal {
+   249→  let s = 0;
+   250→  for (const f of fills) s += dToNumber(f.quantity);
+   251→  return dNormalize(String(+s.toFixed(10)));
+   252→}
+   253→
+   254→function deriveStatus(netPnl: Cents, entryQty: Decimal, exitQty: Decimal): TradeStatus {
+   255→  if (dIsZero(entryQty)) return "open";
+   256→  if (dIsZero(exitQty)) return "open";
+   257→  const cmp = dCmp(exitQty, entryQty);
+   258→  if (cmp < 0) {
+   259→    return netPnl > 0 ? "partial_win" : netPnl < 0 ? "partial_loss" : "breakeven";
+   260→  }
+   261→  if (netPnl > 0) return "win";
+   262→  if (netPnl < 0) return "loss";
+   263→  return "breakeven";
+   264→}
+   265→
+   266→// ---------------------------------------------------------------------------
+   267→// Position sizing (spec section 79)
+   268→// ---------------------------------------------------------------------------
+   269→
+   270→export interface PositionSizeInput {
+   271→  accountBalanceCents: Cents;
+   272→  riskPct: Decimal;       // e.g. 0.005 for 0.5%
+   273→  entryPrice: Decimal;
+   274→  stopPrice: Decimal;
+   275→  contractSize: Decimal;
+   276→  pointValueCents: Cents;
+   277→}
+   278→
+   279→export interface PositionSizeResult {
+   280→  riskAmountCents: Cents;
+   281→  stopDistance: Decimal;
+   282→  positionSize: Decimal | null;
+   283→  plannedLossCents: Cents;
+   284→  plannedRewardCents: Cents | null; // only if target provided
+   285→}
+   286→
+   287→export function calculatePositionSize(input: PositionSizeInput): PositionSizeResult {
+   288→  const riskAmountCents = Math.round((input.accountBalanceCents * dToNumber(input.riskPct)) / 100) * 100 / 100;
+   289→  // careful: Math.round(balance * pct) gives cents directly
+   290→  const riskCents = Math.round((input.accountBalanceCents / 100) * dToNumber(input.riskPct) * 100);
+   291→  const stopDistance = dAbs(dSub(input.entryPrice, input.stopPrice));
+   292→  // position size = riskAmount / (stopDistance * contractSize * pointValue)
+   293→  let positionSize: Decimal | null = null;
+   294→  if (!dIsZero(stopDistance)) {
+   295→    const denom = dToNumber(dMul(dMul(stopDistance, input.contractSize), dNormalize(String(input.pointValueCents / 100))));
+   296→    if (denom > 0) {
+   297→      positionSize = dDiv(String(riskCents / 100), String(denom));
+   298→    }
+   299→  }
+   300→  return {
+   301→    riskAmountCents: riskCents,
+   302→    stopDistance,
+   303→    positionSize,
+   304→    plannedLossCents: negCents(riskCents),
+   305→    plannedRewardCents: null,
+   306→  };
+   307→}
+   308→
+   309→// ---------------------------------------------------------------------------
+   310→// Aggregate metrics (spec section 70)
+   311→// ---------------------------------------------------------------------------
+   312→
+   313→export interface TradeMetricRow {
+   314→  id: string;
+   315→  netPnlCents: Cents;
+   316→  actualR: Decimal | null;
+   317→  status: TradeStatus;
+   318→  entryTime?: Date | string | null;
+   319→  setupGrade?: string | null;
+   320→  instrumentSymbol?: string;
+   321→  session?: string | null;
+   322→  strategyId?: string | null;
+   323→  strategyVersionId?: string | null;
+   324→  behaviorFlags?: string[];
+   325→  psychTags?: string[];
+   326→  ruleCompliant?: boolean;
+   327→}
+   328→
+   329→export interface AggregateMetrics {
+   330→  totalTrades: number;
+   331→  closedTrades: number;
+   332→  wins: number;
+   333→  losses: number;
+   334→  breakevens: number;
+   335→  winRate: Decimal | null;
+   336→  totalPnlCents: Cents;
+   337→  avgPnlCents: Cents | null;
+   338→  avgWinCents: Cents | null;
+   339→  avgLossCents: Cents | null;
+   340→  avgR: Decimal | null;
+   341→  expectancyR: Decimal | null;
+   342→  profitFactor: Decimal | null;
+   343→  maxDrawdownCents: Cents;
+   344→  currentDrawdownCents: Cents;
+   345→  largestWinCents: Cents;
+   346→  largestLossCents: Cents;
+   347→  consecutiveWins: number;
+   348→  consecutiveLosses: number;
+   349→  recoveryPeriod: number | null;
+   350→}
+   351→
+   352→export function computeAggregateMetrics(trades: TradeMetricRow[]): AggregateMetrics {
+   353→  const closed = trades.filter((t) => t.status !== "open" && t.status !== "cancelled");
+   354→  const wins = closed.filter((t) => t.netPnlCents > 0);
+   355→  const losses = closed.filter((t) => t.netPnlCents < 0);
+   356→  const bes = closed.filter((t) => t.netPnlCents === 0);
+   357→
+   358→  const totalPnl = closed.reduce((s, t) => s + t.netPnlCents, 0);
+   359→
+   360→  const winRate = closed.length > 0 ? dNormalize(String(wins.length / closed.length)) : null;
+   361→
+   362→  const avgPnl = closed.length > 0 ? Math.round(totalPnl / closed.length) : null;
+   363→
+   364→  const avgWin = wins.length > 0 ? Math.round(wins.reduce((s, t) => s + t.netPnlCents, 0) / wins.length) : null;
+   365→  const avgLoss = losses.length > 0 ? Math.round(losses.reduce((s, t) => s + t.netPnlCents, 0) / losses.length) : null;
+   366→
+   367→  // Avg R over trades with valid R
+   368→  const rValues = closed.map((t) => t.actualR).filter((r): r is Decimal => r != null && Number.isFinite(dToNumber(r)));
+   369→  const avgR = rValues.length > 0 ? dNormalize(String(+(rValues.reduce((s, r) => s + dToNumber(r), 0) / rValues.length).toFixed(10))) : null;
+   370→
+   371→  // Expectancy = avg realized R (per spec section 73)
+   372→  const expectancyR = avgR;
+   373→
+   374→  // Profit factor (spec section 72): gross profits / abs(gross losses)
+   375→  const grossProfit = wins.reduce((s, t) => s + t.netPnlCents, 0);
+   376→  const grossLoss = Math.abs(losses.reduce((s, t) => s + t.netPnlCents, 0));
+   377→  const profitFactor = grossLoss > 0 ? dNormalize(String(+(grossProfit / grossLoss).toFixed(10))) : null;
+   378→
+   379→  // Drawdown (spec section 71): from equity curve
+   380→  const sorted = [...closed].sort((a, b) => {
+   381→    const ad = a.entryTime ? new Date(a.entryTime).getTime() : 0;
+   382→    const bd = b.entryTime ? new Date(b.entryTime).getTime() : 0;
+   383→    return ad - bd;
+   384→  });
+   385→  let equity = 0;
+   386→  let peak = 0;
+   387→  let maxDD = 0;
+   388→  let currentDD = 0;
+   389→  let recoveryStart: number | null = null;
+   390→  let recoveryPeriod: number | null = null;
+   391→  let inDD = false;
+   392→  let ddStartIdx = -1;
+   393→  for (let i = 0; i < sorted.length; i++) {
+   394→    equity += sorted[i].netPnlCents;
+   395→    if (equity > peak) {
+   396→      peak = equity;
+   397→      if (inDD) {
+   398→        // recovered
+   399→        inDD = false;
+   400→        recoveryPeriod = recoveryStart != null ? i - recoveryStart : null;
+   401→        recoveryStart = null;
+   402→      }
+   403→    }
+   404→    const dd = peak - equity;
+   405→    if (dd > maxDD) maxDD = dd;
+   406→    currentDD = dd;
+   407→    if (dd > 0 && !inDD) {
+   408→      inDD = true;
+   409→      recoveryStart = i;
+   410→    }
+   411→  }
+   412→
+   413→  const largestWin = wins.length > 0 ? Math.max(...wins.map((t) => t.netPnlCents)) : 0;
+   414→  const largestLoss = losses.length > 0 ? Math.min(...losses.map((t) => t.netPnlCents)) : 0;
+   415→
+   416→  // Streaks
+   417→  let cw = 0, cl = 0, maxCw = 0, maxCl = 0;
+   418→  for (const t of sorted) {
+   419→    if (t.netPnlCents > 0) { cw++; cl = 0; maxCw = Math.max(maxCw, cw); }
+   420→    else if (t.netPnlCents < 0) { cl++; cw = 0; maxCl = Math.max(maxCl, cl); }
+   421→    else { cw = 0; cl = 0; }
+   422→  }
+   423→
+   424→  return {
+   425→    totalTrades: trades.length,
+   426→    closedTrades: closed.length,
+   427→    wins: wins.length,
+   428→    losses: losses.length,
+   429→    breakevens: bes.length,
+   430→    winRate,
+   431→    totalPnlCents: totalPnl,
+   432→    avgPnlCents: avgPnl,
+   433→    avgWinCents: avgWin,
+   434→    avgLossCents: avgLoss,
+   435→    avgR,
+   436→    expectancyR,
+   437→    profitFactor,
+   438→    maxDrawdownCents: maxDD,
+   439→    currentDrawdownCents: currentDD,
+   440→    largestWinCents: largestWin,
+   441→    largestLossCents: largestLoss,
+   442→    consecutiveWins: maxCw,
+   443→    consecutiveLosses: maxCl,
+   444→    recoveryPeriod,
+   445→  };
+   446→}
+   447→
+   448→// ---------------------------------------------------------------------------
+   449→// Equity curve (spec section 22)
+   450→// ---------------------------------------------------------------------------
+   451→
+   452→export interface EquityPoint {
+   453→  date: string; // ISO date
+   454→  label: string;
+   455→  pnlCents: Cents;
+   456→  cumulativeCents: Cents;
+   457→  tradeId: string;
+   458→}
+   459→
+   460→export function buildEquityCurve(trades: TradeMetricRow[], startingBalanceCents: Cents = 0): EquityPoint[] {
+   461→  const sorted = [...trades]
+   462→    .filter((t) => t.status !== "open" && t.status !== "cancelled" && t.entryTime)
+   463→    .sort((a, b) => new Date(a.entryTime!).getTime() - new Date(b.entryTime!).getTime());
+   464→  let cumulative = startingBalanceCents;
+   465→  return sorted.map((t) => {
+   466→    cumulative += t.netPnlCents;
+   467→    const d = new Date(t.entryTime!);
+   468→    return {
+   469→      date: d.toISOString(),
+   470→      label: d.toLocaleDateString("en-US", { month: "short", day: "numeric" }),
+   471→      pnlCents: t.netPnlCents,
+   472→      cumulativeCents: cumulative,
+   473→      tradeId: t.id,
+   474→    };
+   475→  });
+   476→}
+   477→
+   478→// ---------------------------------------------------------------------------
+   479→// Daily P&L aggregation (spec section 22)
+   480→// ---------------------------------------------------------------------------
+   481→
+   482→export interface DailyPnlPoint {
+   483→  date: string;
+   484→  label: string;
+   485→  pnlCents: Cents;
+   486→  tradeCount: number;
+   487→}
+   488→
+   489→export function buildDailyPnl(trades: TradeMetricRow[]): DailyPnlPoint[] {
+   490→  const map = new Map<string, { pnl: Cents; count: number; ts: number }>();
+   491→  for (const t of trades) {
+   492→    if (!t.entryTime) continue;
+   493→    const d = new Date(t.entryTime);
+   494→    const key = d.toISOString().slice(0, 10);
+   495→    const entry = map.get(key) ?? { pnl: 0, count: 0, ts: d.getTime() };
+   496→    entry.pnl += t.netPnlCents;
+   497→    entry.count += 1;
+   498→    map.set(key, entry);
+   499→  }
+   500→  return [...map.entries()]
+   501→    .sort((a, b) => a[1].ts - b[1].ts)
+   502→    .map(([date, e]) => ({
+   503→      date,
+   504→      label: new Date(date).toLocaleDateString("en-US", { month: "short", day: "numeric" }),
+   505→      pnlCents: e.pnl,
+   506→      tradeCount: e.count,
+   507→    }));
+   508→}
+   509→
+   510→// ---------------------------------------------------------------------------
+   511→// R distribution (spec section 22)
+   512→// ---------------------------------------------------------------------------
+   513→
+   514→export interface RDistributionBucket {
+   515→  bucket: string;
+   516→  count: number;
+   517→  minR: number;
+   518→  maxR: number;
+   519→}
+   520→
+   521→export function buildRDistribution(trades: TradeMetricRow[]): RDistributionBucket[] {
+   522→  const buckets: { min: number; max: number; label: string }[] = [
+   523→    { min: -Infinity, max: -2, label: "≤ -2R" },
+   524→    { min: -2, max: -1, label: "-2 to -1R" },
+   525→    { min: -1, max: 0, label: "-1 to 0R" },
+   526→    { min: 0, max: 0.0001, label: "BE" },
+   527→    { min: 0.0001, max: 1, label: "0 to +1R" },
+   528→    { min: 1, max: 2, label: "+1 to +2R" },
+   529→    { min: 2, max: Infinity, label: "≥ +2R" },
+   530→  ];
+   531→  return buckets.map((b) => {
+   532→    const count = trades.filter((t) => {
+   533→      if (t.actualR == null) return false;
+   534→      const r = dToNumber(t.actualR);
+   535→      if (b.min === 0 && b.max === 0.0001) return r === 0;
+   536→      if (b.min === -Infinity) return r <= b.max;
+   537→      if (b.max === Infinity) return r > b.min;
+   538→      return r > b.min && r <= b.max;
+   539→    }).length;
+   540→    return { bucket: b.label, count, minR: b.min, maxR: b.max };
+   541→  });
+   542→}
+   543→
+   544→// ---------------------------------------------------------------------------
+   545→// Group-by analytics (spec sections 75, 76, 74)
+   546→// ---------------------------------------------------------------------------
+   547→
+   548→export interface GroupBreakdown {
+   549→  key: string;
+   550→  label: string;
+   551→  trades: number;
+   552→  wins: number;
+   553→  winRate: Decimal | null;
+   554→  avgR: Decimal | null;
+   555→  expectancyR: Decimal | null;
+   556→  pnlCents: Cents;
+   557→}
+   558→
+   559→export function groupBy<T extends TradeMetricRow>(
+   560→  trades: T[],
+   561→  keyFn: (t: T) => string | null | undefined,
+   562→  labelFn: (k: string) => string = (k) => k,
+   563→): GroupBreakdown[] {
+   564→  const groups = new Map<string, T[]>();
+   565→  for (const t of trades) {
+   566→    const k = keyFn(t);
+   567→    if (k == null) continue;
+   568→    const arr = groups.get(k) ?? [];
+   569→    arr.push(t);
+   570→    groups.set(k, arr);
+   571→  }
+   572→  return [...groups.entries()].map(([key, arr]) => {
+   573→    const m = computeAggregateMetrics(arr);
+   574→    return {
+   575→      key,
+   576→      label: labelFn(key),
+   577→      trades: m.totalTrades,
+   578→      wins: m.wins,
+   579→      winRate: m.winRate,
+   580→      avgR: m.avgR,
+   581→      expectancyR: m.expectancyR,
+   582→      pnlCents: m.totalPnlCents,
+   583→    };
+   584→  }).sort((a, b) => b.trades - a.trades);
+   585→}
+   586→
+   587→// ---------------------------------------------------------------------------
+   588→// Sample-size-aware insights (spec sections 23, 24, 137, 138)
+   589→// ---------------------------------------------------------------------------
+   590→
+   591→export interface Insight {
+   592→  id: string;
+   593→  title: string;
+   594→  body: string;
+   595→  sampleSize: number;
+   596→  metric: string;
+   597→  bucketLabel: string;
+   598→  comparison?: string;
+   599→  tradeIds: string[];
+   600→  warning?: "low_sample" | "missing_data";
+   601→}
+   602→
+   603→export function generateInsights(trades: TradeMetricRow[], minSample = 10): Insight[] {
+   604→  const insights: Insight[] = [];
+   605→  const closed = trades.filter((t) => t.status !== "open" && t.status !== "cancelled");
+   606→  if (closed.length < minSample) {
+   607→    if (closed.length > 0) {
+   608→      insights.push({
+   609→        id: "low-sample",
+   610→        title: "Not enough data yet",
+   611→        body: `You have ${closed.length} closed trade${closed.length === 1 ? "" : "s"}. DnD starts generating statistical insights once you have at least ${minSample} closed trades, so patterns you see now may not be reliable.`,
+   612→        sampleSize: closed.length,
+   613→        metric: "samples",
+   614→        bucketLabel: "all",
+   615→        tradeIds: closed.map((t) => t.id),
+   616→        warning: "low_sample",
+   617→      });
+   618→    }
+   619→    return insights;
+   620→  }
+   621→
+   622→  // Behavior flag insights
+   623→  const allFlags = new Set<string>();
+   624→  closed.forEach((t) => t.behaviorFlags?.forEach((f) => allFlags.add(f)));
+   625→  for (const flag of allFlags) {
+   626→    const withFlag = closed.filter((t) => t.behaviorFlags?.includes(flag));
+   627→    const withoutFlag = closed.filter((t) => !t.behaviorFlags?.includes(flag));
+   628→    if (withFlag.length < minSample) continue;
+   629→    const withR = withFlag.map((t) => t.actualR).filter((r): r is Decimal => r != null);
+   630→    const withoutR = withoutFlag.map((t) => t.actualR).filter((r): r is Decimal => r != null);
+   631→    if (withR.length === 0) continue;
+   632→    const withAvg = withR.reduce((s, r) => s + dToNumber(r), 0) / withR.length;
+   633→    const withoutAvg = withoutR.length > 0 ? withoutR.reduce((s, r) => s + dToNumber(r), 0) / withoutR.length : null;
+   634→    const flagLabel = humanizeFlag(flag);
+   635→    if (withoutAvg != null && Math.abs(withAvg - withoutAvg) > 0.05) {
+   636→      const direction = withAvg < withoutAvg ? "lower" : "higher";
+   637→      insights.push({
+   638→        id: `flag-${flag}`,
+   639→        title: `Trades tagged "${flagLabel}"`,
+   640→        body: `Trades tagged "${flagLabel}" have historically produced ${direction} average R (${withAvg.toFixed(2)}R across ${withFlag.length} trades) compared to ${withoutAvg.toFixed(2)}R across ${withoutFlag.length} trades without that flag.`,
+   641→        sampleSize: withFlag.length,
+   642→        metric: "avgR",
+   643→        bucketLabel: flagLabel,
+   644→        comparison: `vs ${withoutAvg.toFixed(2)}R`,
+   645→        tradeIds: withFlag.map((t) => t.id),
+   646→      });
+   647→    } else {
+   648→      insights.push({
+   649→        id: `flag-${flag}`,
+   650→        title: `Trades tagged "${flagLabel}"`,
+   651→        body: `Trades tagged "${flagLabel}" have an average realized R of ${withAvg.toFixed(2)}R across ${withFlag.length} trades.`,
+   652→        sampleSize: withFlag.length,
+   653→        metric: "avgR",
+   654→        bucketLabel: flagLabel,
+   655→        tradeIds: withFlag.map((t) => t.id),
+   656→      });
+   657→    }
+   658→  }
+   659→
+   660→  // Session insights
+   661→  const sessions = groupBy(closed, (t) => t.session, (k) => sessionLabel(k));
+   662→  for (const s of sessions) {
+   663→    if (s.trades < minSample) continue;
+   664→    if (s.avgR == null) continue;
+   665→    insights.push({
+   666→      id: `session-${s.key}`,
+   667→      title: `${s.label} session`,
+   668→      body: `${s.label} trades have produced an average of ${dToNumber(s.avgR).toFixed(2)}R across ${s.trades} trades, with a ${dToNumber(s.winRate).toFixed(1)}% win rate.`,
+   669→      sampleSize: s.trades,
+   670→      metric: "avgR",
+   671→      bucketLabel: s.label,
+   672→      tradeIds: closed.filter((t) => t.session === s.key).map((t) => t.id),
+   673→    });
+   674→  }
+   675→
+   676→  // A+ vs non-A+
+   677→  const aplus = closed.filter((t) => t.setupGrade === "A+");
+   678→  const nonAplus = closed.filter((t) => t.setupGrade && t.setupGrade !== "A+" && t.setupGrade !== "Invalid");
+   679→  if (aplus.length >= minSample && nonAplus.length >= minSample) {
+   680→    const aR = aplus.map((t) => t.actualR).filter((r): r is Decimal => r != null);
+   681→    const nR = nonAplus.map((t) => t.actualR).filter((r): r is Decimal => r != null);
+   682→    if (aR.length > 0 && nR.length > 0) {
+   683→      const aAvg = aR.reduce((s, r) => s + dToNumber(r), 0) / aR.length;
+   684→      const nAvg = nR.reduce((s, r) => s + dToNumber(r), 0) / nR.length;
+   685→      insights.push({
+   686→        id: "aplus-vs-non",
+   687→        title: "A+ vs non-A+ setups",
+   688→        body: `A+ setups have produced ${aAvg.toFixed(2)}R on average across ${aplus.length} trades, compared to ${nAvg.toFixed(2)}R across ${nonAplus.length} non-A+ trades.`,
+   689→        sampleSize: aplus.length + nonAplus.length,
+   690→        metric: "avgR",
+   691→        bucketLabel: "A+ vs non-A+",
+   692→        tradeIds: [...aplus, ...nonAplus].map((t) => t.id),
+   693→      });
+   694→    }
+   695→  }
+   696→
+   697→  return insights.sort((a, b) => b.sampleSize - a.sampleSize);
+   698→}
+   699→
+   700→function humanizeFlag(flag: string): string {
+   701→  return flag
+   702→    .split("_")
+   703→    .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+   704→    .join(" ");
+   705→}
+   706→
+   707→function sessionLabel(s: string): string {
+   708→  const map: Record<string, string> = {
+   709→    asia: "Asia",
+   710→    london: "London",
+   711→    ny_am: "New York AM",
+   712→    ny_pm: "New York PM",
+   713→    custom: "Custom",
+   714→  };
+   715→  return map[s] ?? s;
+   716→}
+   717→

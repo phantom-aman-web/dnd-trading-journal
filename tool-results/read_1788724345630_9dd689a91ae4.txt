@@ -1,0 +1,1011 @@
+     1→"use client";
+     2→
+     3→import { useQuery, useQueryClient } from "@tanstack/react-query";
+     4→import { useState, useEffect, useRef } from "react";
+     5→import { useNav } from "@/lib/nav-store";
+     6→import { Button } from "@/components/ui/button";
+     7→import { Input } from "@/components/ui/input";
+     8→import { Label } from "@/components/ui/label";
+     9→import { Textarea } from "@/components/ui/textarea";
+    10→import { Card } from "@/components/ui/card";
+    11→import { Badge } from "@/components/ui/badge";
+    12→import { ArrowLeft, ArrowRight, Loader2, Save, Sparkles, Check, Tag as TagIcon, Upload, Image as ImageIcon, X, Pencil } from "lucide-react";
+    13→import {
+    14→  Select,
+    15→  SelectContent,
+    16→  SelectItem,
+    17→  SelectTrigger,
+    18→  SelectValue,
+    19→} from "@/components/ui/select";
+    20→import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+    21→import { Checkbox } from "@/components/ui/checkbox";
+    22→import { ImageViewer } from "@/components/trade/image-viewer";
+    23→import { toast } from "sonner";
+    24→import { cn } from "@/lib/utils";
+    25→
+    26→const DRAFT_KEY = "dnd-trade-draft";
+    27→
+    28→async function fetchMe() {
+    29→  const res = await fetch("/api/me", { cache: "no-store" });
+    30→  if (!res.ok) return null;
+    31→  return res.json();
+    32→}
+    33→
+    34→const PSYCH_BEFORE = ["calm", "confident", "hesitant", "fearful", "FOMO", "impatient", "distracted", "excited", "tired", "focused"];
+    35→const PSYCH_AFTER = ["satisfied", "frustrated", "regret", "relief", "overconfident", "disappointed", "calm", "confused", "angry"];
+    36→const BEHAVIOR_FLAGS = ["entered_early", "broke_rules", "moved_stop", "moved_target", "exited_early", "revenge_trade", "overtraded", "increased_size", "chased_price", "ignored_plan"];
+    37→
+    38→export function TradeFormView() {
+    39→  const { params, navigate } = useNav();
+    40→  const qc = useQueryClient();
+    41→  const editingId = params.id;
+    42→
+    43→  const { data: meta } = useQuery({ queryKey: ["me"], queryFn: fetchMe });
+    44→  const { data: existing } = useQuery({
+    45→    queryKey: ["trade", editingId],
+    46→    queryFn: async () => {
+    47→      const res = await fetch(`/api/trades/${editingId}`, { cache: "no-store" });
+    48→      if (!res.ok) return null;
+    49→      return res.json();
+    50→    },
+    51→    enabled: !!editingId,
+    52→  });
+    53→
+    54→  const [form, setForm] = useState<any>({
+    55→    accountId: "",
+    56→    instrumentSymbol: "",
+    57→    direction: "long",
+    58→    session: "ny_am",
+    59→    strategyId: "",
+    60→    setupGrade: "",
+    61→    plannedEntryPrice: "",
+    62→    plannedStopPrice: "",
+    63→    plannedTargetPrice: "",
+    64→    plannedRiskPct: "0.005",
+    65→    entryPrice: "",
+    66→    exitPrice: "",
+    67→    quantity: "1",
+    68→    feesCents: 0,
+    69→    commissionCents: 0,
+    70→    swapCents: 0,
+    71→    slippageCents: 0,
+    72→    entryTime: new Date().toISOString().slice(0, 16),
+    73→    exitTime: "",
+    74→    tradingTimezone: "UTC",
+    75→    setup: { htfContext: { weeklyBias: "bullish", dailyBias: "bullish" }, liquidity: [], structure: [], entryModel: "FVG", session: "ny_am" },
+    76→    thesis: { why: "", narrative: "", liquidityTarget: "", confirms: [], invalidates: [], target: "", earlyExit: "" },
+    77→    notes: "",
+    78→    lessons: "",
+    79→    psychBefore: { moodTags: [], confidence: 3, energy: 3, impact: "moderate" },
+    80→    psychAfter: { moodTags: [], confidence: 3, energy: 3, impact: "moderate" },
+    81→    behaviorFlags: [],
+    82→    tags: [],
+    83→    ruleCompliance: {} as Record<string, boolean>,
+    84→    uploadedMedia: [] as any[],
+    85→    isDraft: false,
+    86→  });
+    87→
+    88→  // Fetch the selected strategy's latest version rules when a strategy is selected
+    89→  const { data: strategyDetail } = useQuery({
+    90→    queryKey: ["strategy-for-form", form.strategyId],
+    91→    queryFn: async () => {
+    92→      if (!form.strategyId) return null;
+    93→      const res = await fetch(`/api/strategies/${form.strategyId}`, { cache: "no-store" });
+    94→      if (!res.ok) return null;
+    95→      return res.json();
+    96→    },
+    97→    enabled: !!form.strategyId,
+    98→  });
+    99→
+   100→  // Reset rule compliance when strategy changes
+   101→  useEffect(() => {
+   102→    setForm((f: any) => ({ ...f, ruleCompliance: {} }));
+   103→  }, [form.strategyId]);
+   104→
+   105→  // Set default account
+   106→  useEffect(() => {
+   107→    if (meta?.accounts && !form.accountId) {
+   108→      const def = meta.accounts.find((a: any) => a.isDefault) ?? meta.accounts[0];
+   109→      if (def) setForm((f: any) => ({ ...f, accountId: def.id }));
+   110→    }
+   111→  }, [meta]);
+   112→
+   113→  // Load existing trade for editing
+   114→  useEffect(() => {
+   115→    if (existing) {
+   116→      setForm({
+   117→        accountId: existing.accountId,
+   118→        instrumentSymbol: existing.instrumentSymbol,
+   119→        direction: existing.direction,
+   120→        session: existing.session ?? "ny_am",
+   121→        strategyId: existing.strategyId ?? "",
+   122→        setupGrade: existing.setupGrade ?? "",
+   123→        plannedEntryPrice: existing.plannedEntryPrice ?? "",
+   124→        plannedStopPrice: existing.plannedStopPrice ?? "",
+   125→        plannedTargetPrice: existing.plannedTargetPrice ?? "",
+   126→        plannedRiskPct: existing.plannedRiskPct ?? "0.005",
+   127→        entryPrice: existing.executions?.find((e: any) => e.kind === "entry")?.price ?? existing.entryPriceAvg ?? "",
+   128→        exitPrice: existing.executions?.find((e: any) => e.kind === "exit")?.price ?? existing.exitPriceAvg ?? "",
+   129→        quantity: existing.executions?.[0]?.quantity ?? existing.positionSize ?? "1",
+   130→        feesCents: existing.feesCents,
+   131→        commissionCents: existing.commissionCents,
+   132→        swapCents: existing.swapCents,
+   133→        slippageCents: existing.slippageCents,
+   134→        entryTime: existing.entryTime ? new Date(existing.entryTime).toISOString().slice(0, 16) : "",
+   135→        exitTime: existing.exitTime ? new Date(existing.exitTime).toISOString().slice(0, 16) : "",
+   136→        tradingTimezone: existing.tradingTimezone ?? "UTC",
+   137→        setup: safeJson(existing.setupJson, form.setup),
+   138→        thesis: safeJson(existing.thesisJson, form.thesis),
+   139→        notes: existing.notes ?? "",
+   140→        lessons: existing.lessons ?? "",
+   141→        psychBefore: safeJson(existing.psychBeforeJson, form.psychBefore),
+   142→        psychAfter: safeJson(existing.psychAfterJson, form.psychAfter),
+   143→        behaviorFlags: safeJson(existing.behaviorFlagsJson, []),
+   144→        tags: safeJson(existing.tagsJson, []),
+   145→        isDraft: existing.isDraft ?? false,
+   146→      });
+   147→    }
+   148→  }, [existing]);
+   149→
+   150→  // Autosave draft (spec section 27)
+   151→  useEffect(() => {
+   152→    if (editingId) return;
+   153→    const t = setTimeout(() => {
+   154→      localStorage.setItem(DRAFT_KEY, JSON.stringify(form));
+   155→    }, 500);
+   156→    return () => clearTimeout(t);
+   157→  }, [form, editingId]);
+   158→
+   159→  // Restore draft on mount (only when not editing)
+   160→  useEffect(() => {
+   161→    if (editingId) return;
+   162→    const saved = localStorage.getItem(DRAFT_KEY);
+   163→    if (saved) {
+   164→      try {
+   165→        const parsed = JSON.parse(saved);
+   166→        setForm((f: any) => ({ ...f, ...parsed }));
+   167→        toast.info("Restored autosaved draft.");
+   168→      } catch {}
+   169→    }
+   170→  }, [editingId]);
+   171→
+   172→  const [saving, setSaving] = useState(false);
+   173→  const [activeTab, setActiveTab] = useState<string>("basics");
+   174→  const fileInputRef = useRef<HTMLInputElement>(null);
+   175→  const [viewerIndex, setViewerIndex] = useState<number | null>(null);
+   176→
+   177→  const TAB_ORDER = ["basics", "execution", "plan", "setup", "psychology", "review", "evidence"];
+   178→
+   179→  // Upload media files to the server immediately (before the trade is saved).
+   180→  // The media is associated with this trade via the tradeId once the trade is created.
+   181→  // For new trades (no editingId yet), we upload as "orphan" media and attach after save.
+   182→  async function handleFileUpload(files: FileList | File[]) {
+   183→    const fileList = Array.from(files);
+   184→    for (const file of fileList) {
+   185→      const formData = new FormData();
+   186→      formData.append("file", file);
+   187→      if (editingId) formData.append("tradeId", editingId);
+   188→      try {
+   189→        const res = await fetch("/api/media", { method: "POST", body: formData });
+   190→        if (res.ok) {
+   191→          const data = await res.json();
+   192→          // Fetch signed URL
+   193→          const detailRes = await fetch(`/api/media/${data.id}`);
+   194→          const detail = await detailRes.json();
+   195→          setForm((f: any) => ({
+   196→            ...f,
+   197→            uploadedMedia: [...(f.uploadedMedia ?? []), { ...data, url: detail.url }],
+   198→          }));
+   199→          toast.success(`${file.name} uploaded.`);
+   200→        } else {
+   201→          const err = await res.json().catch(() => ({}));
+   202→          toast.error(err?.error ?? `Failed to upload ${file.name}`);
+   203→        }
+   204→      } catch {
+   205→        toast.error(`Failed to upload ${file.name}`);
+   206→      }
+   207→    }
+   208→  }
+   209→
+   210→  function setField(path: string, value: any) {
+   211→    setForm((f: any) => {
+   212→      const next = { ...f };
+   213→      const parts = path.split(".");
+   214→      let cur: any = next;
+   215→      for (let i = 0; i < parts.length - 1; i++) {
+   216→        cur[parts[i]] = { ...cur[parts[i]] };
+   217→        cur = cur[parts[i]];
+   218→      }
+   219→      cur[parts[parts.length - 1]] = value;
+   220→      return next;
+   221→    });
+   222→  }
+   223→
+   224→  function toggleArrayField(path: string, value: string) {
+   225→    setForm((f: any) => {
+   226→      const next = { ...f };
+   227→      const parts = path.split(".");
+   228→      let cur: any = next;
+   229→      for (let i = 0; i < parts.length - 1; i++) {
+   230→        cur[parts[i]] = { ...cur[parts[i]] };
+   231→        cur = cur[parts[i]];
+   232→      }
+   233→      const key = parts[parts.length - 1];
+   234→      const arr = Array.isArray(cur[key]) ? [...cur[key]] : [];
+   235→      const idx = arr.indexOf(value);
+   236→      if (idx >= 0) arr.splice(idx, 1); else arr.push(value);
+   237→      cur[key] = arr;
+   238→      return next;
+   239→    });
+   240→  }
+   241→
+   242→  async function submit(isDraft: boolean = false) {
+   243→    if (!form.accountId) {
+   244→      toast.error("Please select an account.");
+   245→      return;
+   246→    }
+   247→    if (!form.instrumentSymbol) {
+   248→      toast.error("Please enter an instrument symbol.");
+   249→      return;
+   250→    }
+   251→    setSaving(true);
+   252→    try {
+   253→      const executions = [];
+   254→      if (form.entryPrice) {
+   255→        executions.push({
+   256→          kind: "entry",
+   257→          price: form.entryPrice,
+   258→          quantity: form.quantity || "1",
+   259→          timestamp: form.entryTime ? new Date(form.entryTime).toISOString() : new Date().toISOString(),
+   260→        });
+   261→      }
+   262→      if (form.exitPrice) {
+   263→        executions.push({
+   264→          kind: "exit",
+   265→          price: form.exitPrice,
+   266→          quantity: form.quantity || "1",
+   267→          timestamp: form.exitTime ? new Date(form.exitTime).toISOString() : new Date().toISOString(),
+   268→        });
+   269→      }
+   270→      const payload = {
+   271→        accountId: form.accountId,
+   272→        instrumentSymbol: form.instrumentSymbol.toUpperCase(),
+   273→        market: meta?.instruments?.find((i: any) => i.symbol === form.instrumentSymbol.toUpperCase())?.market ?? "custom",
+   274→        direction: form.direction,
+   275→        session: form.session,
+   276→        strategyId: form.strategyId || null,
+   277→        setupGrade: form.setupGrade || null,
+   278→        setupScore: form.setupGrade === "A+" ? "0.92" : form.setupGrade === "A" ? "0.80" : form.setupGrade === "B" ? "0.62" : form.setupGrade === "C" ? "0.45" : null,
+   279→        tags: form.tags,
+   280→        plannedEntryPrice: form.plannedEntryPrice || null,
+   281→        plannedStopPrice: form.plannedStopPrice || null,
+   282→        plannedTargetPrice: form.plannedTargetPrice || null,
+   283→        plannedRiskPct: form.plannedRiskPct || null,
+   284→        executions,
+   285→        feesCents: Number(form.feesCents) || 0,
+   286→        commissionCents: Number(form.commissionCents) || 0,
+   287→        swapCents: Number(form.swapCents) || 0,
+   288→        slippageCents: Number(form.slippageCents) || 0,
+   289→        entryTime: form.entryTime ? new Date(form.entryTime).toISOString() : null,
+   290→        exitTime: form.exitTime ? new Date(form.exitTime).toISOString() : null,
+   291→        tradingTimezone: form.tradingTimezone,
+   292→        setup: form.setup,
+   293→        thesis: form.thesis,
+   294→        notes: form.notes || null,
+   295→        lessons: form.lessons || null,
+   296→        psychBefore: form.psychBefore,
+   297→        psychAfter: form.psychAfter,
+   298→        behaviorFlags: form.behaviorFlags,
+   299→        ruleCompliance: form.ruleCompliance,
+   300→        isDraft,
+   301→      };
+   302→      const url = editingId ? `/api/trades/${editingId}` : "/api/trades";
+   303→      const method = editingId ? "PATCH" : "POST";
+   304→      const res = await fetch(url, {
+   305→        method,
+   306→        headers: { "Content-Type": "application/json" },
+   307→        body: JSON.stringify(payload),
+   308→      });
+   309→      const data = await res.json();
+   310→      if (!res.ok) {
+   311→        toast.error(data?.error ?? "Failed to save trade.");
+   312→        setSaving(false);
+   313→        return;
+   314→      }
+   315→      // Attach any orphaned uploaded media to the newly created trade and save captions
+   316→      if (form.uploadedMedia?.length > 0) {
+   317→        for (const m of form.uploadedMedia) {
+   318→          if (m.id) {
+   319→            const patchBody: any = {};
+   320→            if (!editingId) patchBody.tradeId = data.id;
+   321→            if (m.caption) patchBody.caption = m.caption;
+   322→            if (Object.keys(patchBody).length > 0) {
+   323→              await fetch(`/api/media/${m.id}`, {
+   324→                method: "PATCH",
+   325→                headers: { "Content-Type": "application/json" },
+   326→                body: JSON.stringify(patchBody),
+   327→              }).catch(() => {});
+   328→            }
+   329→          }
+   330→        }
+   331→      }
+   332→      toast.success(isDraft ? "Draft saved." : "Trade saved.");
+   333→      localStorage.removeItem(DRAFT_KEY);
+   334→      qc.invalidateQueries({ queryKey: ["trades"] });
+   335→      qc.invalidateQueries({ queryKey: ["dashboard"] });
+   336→      navigate("tradeDetail", { id: data.id });
+   337→    } catch (e) {
+   338→      toast.error("Network error");
+   339→      setSaving(false);
+   340→    }
+   341→  }
+   342→
+   343→  return (
+   344→    <div className="p-4 md:p-6 max-w-4xl space-y-4">
+   345→      <div className="flex items-center gap-3">
+   346→        <Button variant="ghost" size="icon" onClick={() => navigate("journal")}>
+   347→          <ArrowLeft className="h-4 w-4" />
+   348→        </Button>
+   349→        <h1 className="text-2xl font-semibold tracking-tight">
+   350→          {editingId ? "Edit Trade" : "Add Trade"}
+   351→        </h1>
+   352→      </div>
+   353→
+   354→      <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
+   355→        <TabsList className="w-full justify-start overflow-x-auto no-scrollbar">
+   356→          <TabsTrigger value="basics">1. Basics</TabsTrigger>
+   357→          <TabsTrigger value="execution">2. Execution</TabsTrigger>
+   358→          <TabsTrigger value="plan">3. Trading Plan</TabsTrigger>
+   359→          <TabsTrigger value="setup">4. ICT Setup</TabsTrigger>
+   360→          <TabsTrigger value="psychology">5. Psychology</TabsTrigger>
+   361→          <TabsTrigger value="review">6. Review</TabsTrigger>
+   362→          <TabsTrigger value="evidence">7. Evidence</TabsTrigger>
+   363→        </TabsList>
+   364→
+   365→        {/* Basics */}
+   366→        <TabsContent value="basics" className="space-y-4 mt-3">
+   367→          <Card className="p-4 space-y-4">
+   368→            <div className="grid sm:grid-cols-2 gap-3">
+   369→              <div className="space-y-2">
+   370→                <Label>Account</Label>
+   371→                <Select value={form.accountId} onValueChange={(v) => setField("accountId", v)}>
+   372→                  <SelectTrigger><SelectValue placeholder="Select account" /></SelectTrigger>
+   373→                  <SelectContent>
+   374→                    {meta?.accounts?.map((a: any) => (
+   375→                      <SelectItem key={a.id} value={a.id}>{a.name} ({a.currency})</SelectItem>
+   376→                    ))}
+   377→                  </SelectContent>
+   378→                </Select>
+   379→              </div>
+   380→              <div className="space-y-2">
+   381→                <Label>Instrument</Label>
+   382→                <Input
+   383→                  list="instruments"
+   384→                  value={form.instrumentSymbol}
+   385→                  onChange={(e) => setField("instrumentSymbol", e.target.value)}
+   386→                  placeholder="XAUUSD"
+   387→                />
+   388→                <datalist id="instruments">
+   389→                  {meta?.instruments?.map((i: any) => <option key={i.id} value={i.symbol} />)}
+   390→                </datalist>
+   391→              </div>
+   392→              <div className="space-y-2">
+   393→                <Label>Direction</Label>
+   394→                <Select value={form.direction} onValueChange={(v) => setField("direction", v)}>
+   395→                  <SelectTrigger><SelectValue /></SelectTrigger>
+   396→                  <SelectContent>
+   397→                    <SelectItem value="long">Long</SelectItem>
+   398→                    <SelectItem value="short">Short</SelectItem>
+   399→                  </SelectContent>
+   400→                </Select>
+   401→              </div>
+   402→              <div className="space-y-2">
+   403→                <Label>Session</Label>
+   404→                <Select value={form.session} onValueChange={(v) => setField("session", v)}>
+   405→                  <SelectTrigger><SelectValue /></SelectTrigger>
+   406→                  <SelectContent>
+   407→                    <SelectItem value="asia">Asia</SelectItem>
+   408→                    <SelectItem value="london">London</SelectItem>
+   409→                    <SelectItem value="ny_am">New York AM</SelectItem>
+   410→                    <SelectItem value="ny_pm">New York PM</SelectItem>
+   411→                    <SelectItem value="custom">Custom</SelectItem>
+   412→                  </SelectContent>
+   413→                </Select>
+   414→              </div>
+   415→              <div className="space-y-2">
+   416→                <Label>Strategy</Label>
+   417→                <Select value={form.strategyId || "__none"} onValueChange={(v) => setField("strategyId", v === "__none" ? "" : v)}>
+   418→                  <SelectTrigger><SelectValue placeholder="None" /></SelectTrigger>
+   419→                  <SelectContent>
+   420→                    <SelectItem value="__none">None</SelectItem>
+   421→                    {meta?.strategies?.map((s: any) => (
+   422→                      <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>
+   423→                    ))}
+   424→                  </SelectContent>
+   425→                </Select>
+   426→              </div>
+   427→              <div className="space-y-2">
+   428→                <Label>Setup Grade</Label>
+   429→                <Select value={form.setupGrade || "__none"} onValueChange={(v) => setField("setupGrade", v === "__none" ? "" : v)}>
+   430→                  <SelectTrigger><SelectValue placeholder="None" /></SelectTrigger>
+   431→                  <SelectContent>
+   432→                    <SelectItem value="__none">None</SelectItem>
+   433→                    <SelectItem value="A+">A+</SelectItem>
+   434→                    <SelectItem value="A">A</SelectItem>
+   435→                    <SelectItem value="B">B</SelectItem>
+   436→                    <SelectItem value="C">C</SelectItem>
+   437→                    <SelectItem value="Invalid">Invalid</SelectItem>
+   438→                  </SelectContent>
+   439→                </Select>
+   440→              </div>
+   441→              <div className="space-y-2">
+   442→                <Label>Entry Time</Label>
+   443→                <Input
+   444→                  type="datetime-local"
+   445→                  value={form.entryTime}
+   446→                  onChange={(e) => setField("entryTime", e.target.value)}
+   447→                />
+   448→              </div>
+   449→              <div className="space-y-2">
+   450→                <Label>Exit Time</Label>
+   451→                <Input
+   452→                  type="datetime-local"
+   453→                  value={form.exitTime}
+   454→                  onChange={(e) => setField("exitTime", e.target.value)}
+   455→                />
+   456→              </div>
+   457→            </div>
+   458→          </Card>
+   459→        </TabsContent>
+   460→
+   461→        {/* Execution */}
+   462→        <TabsContent value="execution" className="space-y-4 mt-3">
+   463→          <Card className="p-4 space-y-4">
+   464→            <div className="grid sm:grid-cols-2 gap-3">
+   465→              <div className="space-y-2">
+   466→                <Label>Entry Price</Label>
+   467→                <Input value={form.entryPrice} onChange={(e) => setField("entryPrice", e.target.value)} placeholder="0.00000" />
+   468→              </div>
+   469→              <div className="space-y-2">
+   470→                <Label>Exit Price</Label>
+   471→                <Input value={form.exitPrice} onChange={(e) => setField("exitPrice", e.target.value)} placeholder="0.00000" />
+   472→              </div>
+   473→              <div className="space-y-2">
+   474→                <Label>Quantity / Size</Label>
+   475→                <Input value={form.quantity} onChange={(e) => setField("quantity", e.target.value)} placeholder="1.0" />
+   476→              </div>
+   477→              <div className="space-y-2">
+   478→                <Label>Risk %</Label>
+   479→                <Input value={form.plannedRiskPct} onChange={(e) => setField("plannedRiskPct", e.target.value)} placeholder="0.005" />
+   480→              </div>
+   481→            </div>
+   482→            <Separator />
+   483→            <div className="grid sm:grid-cols-2 gap-3">
+   484→              <div className="space-y-2">
+   485→                <Label>Fees (cents)</Label>
+   486→                <Input type="number" value={form.feesCents} onChange={(e) => setField("feesCents", Number(e.target.value))} />
+   487→              </div>
+   488→              <div className="space-y-2">
+   489→                <Label>Commission (cents)</Label>
+   490→                <Input type="number" value={form.commissionCents} onChange={(e) => setField("commissionCents", Number(e.target.value))} />
+   491→              </div>
+   492→              <div className="space-y-2">
+   493→                <Label>Swap (cents)</Label>
+   494→                <Input type="number" value={form.swapCents} onChange={(e) => setField("swapCents", Number(e.target.value))} />
+   495→              </div>
+   496→              <div className="space-y-2">
+   497→                <Label>Slippage (cents)</Label>
+   498→                <Input type="number" value={form.slippageCents} onChange={(e) => setField("slippageCents", Number(e.target.value))} />
+   499→              </div>
+   500→            </div>
+   501→            <p className="text-xs text-muted-foreground">
+   502→              P&L and R are computed server-side. Values shown are computed from the execution ledger and validated before storage.
+   503→            </p>
+   504→          </Card>
+   505→        </TabsContent>
+   506→
+   507→        {/* Plan */}
+   508→        <TabsContent value="plan" className="space-y-4 mt-3">
+   509→          <Card className="p-4 space-y-4">
+   510→            <div className="grid sm:grid-cols-3 gap-3">
+   511→              <div className="space-y-2">
+   512→                <Label>Planned Entry</Label>
+   513→                <Input value={form.plannedEntryPrice} onChange={(e) => setField("plannedEntryPrice", e.target.value)} placeholder="0.00000" />
+   514→              </div>
+   515→              <div className="space-y-2">
+   516→                <Label>Planned Stop</Label>
+   517→                <Input value={form.plannedStopPrice} onChange={(e) => setField("plannedStopPrice", e.target.value)} placeholder="0.00000" />
+   518→              </div>
+   519→              <div className="space-y-2">
+   520→                <Label>Planned Target</Label>
+   521→                <Input value={form.plannedTargetPrice} onChange={(e) => setField("plannedTargetPrice", e.target.value)} placeholder="0.00000" />
+   522→              </div>
+   523→            </div>
+   524→            <Separator />
+   525→            <div className="space-y-2">
+   526→              <Label>Thesis: Why am I taking this trade?</Label>
+   527→              <Textarea
+   528→                value={form.thesis.why}
+   529→                onChange={(e) => setField("thesis.why", e.target.value)}
+   530→                rows={3}
+   531→                placeholder="What is the market narrative? What liquidity am I targeting? What confirms the setup?"
+   532→              />
+   533→            </div>
+   534→            <div className="grid sm:grid-cols-2 gap-3">
+   535→              <div className="space-y-2">
+   536→                <Label>What confirms the setup? (comma separated)</Label>
+   537→                <Input
+   538→                  value={(form.thesis.confirms ?? []).join(", ")}
+   539→                  onChange={(e) => setField("thesis.confirms", e.target.value.split(",").map((s: string) => s.trim()).filter(Boolean))}
+   540→                  placeholder="Displacement, MSS"
+   541→                />
+   542→              </div>
+   543→              <div className="space-y-2">
+   544→                <Label>What invalidates it? (comma separated)</Label>
+   545→                <Input
+   546→                  value={(form.thesis.invalidates ?? []).join(", ")}
+   547→                  onChange={(e) => setField("thesis.invalidates", e.target.value.split(",").map((s: string) => s.trim()).filter(Boolean))}
+   548→                  placeholder="No displacement, MSS fails"
+   549→                />
+   550→              </div>
+   551→              <div className="space-y-2">
+   552→                <Label>Target</Label>
+   553→                <Input value={form.thesis.target} onChange={(e) => setField("thesis.target", e.target.value)} />
+   554→              </div>
+   555→              <div className="space-y-2">
+   556→                <Label>What would make me exit early?</Label>
+   557→                <Input value={form.thesis.earlyExit} onChange={(e) => setField("thesis.earlyExit", e.target.value)} />
+   558→              </div>
+   559→            </div>
+   560→          </Card>
+   561→        </TabsContent>
+   562→
+   563→        {/* Setup */}
+   564→        <TabsContent value="setup" className="space-y-4 mt-3">
+   565→          <Card className="p-4 space-y-4">
+   566→            <div className="grid sm:grid-cols-2 gap-3">
+   567→              <div className="space-y-2">
+   568→                <Label>Weekly Bias</Label>
+   569→                <Select value={form.setup.htfContext.weeklyBias} onValueChange={(v) => setField("setup.htfContext.weeklyBias", v)}>
+   570→                  <SelectTrigger><SelectValue /></SelectTrigger>
+   571→                  <SelectContent>
+   572→                    <SelectItem value="bullish">Bullish</SelectItem>
+   573→                    <SelectItem value="bearish">Bearish</SelectItem>
+   574→                    <SelectItem value="neutral">Neutral</SelectItem>
+   575→                  </SelectContent>
+   576→                </Select>
+   577→              </div>
+   578→              <div className="space-y-2">
+   579→                <Label>Daily Bias</Label>
+   580→                <Select value={form.setup.htfContext.dailyBias} onValueChange={(v) => setField("setup.htfContext.dailyBias", v)}>
+   581→                  <SelectTrigger><SelectValue /></SelectTrigger>
+   582→                  <SelectContent>
+   583→                    <SelectItem value="bullish">Bullish</SelectItem>
+   584→                    <SelectItem value="bearish">Bearish</SelectItem>
+   585→                    <SelectItem value="neutral">Neutral</SelectItem>
+   586→                  </SelectContent>
+   587→                </Select>
+   588→              </div>
+   589→            </div>
+   590→            <Separator />
+   591→            <div className="space-y-2">
+   592→              <Label>Liquidity Targets</Label>
+   593→              <div className="flex flex-wrap gap-2">
+   594→                {["PDH", "PDL", "PWH", "PWL", "equal highs", "equal lows", "buy-side", "sell-side", "session liquidity"].map((opt) => {
+   595→                  const active = (form.setup.liquidity ?? []).includes(opt);
+   596→                  return (
+   597→                    <button
+   598→                      key={opt}
+   599→                      type="button"
+   600→                      onClick={() => toggleArrayField("setup.liquidity", opt)}
+   601→                      className={cn("px-2 py-1 rounded-md text-xs border transition-colors", active ? "bg-primary text-primary-foreground border-primary" : "border-border hover:bg-muted")}
+   602→                    >
+   603→                      {opt}
+   604→                    </button>
+   605→                  );
+   606→                })}
+   607→              </div>
+   608→            </div>
+   609→            <div className="space-y-2">
+   610→              <Label>Structure</Label>
+   611→              <div className="flex flex-wrap gap-2">
+   612→                {["BOS", "MSS", "displacement", "protected high", "protected low", "structure shift"].map((opt) => {
+   613→                  const active = (form.setup.structure ?? []).includes(opt);
+   614→                  return (
+   615→                    <button
+   616→                      key={opt}
+   617→                      type="button"
+   618→                      onClick={() => toggleArrayField("setup.structure", opt)}
+   619→                      className={cn("px-2 py-1 rounded-md text-xs border transition-colors", active ? "bg-primary text-primary-foreground border-primary" : "border-border hover:bg-muted")}
+   620→                    >
+   621→                      {opt}
+   622→                    </button>
+   623→                  );
+   624→                })}
+   625→              </div>
+   626→            </div>
+   627→            <div className="space-y-2">
+   628→              <Label>Entry Model</Label>
+   629→              <Select value={form.setup.entryModel} onValueChange={(v) => setField("setup.entryModel", v)}>
+   630→                <SelectTrigger><SelectValue /></SelectTrigger>
+   631→                <SelectContent>
+   632→                  {["liquidity sweep", "displacement", "FVG", "Order Block", "Breaker", "Mitigation", "SMT", "retracement"].map((o) => (
+   633→                    <SelectItem key={o} value={o}>{o}</SelectItem>
+   634→                  ))}
+   635→                </SelectContent>
+   636→              </Select>
+   637→            </div>
+   638→          </Card>
+   639→
+   640→          {/* Strategy Rules Checklist */}
+   641→          {form.strategyId && strategyDetail?.versions?.[0] && (() => {
+   642→            let rules: Record<string, string[]> = {};
+   643→            try { rules = JSON.parse(strategyDetail.versions[0].rulesJson ?? "{}"); } catch {}
+   644→            const sections = ["entry", "stop", "target", "management", "invalidation"];
+   645→            const hasRules = sections.some(s => Array.isArray(rules[s]) && rules[s].length > 0);
+   646→            if (!hasRules) return null;
+   647→            const latestVersion = strategyDetail.versions[0];
+   648→            return (
+   649→              <Card className="p-4 space-y-4">
+   650→                <div className="flex items-center justify-between">
+   651→                  <div>
+   652→                    <h3 className="font-medium">Strategy Rules Checklist</h3>
+   653→                    <p className="text-xs text-muted-foreground mt-0.5">
+   654→                      {strategyDetail.name} · v{latestVersion.versionLabel}
+   655→                    </p>
+   656→                  </div>
+   657→                  <Badge variant="outline">v{latestVersion.versionLabel}</Badge>
+   658→                </div>
+   659→                <p className="text-sm text-muted-foreground">
+   660→                  Check off each rule you followed on this trade. This becomes part of your behavior analytics.
+   661→                </p>
+   662→                <div className="space-y-4">
+   663→                  {sections.map((section) => {
+   664→                    const sectionRules = Array.isArray(rules[section]) ? rules[section] : [];
+   665→                    if (sectionRules.length === 0) return null;
+   666→                    const sectionLabel = section.charAt(0).toUpperCase() + section.slice(1);
+   667→                    const followed = sectionRules.filter((r: string) => form.ruleCompliance?.[`${section}:${r}`]).length;
+   668→                    return (
+   669→                      <div key={section} className="space-y-2">
+   670→                        <div className="flex items-center justify-between">
+   671→                          <Label className="text-xs uppercase tracking-wide text-muted-foreground">{sectionLabel} Rules</Label>
+   672→                          <Badge variant="secondary" className="text-xs">{followed}/{sectionRules.length} followed</Badge>
+   673→                        </div>
+   674→                        <div className="space-y-1.5">
+   675→                          {sectionRules.map((rule: string, i: number) => {
+   676→                            const key = `${section}:${rule}`;
+   677→                            const checked = form.ruleCompliance?.[key] ?? false;
+   678→                            return (
+   679→                              <label
+   680→                                key={i}
+   681→                                className={cn(
+   682→                                  "flex items-center gap-3 p-2 rounded-md border cursor-pointer transition-colors",
+   683→                                  checked ? "bg-profit/10 border-profit/30" : "border-border hover:bg-muted/40",
+   684→                                )}
+   685→                              >
+   686→                                <Checkbox
+   687→                                  checked={checked}
+   688→                                  onCheckedChange={(v) => {
+   689→                                    setForm((f: any) => ({
+   690→                                      ...f,
+   691→                                      ruleCompliance: { ...f.ruleCompliance, [key]: !!v },
+   692→                                    }));
+   693→                                  }}
+   694→                                />
+   695→                                <span className={cn("text-sm", checked && "text-profit font-medium")}>{rule}</span>
+   696→                                {checked && <Check className="h-3 w-3 text-profit ml-auto" />}
+   697→                              </label>
+   698→                            );
+   699→                          })}
+   700→                        </div>
+   701→                      </div>
+   702→                    );
+   703→                  })}
+   704→                </div>
+   705→              </Card>
+   706→            );
+   707→          })()}
+   708→        </TabsContent>
+   709→
+   710→        {/* Psychology */}
+   711→        <TabsContent value="psychology" className="space-y-4 mt-3">
+   712→          <Card className="p-4 space-y-4">
+   713→            <div className="space-y-2">
+   714→              <Label>Mood Before</Label>
+   715→              <div className="flex flex-wrap gap-2">
+   716→                {PSYCH_BEFORE.map((opt) => {
+   717→                  const active = (form.psychBefore.moodTags ?? []).includes(opt);
+   718→                  return (
+   719→                    <button
+   720→                      key={opt}
+   721→                      type="button"
+   722→                      onClick={() => toggleArrayField("psychBefore.moodTags", opt)}
+   723→                      className={cn("px-2 py-1 rounded-md text-xs border transition-colors", active ? "bg-primary text-primary-foreground border-primary" : "border-border hover:bg-muted")}
+   724→                    >
+   725→                      {opt}
+   726→                    </button>
+   727→                  );
+   728→                })}
+   729→              </div>
+   730→            </div>
+   731→            <div className="grid sm:grid-cols-2 gap-3">
+   732→              <div className="space-y-2">
+   733→                <Label>Confidence Before (1-5)</Label>
+   734→                <Input type="number" min={1} max={5} value={form.psychBefore.confidence} onChange={(e) => setField("psychBefore.confidence", Number(e.target.value))} />
+   735→              </div>
+   736→              <div className="space-y-2">
+   737→                <Label>Energy/Focus Before (1-5)</Label>
+   738→                <Input type="number" min={1} max={5} value={form.psychBefore.energy} onChange={(e) => setField("psychBefore.energy", Number(e.target.value))} />
+   739→              </div>
+   740→            </div>
+   741→            <Separator />
+   742→            <div className="space-y-2">
+   743→              <Label>Mood After</Label>
+   744→              <div className="flex flex-wrap gap-2">
+   745→                {PSYCH_AFTER.map((opt) => {
+   746→                  const active = (form.psychAfter.moodTags ?? []).includes(opt);
+   747→                  return (
+   748→                    <button
+   749→                      key={opt}
+   750→                      type="button"
+   751→                      onClick={() => toggleArrayField("psychAfter.moodTags", opt)}
+   752→                      className={cn("px-2 py-1 rounded-md text-xs border transition-colors", active ? "bg-primary text-primary-foreground border-primary" : "border-border hover:bg-muted")}
+   753→                    >
+   754→                      {opt}
+   755→                    </button>
+   756→                  );
+   757→                })}
+   758→              </div>
+   759→            </div>
+   760→            <Separator />
+   761→            <div className="space-y-2">
+   762→              <Label>Behavior Flags</Label>
+   763→              <div className="flex flex-wrap gap-2">
+   764→                {BEHAVIOR_FLAGS.map((opt) => {
+   765→                  const active = (form.behaviorFlags ?? []).includes(opt);
+   766→                  return (
+   767→                    <button
+   768→                      key={opt}
+   769→                      type="button"
+   770→                      onClick={() => toggleArrayField("behaviorFlags", opt)}
+   771→                      className={cn("px-2 py-1 rounded-md text-xs border transition-colors", active ? "bg-warning text-white border-warning" : "border-border hover:bg-muted")}
+   772→                    >
+   773→                      {opt.split("_").map((w) => w.charAt(0).toUpperCase() + w.slice(1)).join(" ")}
+   774→                    </button>
+   775→                  );
+   776→                })}
+   777→              </div>
+   778→            </div>
+   779→          </Card>
+   780→        </TabsContent>
+   781→
+   782→        {/* Review */}
+   783→        <TabsContent value="review" className="space-y-4 mt-3">
+   784→          <Card className="p-4 space-y-4">
+   785→            <div className="space-y-2">
+   786→              <Label>Notes</Label>
+   787→              <Textarea value={form.notes} onChange={(e) => setField("notes", e.target.value)} rows={4} placeholder="Free-form notes about this trade" />
+   788→            </div>
+   789→            <div className="space-y-2">
+   790→              <Label>Lessons</Label>
+   791→              <Textarea value={form.lessons} onChange={(e) => setField("lessons", e.target.value)} rows={3} placeholder="What did you learn?" />
+   792→            </div>
+   793→            <div className="space-y-2">
+   794→              <Label className="flex items-center gap-2"><TagIcon className="h-4 w-4" /> Tags</Label>
+   795→              <div className="flex flex-wrap gap-2">
+   796→                {(meta?.tags ?? []).map((tag: any) => {
+   797→                  const active = (form.tags ?? []).includes(tag.name);
+   798→                  return (
+   799→                    <button
+   800→                      key={tag.id}
+   801→                      type="button"
+   802→                      onClick={() => toggleArrayField("tags", tag.name)}
+   803→                      className={cn("px-2 py-1 rounded-md text-xs border transition-colors", active ? "bg-primary text-primary-foreground border-primary" : "border-border hover:bg-muted")}
+   804→                    >
+   805→                      {tag.name}
+   806→                    </button>
+   807→                  );
+   808→                })}
+   809→              </div>
+   810→            </div>
+   811→          </Card>
+   812→        </TabsContent>
+   813→
+   814→        {/* Evidence */}
+   815→        <TabsContent value="evidence" className="space-y-4 mt-3">
+   816→          <Card className="p-4 space-y-4">
+   817→            <div className="flex items-center justify-between">
+   818→              <div>
+   819→                <h3 className="font-medium">Evidence</h3>
+   820→                <p className="text-sm text-muted-foreground mt-0.5">
+   821→                  Upload screenshots, chart recordings, or trade evidence. Files are stored privately.
+   822→                </p>
+   823→              </div>
+   824→              <Button
+   825→                type="button"
+   826→                variant="outline"
+   827→                size="sm"
+   828→                onClick={() => fileInputRef.current?.click()}
+   829→              >
+   830→                <Upload className="h-4 w-4" /> Upload
+   831→              </Button>
+   832→              <input
+   833→                ref={fileInputRef}
+   834→                type="file"
+   835→                accept="image/png,image/jpeg,image/webp,image/gif,video/mp4,video/webm,video/quicktime"
+   836→                multiple
+   837→                className="hidden"
+   838→                onChange={(e) => {
+   839→                  const files = e.target.files;
+   840→                  if (!files) return;
+   841→                  handleFileUpload(files);
+   842→                  e.target.value = "";
+   843→                }}
+   844→              />
+   845→            </div>
+   846→
+   847→            {/* Paste support */}
+   848→            <div className="rounded-md border border-dashed border-border p-3 text-center text-sm text-muted-foreground">
+   849→              You can also paste screenshots directly with Ctrl+V (click here first to focus).
+   850→              <div
+   851→                contentEditable
+   852→                className="sr-only"
+   853→                onPaste={(e) => {
+   854→                  const items = e.clipboardData?.items;
+   855→                  if (!items) return;
+   856→                  const files: File[] = [];
+   857→                  for (const item of items) {
+   858→                    if (item.type.startsWith("image/")) {
+   859→                      const file = item.getAsFile();
+   860→                      if (file) files.push(file);
+   861→                    }
+   862→                  }
+   863→                  if (files.length > 0) {
+   864→                    handleFileUpload(files);
+   865→                    e.preventDefault();
+   866→                  }
+   867→                }}
+   868→                tabIndex={0}
+   869→              />
+   870→            </div>
+   871→
+   872→            {/* Uploaded media grid */}
+   873→            {form.uploadedMedia.length > 0 && (
+   874→              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+   875→                {form.uploadedMedia.map((m: any, i: number) => (
+   876→                  <div key={m.id || i} className="relative group rounded-md border border-border overflow-hidden">
+   877→                    <div className="relative">
+   878→                      {m.kind === "image" ? (
+   879→                        <img src={m.url} alt={m.filename} className="w-full aspect-video object-cover" />
+   880→                      ) : (
+   881→                        <div className="aspect-video bg-muted flex items-center justify-center">
+   882→                          <ImageIcon className="h-8 w-8 text-muted-foreground" />
+   883→                        </div>
+   884→                      )}
+   885→                      {m.kind === "image" && (
+   886→                        <button
+   887→                          type="button"
+   888→                          className="absolute top-2 right-2 h-7 px-2 rounded-full bg-black/60 text-white flex items-center gap-1 text-xs opacity-0 group-hover:opacity-100 transition-opacity"
+   889→                          onClick={() => setViewerIndex(i)}
+   890→                        >
+   891→                          <Pencil className="h-3 w-3" /> Annotate
+   892→                        </button>
+   893→                      )}
+   894→                      <button
+   895→                        type="button"
+   896→                        className="absolute top-2 left-2 h-7 w-7 rounded-full bg-black/60 text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+   897→                        onClick={() => {
+   898→                          setForm((f: any) => ({
+   899→                            ...f,
+   900→                            uploadedMedia: f.uploadedMedia.filter((_: any, idx: number) => idx !== i),
+   901→                          }));
+   902→                        }}
+   903→                      >
+   904→                        <X className="h-3 w-3" />
+   905→                      </button>
+   906→                    </div>
+   907→                    <div className="p-3 space-y-2">
+   908→                      <div className="flex items-center justify-between">
+   909→                        <div className="text-xs font-medium truncate flex-1">{m.filename}</div>
+   910→                        <div className="text-[10px] text-muted-foreground ml-2 shrink-0">
+   911→                          {(m.sizeBytes / 1024).toFixed(0)} KB
+   912→                        </div>
+   913→                      </div>
+   914→                      <div>
+   915→                        <Label className="text-xs text-muted-foreground">Description (optional)</Label>
+   916→                        <Textarea
+   917→                          value={m.caption || ""}
+   918→                          onChange={(e) => {
+   919→                            const val = e.target.value;
+   920→                            setForm((f: any) => ({
+   921→                              ...f,
+   922→                              uploadedMedia: f.uploadedMedia.map((item: any, idx: number) =>
+   923→                                idx === i ? { ...item, caption: val } : item
+   924→                              ),
+   925→                            }));
+   926→                          }}
+   927→                          rows={2}
+   928→                          placeholder="Describe what this screenshot shows..."
+   929→                          className="text-sm mt-1"
+   930→                        />
+   931→                      </div>
+   932→                    </div>
+   933→                  </div>
+   934→                ))}
+   935→              </div>
+   936→            )}
+   937→
+   938→            {form.uploadedMedia.length === 0 && (
+   939→              <div className="rounded-md border border-dashed border-border p-8 text-center">
+   940→                <ImageIcon className="h-8 w-8 mx-auto text-muted-foreground mb-2" />
+   941→                <p className="text-sm text-muted-foreground">No evidence uploaded yet.</p>
+   942→                <p className="text-xs text-muted-foreground mt-1">
+   943→                  Click Upload above or paste a screenshot with Ctrl+V.
+   944→                </p>
+   945→              </div>
+   946→            )}
+   947→          </Card>
+   948→        </TabsContent>
+   949→      </Tabs>
+   950→
+   951→      {/* Navigation bar: Next/Back on intermediate tabs, Save on the final tab.
+   952→          On mobile: fixed to bottom of viewport (below mobile nav). On desktop: sticky at bottom of scroll. */}
+   953→      <div className="fixed bottom-16 md:static left-0 right-0 z-20 flex gap-2 justify-between bg-background/95 backdrop-blur p-2 border-t border-border md:rounded-md md:border">
+   954→        <div className="flex gap-2">
+   955→          <Button
+   956→            variant="outline"
+   957→            onClick={() => {
+   958→              const idx = TAB_ORDER.indexOf(activeTab);
+   959→              if (idx > 0) setActiveTab(TAB_ORDER[idx - 1]);
+   960→            }}
+   961→            disabled={activeTab === TAB_ORDER[0]}
+   962→          >
+   963→            <ArrowLeft className="h-4 w-4" /> Back
+   964→          </Button>
+   965→        </div>
+   966→        <div className="flex gap-2">
+   967→          {activeTab !== TAB_ORDER[TAB_ORDER.length - 1] ? (
+   968→            <Button
+   969→              onClick={() => {
+   970→                const idx = TAB_ORDER.indexOf(activeTab);
+   971→                if (idx < TAB_ORDER.length - 1) setActiveTab(TAB_ORDER[idx + 1]);
+   972→              }}
+   973→            >
+   974→              Next <ArrowRight className="h-4 w-4" />
+   975→            </Button>
+   976→          ) : (
+   977→            <>
+   978→              <Button variant="outline" onClick={() => submit(true)} disabled={saving}>
+   979→                {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+   980→                Save as Draft
+   981→              </Button>
+   982→              <Button onClick={() => submit(false)} disabled={saving}>
+   983→                {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
+   984→                Save Trade
+   985→              </Button>
+   986→            </>
+   987→          )}
+   988→        </div>
+   989→      </div>
+   990→
+   991→      {/* Image viewer with annotation support */}
+   992→      {viewerIndex != null && form.uploadedMedia[viewerIndex] && (
+   993→        <ImageViewer
+   994→          mediaItems={form.uploadedMedia.filter((m: any) => m.kind === "image")}
+   995→          initialIndex={form.uploadedMedia.filter((m: any) => m.kind === "image").findIndex((m: any) => m.id === form.uploadedMedia[viewerIndex].id)}
+   996→          onClose={() => setViewerIndex(null)}
+   997→        />
+   998→      )}
+   999→    </div>
+  1000→  );
+  1001→}
+  1002→
+  1003→function safeJson(json: string | null, fallback: any): any {
+  1004→  if (!json) return fallback;
+  1005→  try { return JSON.parse(json); } catch { return fallback; }
+  1006→}
+  1007→
+  1008→function Separator() {
+  1009→  return <div className="h-px bg-border" />;
+  1010→}
+  1011→

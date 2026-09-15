@@ -1,0 +1,681 @@
+// DnD — Trading Performance Platform
+// Prisma schema (PostgreSQL / Neon). RLS is enforced in the service layer via mandatory userId filters.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ---------------------------------------------------------------------------
+// Users & Auth
+// ---------------------------------------------------------------------------
+
+model User {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  name         String?
+  passwordHash String
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  accounts          TradingAccount[]
+  instruments       Instrument[]
+  trades            Trade[]
+  strategies        Strategy[]
+  checklists        ChecklistConfig[]
+  tags              Tag[]
+  dailyPlans        DailyPlan[]
+  reviews           Review[]
+  actionItems       ActionItem[]
+  goals             Goal[]
+  imports           Import[]
+  backups           Backup[]
+  auditEvents       AuditEvent[]
+  notifications      Notification[]
+  notificationPrefs NotificationPreferences?
+  settings          UserSettings?
+  legalAcceptances   LegalAcceptance[]
+  media              TradeMedia[]
+  deviceSessions     DeviceSession[]
+}
+
+// ---------------------------------------------------------------------------
+// Trading Accounts & Instruments
+// ---------------------------------------------------------------------------
+
+model TradingAccount {
+  id             String   @id @default(cuid())
+  userId         String
+  name           String
+  broker         String?
+  accountType    String   @default("live") // live | demo | prop | funded | backtest | personal | other
+  currency       String   @default("USD")
+  startingBalanceCents Int @default(100000)
+  currentBalanceCents Int @default(100000)
+  consistencyRate Float?
+  dailyLossLimitPct Float?
+  maxDrawdownPct Float?
+  isDefault      Boolean  @default(false)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  user   User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  trades Trade[]
+
+  @@index([userId])
+}
+
+model Instrument {
+  id            String  @id @default(cuid())
+  userId        String
+  symbol        String
+  name          String?
+  market        String  // forex | gold | indices | futures | crypto | stocks | custom
+  pipSize       String  @default("0.0001") // decimal string
+  tickSize      String  @default("0.0001")
+  contractSize  String  @default("1") // decimal string
+  pricePrecision Int   @default(5)
+  currency      String  @default("USD")
+  createdAt     DateTime @default(now())
+
+  user   User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  trades Trade[]
+
+  @@unique([userId, symbol])
+  @@index([userId])
+}
+
+// ---------------------------------------------------------------------------
+// Strategies & Versioning
+// ---------------------------------------------------------------------------
+
+model Strategy {
+  id          String   @id @default(cuid())
+  userId      String
+  name        String
+  description String?
+  purpose     String?
+  instruments String?  // comma-separated symbols
+  market      String?
+  timeframe   String?
+  session     String?
+  status      String   @default("active") // active | paused | archived
+  checklistConfigId String? // FK to the strategy's associated checklist
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  user    User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  versions StrategyVersion[]
+  trades  Trade[]
+  experiments StrategyExperiment[]
+  checklistConfig ChecklistConfig? @relation(fields: [checklistConfigId], references: [id], onDelete: SetNull)
+
+  @@index([userId])
+}
+
+model StrategyVersion {
+  id            String   @id @default(cuid())
+  strategyId    String
+  versionLabel  String   // e.g. "1.0", "1.1", "2.0"
+  changeReason  String?
+  changeSummary String?
+  expectedImpact String?
+  rulesJson     String   // JSON: { entry:[], stop:[], target:[], management:[], invalidation:[] }
+  checklistJson  String?  // optional embedded checklist
+  effectiveDate DateTime
+  status        String   @default("active")
+  createdAt     DateTime @default(now())
+
+  strategy  Strategy @relation(fields: [strategyId], references: [id], onDelete: Cascade)
+  trades    Trade[]
+  experiments StrategyExperiment[]
+  checklistEvaluations TradeChecklistEvaluation[]
+
+  @@unique([strategyId, versionLabel])
+  @@index([strategyId])
+}
+
+model StrategyExperiment {
+  id            String   @id @default(cuid())
+  strategyId    String
+  versionId     String?
+  title         String
+  hypothesis    String?
+  startDate     DateTime
+  endDate       DateTime?
+  status        String   @default("running") // running | concluded | abandoned
+  resultsJson   String?
+  createdAt     DateTime @default(now())
+
+  strategy Strategy         @relation(fields: [strategyId], references: [id], onDelete: Cascade)
+  version  StrategyVersion? @relation(fields: [versionId], references: [id], onDelete: SetNull)
+
+  @@index([strategyId])
+}
+
+// ---------------------------------------------------------------------------
+// Checklists (versioned)
+// ---------------------------------------------------------------------------
+
+model ChecklistConfig {
+  id          String   @id @default(cuid())
+  userId      String
+  name        String
+  description String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  user    User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  versions ChecklistVersion[]
+  strategies Strategy[] // strategies that use this checklist
+
+  @@index([userId])
+}
+
+model ChecklistVersion {
+  id              String   @id @default(cuid())
+  checklistId     String
+  versionLabel    String
+  itemsJson       String   // JSON: [{ id, text, required, weight, evidenceRequired }]
+  gradingThresholdsJson String? // JSON: { "A+":0.9, "A":0.75, "B":0.6, "C":0.4 }
+  effectiveDate   DateTime
+  createdAt       DateTime @default(now())
+
+  checklist   ChecklistConfig @relation(fields: [checklistId], references: [id], onDelete: Cascade)
+  evaluations TradeChecklistEvaluation[]
+  trades      Trade[]
+
+  @@unique([checklistId, versionLabel])
+  @@index([checklistId])
+}
+
+// ---------------------------------------------------------------------------
+// Trades & Execution Ledger
+// ---------------------------------------------------------------------------
+
+model Trade {
+  id             String   @id @default(cuid())
+  userId         String
+  accountId      String
+  instrumentId   String?
+  instrumentSymbol String // denormalized for resilience
+  market         String?
+  direction      String   // long | short
+  status         String   @default("open") // open | win | loss | breakeven | partial_win | partial_loss | cancelled
+  session        String?  // asia | london | ny_am | ny_pm | custom
+  newsEvent      String?  @default("none") // structured news event key (see src/lib/news-events.ts)
+  strategyId     String?
+  strategyVersionId String?
+  dailyPlanId    String?
+  checklistVersionId String?
+  setupGrade     String?  // A+ | A | B | C | Invalid
+  setupScore     String?  // decimal string 0..1
+  tagsJson       String   @default("[]") // JSON string array of tag names
+
+  // Planned
+  plannedEntryPrice  String? // decimal
+  plannedStopPrice   String?
+  plannedTargetPrice String?
+  plannedRiskAmountCents Int?
+  plannedRiskPct     String? // decimal
+  // BUG-CALC-3 fix: planned risk-reward ratio (targetDistance / stopDistance).
+  plannedRR          String? // decimal
+
+  // Actual (denormalized from executions, server-computed)
+  entryPriceAvg  String?
+  exitPriceAvg   String?
+  positionSize   String? // decimal
+  feesCents      Int     @default(0)
+  commissionCents Int    @default(0)
+  swapCents       Int     @default(0)
+  slippageCents  Int     @default(0)
+  grossPnlCents  Int     @default(0)
+  netPnlCents    Int     @default(0)
+  actualR        String? // decimal or null when undefined
+
+  // Times
+  entryTime      DateTime?
+  exitTime       DateTime?
+  tradingTimezone String  @default("UTC")
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  // ICT setup JSON (free-form but structured)
+  setupJson      String?  // { htfContext, liquidity, structure, entryModel, session }
+
+  // Thesis & notes
+  thesisJson     String?  // { why, narrative, liquidityTarget, confirms, invalidates, target, earlyExit }
+  notes          String?
+  lessons        String?
+
+  // Plan vs execution
+  planAdherenceJson String? // { session, risk, tradeCount, conditions, instruments, target }
+
+  // Psychology
+  psychBeforeJson String? // { moodTags:[], confidence:1-5, energy:1-5, impact, notes }
+  psychAfterJson  String?
+  behaviorFlagsJson String? @default("[]") // [entered_early, broke_rules, ...]
+
+  // Draft / archive
+  isDraft        Boolean  @default(false)
+  isArchived     Boolean  @default(false)
+  draftJson      String?  // autosaved draft payload
+
+  user           User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  account        TradingAccount   @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  instrument     Instrument?      @relation(fields: [instrumentId], references: [id], onDelete: SetNull)
+  strategy       Strategy?        @relation(fields: [strategyId], references: [id], onDelete: SetNull)
+  strategyVersion StrategyVersion? @relation(fields: [strategyVersionId], references: [id], onDelete: SetNull)
+  dailyPlan      DailyPlan?       @relation(fields: [dailyPlanId], references: [id], onDelete: SetNull)
+  checklistVersion ChecklistVersion? @relation(fields: [checklistVersionId], references: [id], onDelete: SetNull)
+  executions     TradeExecution[]
+  targets        TradeTarget[]
+  media          TradeMedia[]
+  checklistEvaluations TradeChecklistEvaluation[]
+  reviewLinks    ReviewTradeLink[]
+
+  @@index([userId])
+  @@index([accountId])
+  @@index([instrumentId])
+  @@index([strategyId])
+  @@index([dailyPlanId])
+  @@index([session])
+  @@index([status])
+  @@index([entryTime])
+}
+
+model TradeExecution {
+  id        String   @id @default(cuid())
+  tradeId   String
+  kind      String   // entry | exit
+  seq       Int      @default(0)
+  price     String   // decimal
+  quantity  String   // decimal
+  timestamp DateTime
+  notes     String?
+  createdAt DateTime @default(now())
+
+  trade Trade @relation(fields: [tradeId], references: [id], onDelete: Cascade)
+
+  @@index([tradeId])
+}
+
+model TradeTarget {
+  id        String  @id @default(cuid())
+  tradeId   String
+  label     String  // TP1, TP2, ...
+  price     String  // decimal
+  quantityPct String // decimal 0..1 of position
+  createdAt DateTime @default(now())
+
+  trade Trade @relation(fields: [tradeId], references: [id], onDelete: Cascade)
+
+  @@index([tradeId])
+}
+
+// ---------------------------------------------------------------------------
+// Media & Annotations
+// ---------------------------------------------------------------------------
+
+model TradeMedia {
+  id          String   @id @default(cuid())
+  userId      String
+  tradeId     String?
+  strategyId  String?
+  reviewId    String?
+  kind        String   // image | video
+  stage       String?  // before_entry | setup | entry | during_trade | exit | review
+  filename    String
+  storedPath  String   // relative to storage root
+  mimeType    String
+  sizeBytes   Int
+  width       Int?
+  height      Int?
+  durationMs  Int?
+  thumbnailPath String?
+  caption     String?
+  timeframe   String?  // chart timeframe the screenshot captures (see src/lib/timeframes.ts)
+  tagsJson    String   @default("[]")
+  uploadStatus String  @default("ready") // uploading | processing | ready | failed
+  createdAt   DateTime @default(now())
+
+  user        User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  trade       Trade?     @relation(fields: [tradeId], references: [id], onDelete: Cascade)
+  annotations MediaAnnotation[]
+
+  @@index([userId])
+  @@index([tradeId])
+  @@index([stage])
+}
+
+model MediaAnnotation {
+  id        String  @id @default(cuid())
+  mediaId   String
+  kind      String  // line | arrow | rect | circle | text | price
+  payloadJson String // geometry + style
+  createdAt DateTime @default(now())
+
+  media TradeMedia @relation(fields: [mediaId], references: [id], onDelete: Cascade)
+
+  @@index([mediaId])
+}
+
+// ---------------------------------------------------------------------------
+// Checklist evaluations (per-trade, locked to version)
+// ---------------------------------------------------------------------------
+
+model TradeChecklistEvaluation {
+  id                   String  @id @default(cuid())
+  tradeId              String
+  // checklistVersionId is nullable because DnD evaluates checklist answers
+  // against the StrategyVersion.rulesJson (not a separate ChecklistVersion)
+  // for most user-created trades. When the strategy has an associated
+  // ChecklistConfig, the latest ChecklistVersion is linked here; otherwise
+  // strategyVersionId is used instead.
+  checklistVersionId   String?
+  strategyVersionId    String?
+  rawAnswersJson       String  // { itemId: { checked, note } }
+  weightedScore        String  // decimal 0..1
+  finalGrade           String  // A+ | A | B | C | Invalid
+  evaluatedAt          DateTime @default(now())
+
+  trade             Trade             @relation(fields: [tradeId], references: [id], onDelete: Cascade)
+  checklistVersion  ChecklistVersion? @relation(fields: [checklistVersionId], references: [id], onDelete: Cascade)
+  strategyVersion   StrategyVersion?  @relation(fields: [strategyVersionId], references: [id], onDelete: SetNull)
+
+  @@index([tradeId])
+}
+
+// ---------------------------------------------------------------------------
+// Tags
+// ---------------------------------------------------------------------------
+
+model Tag {
+  id        String   @id @default(cuid())
+  userId    String
+  name      String
+  color     String   @default("slate")
+  archived  Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, name])
+  @@index([userId])
+}
+
+// ---------------------------------------------------------------------------
+// Daily Plans
+// ---------------------------------------------------------------------------
+
+model DailyPlan {
+  id           String   @id @default(cuid())
+  userId       String
+  date         DateTime
+  weeklyBias   String?
+  dailyBias    String?
+  instruments  String?
+  pwh          String?
+  pwl          String?
+  pdh          String?
+  pdl          String?
+  htfLevelsJson String?
+  liquidityTargets String?
+  session      String?
+  setupConditions String?
+  invalidation String?
+  maxTrades    Int?
+  maxDailyRiskPct String?
+  notes        String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  user   User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  trades Trade[]
+
+  @@unique([userId, date])
+  @@index([userId])
+}
+
+// ---------------------------------------------------------------------------
+// Reviews & Action Items
+// ---------------------------------------------------------------------------
+
+model Review {
+  id           String   @id @default(cuid())
+  userId       String
+  kind         String   // daily | weekly | monthly
+  periodStart  DateTime
+  periodEnd    DateTime
+  title        String?
+  marketConditions String?
+  planFollowed String?
+  bestTradeId  String?
+  worstTradeId String?
+  biggestMistake String?
+  emotionalState String?
+  biggestLesson String?
+  nextFocus    String?
+  reflection   String?
+  // auto-computed metrics snapshot
+  metricsJson  String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  user        User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tradeLinks  ReviewTradeLink[]
+  actionItems ActionItem[]
+
+  @@index([userId, kind])
+}
+
+model ReviewTradeLink {
+  id        String @id @default(cuid())
+  reviewId  String
+  tradeId   String
+  createdAt DateTime @default(now())
+
+  review Review @relation(fields: [reviewId], references: [id], onDelete: Cascade)
+  trade  Trade  @relation(fields: [tradeId], references: [id], onDelete: Cascade)
+
+  @@unique([reviewId, tradeId])
+}
+
+model ActionItem {
+  id          String   @id @default(cuid())
+  userId      String
+  reviewId    String?
+  title       String
+  description String?
+  dueDate     DateTime?
+  status      String   @default("open") // open | done | dismissed
+  linkedStrategyId String?
+  linkedChecklistId String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  user   User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  review Review? @relation(fields: [reviewId], references: [id], onDelete: SetNull)
+
+  @@index([userId, status])
+}
+
+model Goal {
+  id          String  @id @default(cuid())
+  userId      String
+  title       String
+  kind        String  // process | performance
+  target      String?
+  periodStart DateTime?
+  periodEnd   DateTime?
+  status      String  @default("active")
+  createdAt    DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+// ---------------------------------------------------------------------------
+// Notifications, Audit, Imports, Backups, Settings
+// ---------------------------------------------------------------------------
+
+model Notification {
+  id        String   @id @default(cuid())
+  userId    String
+  category  String   // trading | journal | system
+  title     String
+  body      String?
+  read      Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, read])
+}
+
+model NotificationPreferences {
+  id            String  @id @default(cuid())
+  userId        String  @unique
+  prefsJson     String  // { trading:{...}, journal:{...}, system:{...}, quietHours:{...} }
+  updatedAt     DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model AuditEvent {
+  id        String   @id @default(cuid())
+  userId    String
+  action    String   // trade.created, strategy.versioned, import.completed...
+  entity    String
+  entityId  String?
+  diffJson   String?
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+}
+
+model Import {
+  id         String   @id @default(cuid())
+  userId     String
+  source     String   // csv | json | broker
+  filename   String
+  status     String   @default("uploaded") // uploaded|mapped|previewed|validated|imported|failed
+  rowCount   Int      @default(0)
+  summaryJson String?
+  createdAt  DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  rows ImportRow[]
+
+  @@index([userId])
+}
+
+model ImportRow {
+  id        String  @id @default(cuid())
+  importId  String
+  rowIndex  Int
+  rawJson   String
+  mappedJson String?
+  status    String  @default("pending") // pending | valid | invalid | duplicate | imported
+  issues    String?
+  createdAt DateTime @default(now())
+
+  import Import @relation(fields: [importId], references: [id], onDelete: Cascade)
+
+  @@index([importId])
+}
+
+model Backup {
+  id         String   @id @default(cuid())
+  userId     String
+  filename   String
+  storedPath String
+  sizeBytes  Int
+  recordCountsJson String?
+  createdAt  DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+model UserSettings {
+  userId            String  @id
+  timezone          String  @default("UTC")
+  displayTimezone   String  @default("UTC")
+  tradingTimezone   String  @default("UTC")
+  theme             String  @default("nordic") // nordic | terminal | institutional
+  density           String  @default("comfortable") // comfortable | compact
+  reducedMotion     Boolean @default(false)
+  largerText        Boolean @default(false)
+  defaultRiskPct    String  @default("0.5")
+  // Base currency symbol used for display in amounts (e.g. "$", "€").
+  baseCurrencySymbol String @default("$")
+  // Risk threshold banners — percentages where DnD flags a trade's planned
+  // risk as Normal / Warning / Critical. Default to 1.5 / 3 / 5 %.
+  normalRiskMaxPct  Float   @default(1.5)
+  warningRiskMaxPct Float   @default(3)
+  criticalRiskMaxPct Float  @default(5)
+  defaultAccountId  String?
+  defaultSession    String?
+  defaultInstrument String?
+  defaultTimeframe  String? @default("5m")
+  dailyTradeLimit    Int?
+  maxTradesPerDay   Int?
+  maxRiskPerTradePct Float?
+  dailyLossLimitPct  String?
+  preferredInstruments String?
+  dateFormat        String? @default("MMM D, YYYY")
+  timeFormat        String? @default("HH:mm")
+  weekStartsOn      String? @default("monday")
+  nyMarketOffset    String? @default("UTC-4")
+  privacyModeEnabled Boolean @default(false)
+  privacyPassphraseHash String?
+  updatedAt          DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model LegalAcceptance {
+  id        String   @id @default(cuid())
+  userId    String
+  docType   String   // terms | privacy | cookies | marketing | analytics
+  version   String
+  acceptedAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, docType])
+}
+
+model DeviceSession {
+  id        String   @id @default(cuid())
+  userId    String
+  label     String?
+  userAgent String?
+  createdAt DateTime @default(now())
+  lastSeen  DateTime @default(now())
+  revoked   Boolean  @default(false)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+model AnalyticsCache {
+  id        String   @id @default(cuid())
+  userId    String
+  bucket    String   // e.g. "dashboard:30d", "strategy:<id>"
+  payloadJson String
+  updatedAt DateTime @updatedAt
+
+  @@unique([userId, bucket])
+  @@index([userId])
+}

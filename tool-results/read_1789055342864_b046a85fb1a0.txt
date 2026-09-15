@@ -1,0 +1,2002 @@
+     1→DN D CURRENT BUILD: ULTIMATE READ-ONLY FULL SYSTEM AUDIT
+     2→
+     3→============================================================
+     4→ABSOLUTE RULE: DO NOT MODIFY THE PROJECT
+     5→============================================================
+     6→
+     7→Your ONLY task is to inspect and document the CURRENT DnD project exactly as it exists at the moment this audit begins.
+     8→
+     9→This is a READ-ONLY reverse-engineering and documentation task.
+    10→
+    11→DO NOT:
+    12→
+    13→- modify source code
+    14→- modify UI
+    15→- redesign anything
+    16→- fix bugs
+    17→- refactor
+    18→- rename files
+    19→- rename variables
+    20→- change configuration
+    21→- change environment variables
+    22→- install packages
+    23→- update dependencies
+    24→- delete files
+    25→- create migrations
+    26→- modify database schema
+    27→- modify database records
+    28→- seed data
+    29→- alter user data
+    30→- rewrite documentation in the project
+    31→- change routes
+    32→- change API behavior
+    33→- change authentication
+    34→- change styling
+    35→- change settings
+    36→- change onboarding
+    37→- change financial logic
+    38→- change deployment configuration
+    39→
+    40→Do not "improve" anything you find.
+    41→
+    42→Do not silently correct inconsistencies.
+    43→
+    44→Do not clean up the code.
+    45→
+    46→You are observing and documenting only.
+    47→
+    48→If a command could modify the project, DO NOT RUN IT.
+    49→
+    50→Safe read-only inspection, browser navigation, source inspection, build inspection, schema inspection, and non-destructive runtime observation are allowed.
+    51→
+    52→============================================================
+    53→WHY THIS AUDIT EXISTS
+    54→============================================================
+    55→
+    56→DnD has gone through several major redesigns and feature changes.
+    57→
+    58→Previous reports are now historical context and must NOT be treated as authoritative.
+    59→
+    60→The CURRENT CODEBASE + CURRENT RUNNING APPLICATION are the source of truth.
+    61→
+    62→I need a completely fresh snapshot of what DnD is NOW.
+    63→
+    64→The report must be detailed enough that I can give it to another AI model and that model can understand the entire application without needing to rediscover it from scratch.
+    65→
+    66→The report must cover:
+    67→
+    68→FRONTEND
+    69→UI
+    70→UX
+    71→DESIGN
+    72→EVERY SCREEN
+    73→EVERY FORM
+    74→EVERY INTERACTION
+    75→NAVIGATION
+    76→RESPONSIVE DESIGN
+    77→STATE
+    78→BACKEND
+    79→API
+    80→SERVER LOGIC
+    81→DATABASE
+    82→TRADING DOMAIN
+    83→FINANCIAL ENGINE
+    84→STRATEGIES
+    85→CHECKLISTS
+    86→DAILY PLANS
+    87→TRADE STATES
+    88→MEDIA
+    89→TIMEFRAMES
+    90→NEWS
+    91→ANALYTICS
+    92→CALENDAR
+    93→ONBOARDING
+    94→SETTINGS
+    95→AUTH
+    96→SECURITY
+    97→LEGAL
+    98→COOKIES
+    99→PERFORMANCE
+   100→TESTING
+   101→DEPLOYMENT
+   102→DATA FLOW
+   103→KNOWN ISSUES
+   104→MISSING FEATURES
+   105→
+   106→============================================================
+   107→SOURCE-OF-TRUTH RULE
+   108→============================================================
+   109→
+   110→Use this priority:
+   111→
+   112→1. Current running application
+   113→2. Current source code
+   114→3. Current database/schema
+   115→4. Current configuration
+   116→5. Current package/dependency configuration
+   117→6. Current deployment files
+   118→7. Historical project documentation only for comparison
+   119→
+   120→If sources conflict:
+   121→
+   122→CURRENT BEHAVIOR wins.
+   123→
+   124→Mark the discrepancy under:
+   125→
+   126→CURRENT VS HISTORICAL
+   127→
+   128→Never silently merge different versions together.
+   129→
+   130→============================================================
+   131→VERIFICATION LABELS
+   132→============================================================
+   133→
+   134→Every important conclusion must use one of:
+   135→
+   136→VERIFIED
+   137→PARTIALLY VERIFIED
+   138→INFERRED
+   139→NOT FOUND
+   140→NOT VERIFIED
+   141→BLOCKED
+   142→
+   143→Definitions:
+   144→
+   145→VERIFIED
+   146→Directly confirmed through current code, UI, runtime, schema, configuration, or other concrete evidence.
+   147→
+   148→PARTIALLY VERIFIED
+   149→Some parts confirmed, others not.
+   150→
+   151→INFERRED
+   152→Strongly suggested but not directly confirmed.
+   153→
+   154→NOT FOUND
+   155→Search performed and no implementation was found.
+   156→
+   157→NOT VERIFIED
+   158→Implementation may exist but behavior could not be confirmed.
+   159→
+   160→BLOCKED
+   161→Could not inspect/test because required infrastructure was unavailable.
+   162→
+   163→Never turn:
+   164→BLOCKED → VERIFIED
+   165→
+   166→Never turn:
+   167→INFERRED → VERIFIED
+   168→
+   169→============================================================
+   170→1. PROJECT IDENTITY
+   171→============================================================
+   172→
+   173→Document:
+   174→
+   175→- product name
+   176→- current product description
+   177→- product purpose
+   178→- target user
+   179→- user problem
+   180→- current value proposition
+   181→- differentiators
+   182→- current positioning
+   183→- core mental model
+   184→- major workflows
+   185→
+   186→Explain what DnD currently is in one paragraph.
+   187→
+   188→Then explain it technically.
+   189→
+   190→============================================================
+   191→2. COMPLETE PROJECT STRUCTURE
+   192→============================================================
+   193→
+   194→Inspect the entire repository.
+   195→
+   196→Create a meaningful architecture tree showing:
+   197→
+   198→- app
+   199→- components
+   200→- views
+   201→- common components
+   202→- UI components
+   203→- trade components
+   204→- onboarding
+   205→- public
+   206→- libraries
+   207→- database
+   208→- API
+   209→- services
+   210→- utilities
+   211→- styles
+   212→- public assets
+   213→- scripts
+   214→- tests
+   215→- deployment
+   216→- configuration
+   217→
+   218→For important files include:
+   219→
+   220→PATH
+   221→PURPOSE
+   222→FEATURE
+   223→DEPENDENCIES
+   224→
+   225→Do not dump thousands of unimportant files.
+   226→
+   227→============================================================
+   228→3. COMPLETE CURRENT ROUTE / VIEW MAP
+   229→============================================================
+   230→
+   231→Determine exactly how navigation works.
+   232→
+   233→Determine whether the current app uses:
+   234→
+   235→- Next.js routes
+   236→- SPA view switching
+   237→- query parameters
+   238→- modals
+   239→- drawers
+   240→- overlays
+   241→- nested navigation
+   242→
+   243→For EVERY view:
+   244→
+   245→- exact route/view key
+   246→- component
+   247→- public/authenticated
+   248→- purpose
+   249→- entry points
+   250→- exit points
+   251→- primary action
+   252→- secondary actions
+   253→- related views
+   254→- backend dependencies
+   255→
+   256→============================================================
+   257→4. COMPLETE NAVIGATION AUDIT
+   258→============================================================
+   259→
+   260→Inspect the ACTUAL current:
+   261→
+   262→- desktop sidebar
+   263→- top navbar
+   264→- mobile navigation
+   265→- account switcher
+   266→- search
+   267→- command palette
+   268→- profile/user menu
+   269→- dropdowns
+   270→- contextual actions
+   271→- buttons that navigate to views
+   272→
+   273→For each:
+   274→
+   275→- exact label
+   276→- icon
+   277→- position
+   278→- order
+   279→- grouping
+   280→- active state
+   281→- collapsed state
+   282→- mobile behavior
+   283→- keyboard behavior
+   284→- data-tour attribute if present
+   285→
+   286→Do not rely on old navigation documentation.
+   287→
+   288→============================================================
+   289→5. COMPLETE DESIGN SYSTEM
+   290→============================================================
+   291→
+   292→Inspect actual current UI styling.
+   293→
+   294→Document exact values where available:
+   295→
+   296→COLORS
+   297→
+   298→- background
+   299→- foreground
+   300→- surface
+   301→- card
+   302→- border
+   303→- primary
+   304→- secondary
+   305→- success
+   306→- warning
+   307→- danger
+   308→- profit
+   309→- loss
+   310→- sidebar
+   311→- inputs
+   312→- overlays
+   313→- charts
+   314→
+   315→TYPOGRAPHY
+   316→
+   317→- fonts
+   318→- font stack
+   319→- headings
+   320→- body
+   321→- labels
+   322→- captions
+   323→- numeric styles
+   324→- monospace
+   325→
+   326→SPACING
+   327→
+   328→- page padding
+   329→- section spacing
+   330→- card padding
+   331→- grid gap
+   332→- form gap
+   333→- navigation spacing
+   334→
+   335→COMPONENT STYLING
+   336→
+   337→- border radius
+   338→- borders
+   339→- shadows
+   340→- elevation
+   341→- hover
+   342→- active
+   343→- selected
+   344→- focus
+   345→- disabled
+   346→
+   347→THEMES
+   348→
+   349→- light
+   350→- dark
+   351→- institutional/other
+   352→- persistence
+   353→- initialization
+   354→- no-FOUC behavior
+   355→
+   356→ICONS
+   357→
+   358→- library
+   359→- sizes
+   360→- usage patterns
+   361→
+   362→MOTION
+   363→
+   364→- animation library
+   365→- transitions
+   366→- entrance animations
+   367→- reduced motion behavior
+   368→
+   369→ACCESSIBILITY
+   370→
+   371→- focus
+   372→- keyboard
+   373→- aria labels
+   374→- contrast
+   375→- touch targets
+   376→
+   377→============================================================
+   378→6. SCREEN-BY-SCREEN UI REVERSE ENGINEERING
+   379→============================================================
+   380→
+   381→THIS IS ONE OF THE MOST IMPORTANT SECTIONS.
+   382→
+   383→Open and inspect every accessible screen.
+   384→
+   385→For each screen document:
+   386→
+   387→SCREEN NAME
+   388→
+   389→ROUTE / VIEW
+   390→
+   391→PURPOSE
+   392→
+   393→LAYOUT
+   394→
+   395→HEADER
+   396→
+   397→SIDEBAR/NAV
+   398→
+   399→CONTENT STRUCTURE
+   400→
+   401→SECTION ORDER
+   402→
+   403→CARDS
+   404→
+   405→TABLES
+   406→
+   407→CHARTS
+   408→
+   409→FILTERS
+   410→
+   411→TABS
+   412→
+   413→DROPDOWNS
+   414→
+   415→FORMS
+   416→
+   417→BUTTONS
+   418→
+   419→MODALS
+   420→
+   421→DRAWERS
+   422→
+   423→TOOLTIPS
+   424→
+   425→EMPTY STATES
+   426→
+   427→LOADING STATES
+   428→
+   429→ERROR STATES
+   430→
+   431→SUCCESS STATES
+   432→
+   433→PRIMARY CTA
+   434→
+   435→SECONDARY ACTIONS
+   436→
+   437→DATA DISPLAYED
+   438→
+   439→DATA SOURCE
+   440→
+   441→BACKEND DEPENDENCIES
+   442→
+   443→RESPONSIVE BEHAVIOR
+   444→
+   445→KEY INTERACTIONS
+   446→
+   447→============================================================
+   448→7. VISUAL SCREEN INVENTORY
+   449→============================================================
+   450→
+   451→If browser screenshot tooling is available, capture representative screenshots of:
+   452→
+   453→- landing page
+   454→- signup
+   455→- sign in
+   456→- cookie consent
+   457→- onboarding welcome
+   458→- every setup step
+   459→- every tour state where useful
+   460→- dashboard
+   461→- trades log
+   462→- planned trade
+   463→- open trade
+   464→- close trade modal
+   465→- closed trade
+   466→- add trade
+   467→- every Add Trade step
+   468→- trade detail
+   469→- strategies
+   470→- strategy creation
+   471→- strategy editing
+   472→- strategy versions
+   473→- checklist
+   474→- media/evidence
+   475→- calendar
+   476→- day details
+   477→- analytics
+   478→- settings
+   479→- profile
+   480→- trading settings
+   481→- appearance
+   482→- legal
+   483→- backup
+   484→- account management
+   485→- mobile layouts
+   486→
+   487→Screenshots are evidence.
+   488→
+   489→Do not modify the application to create screenshots.
+   490→
+   491→============================================================
+   492→8. COMPLETE FORM INVENTORY
+   493→============================================================
+   494→
+   495→Inspect EVERY form.
+   496→
+   497→For each form:
+   498→
+   499→FORM NAME
+   500→
+   501→SCREEN
+   502→
+   503→STEP/TAB
+   504→
+   505→PURPOSE
+   506→
+   507→FIELDS
+   508→
+   509→FIELD TYPE
+   510→
+   511→REQUIRED / OPTIONAL
+   512→
+   513→DEFAULT
+   514→
+   515→PLACEHOLDER
+   516→
+   517→OPTIONS
+   518→
+   519→ENUM VALUES
+   520→
+   521→AUTO-FORMATTING
+   522→
+   523→VALIDATION
+   524→
+   525→DEPENDENCIES
+   526→
+   527→CONDITIONAL LOGIC
+   528→
+   529→CALCULATED VALUES
+   530→
+   531→CLIENT VALIDATION
+   532→
+   533→SERVER VALIDATION
+   534→
+   535→SUBMIT ACTION
+   536→
+   537→API/SERVER ACTION
+   538→
+   539→SUCCESS
+   540→
+   541→ERROR
+   542→
+   543→RESET
+   544→
+   545→EDIT MODE
+   546→
+   547→UNSAVED STATE
+   548→
+   549→DRAFT STATE
+   550→
+   551→PERSISTENCE
+   552→
+   553→Do this for:
+   554→
+   555→- signup
+   556→- signin
+   557→- account creation
+   558→- account editing
+   559→- instrument selection
+   560→- strategy creation
+   561→- strategy editing
+   562→- rules
+   563→- trade creation
+   564→- trade editing
+   565→- planned trade
+   566→- execution
+   567→- close trade
+   568→- partial exits
+   569→- checklist
+   570→- psychology
+   571→- evidence
+   572→- annotations
+   573→- daily plan
+   574→- reviews
+   575→- settings
+   576→- legal
+   577→- cookie preferences
+   578→- data import
+   579→- other discovered forms
+   580→
+   581→============================================================
+   582→9. ADD TRADE COMPLETE AUDIT
+   583→============================================================
+   584→
+   585→Reverse-engineer the ENTIRE current Add Trade experience.
+   586→
+   587→Document the exact number and order of steps.
+   588→
+   589→For every step:
+   590→
+   591→- exact title
+   592→- exact fields
+   593→- field types
+   594→- defaults
+   595→- validation
+   596→- dynamic behavior
+   597→- dependent fields
+   598→- calculated values
+   599→- next/back
+   600→- save behavior
+   601→- draft behavior
+   602→
+   603→Trace:
+   604→
+   605→USER
+   606→→ ADD TRADE
+   607→→ FORM
+   608→→ STATE
+   609→→ VALIDATION
+   610→→ API
+   611→→ SERVER LOGIC
+   612→→ DATABASE
+   613→→ ANALYTICS
+   614→→ UI
+   615→
+   616→Inspect in detail:
+   617→
+   618→- account
+   619→- instrument
+   620→- direction
+   621→- status
+   622→- date/time
+   623→- session
+   624→- timeframe
+   625→- news
+   626→- strategy
+   627→- checklist
+   628→- entry
+   629→- stop
+   630→- target
+   631→- size
+   632→- risk
+   633→- R:R
+   634→- partial exits
+   635→- psychology
+   636→- thesis
+   637→- evidence
+   638→- image
+   639→- video
+   640→- files
+   641→- media upload
+   642→- timeframe tagging
+   643→- annotations
+   644→- planned vs actual
+   645→- final review/save
+   646→
+   647→============================================================
+   648→10. TRADE STATE MACHINE
+   649→============================================================
+   650→
+   651→Determine the actual supported states.
+   652→
+   653→Potential examples:
+   654→
+   655→DRAFT
+   656→PLANNED
+   657→OPEN
+   658→CLOSED
+   659→
+   660→But DO NOT assume these exist.
+   661→
+   662→Identify:
+   663→
+   664→- valid states
+   665→- state transitions
+   666→- who/what triggers transition
+   667→- available actions per state
+   668→- fields required by state
+   669→- calculated metrics by state
+   670→- whether state transitions are reversible
+   671→
+   672→Create a state diagram.
+   673→
+   674→============================================================
+   675→11. PLANNED TRADE
+   676→============================================================
+   677→
+   678→Inspect everything relating to planned trades.
+   679→
+   680→Document:
+   681→
+   682→- creation
+   683→- fields
+   684→- UI
+   685→- status
+   686→- editing
+   687→- execution/start
+   688→- conversion to open trade
+   689→- cancel/delete
+   690→- calendar
+   691→- dashboard
+   692→- analytics
+   693→- relationship to actual execution
+   694→
+   695→Determine exactly how:
+   696→
+   697→PLANNED
+   698→→ OPEN
+   699→→ CLOSED
+   700→
+   701→works in the current implementation.
+   702→
+   703→============================================================
+   704→12. OPEN TRADE / CLOSE TRADE
+   705→============================================================
+   706→
+   707→Inspect the current close-trade experience.
+   708→
+   709→Document:
+   710→
+   711→- where Close Trade appears
+   712→- modal/page
+   713→- all fields
+   714→- validation
+   715→- partial close
+   716→- full close
+   717→- execution details
+   718→- fees
+   719→- P&L preview
+   720→- R preview
+   721→- server calculations
+   722→- status update
+   723→- audit
+   724→- refresh behavior
+   725→- errors
+   726→
+   727→============================================================
+   728→13. STRATEGY SYSTEM
+   729→============================================================
+   730→
+   731→Reverse-engineer:
+   732→
+   733→- strategy creation
+   734→- strategy editing
+   735→- strategy duplication
+   736→- activation/deactivation
+   737→- versioning
+   738→- version labels
+   739→- rule management
+   740→- rule ordering
+   741→- rule weight
+   742→- rule necessity
+   743→- descriptions
+   744→- historical versions
+   745→- trade linkage
+   746→
+   747→Trace:
+   748→
+   749→STRATEGY
+   750→→ VERSION
+   751→→ RULES
+   752→→ TRADE
+   753→→ CHECKLIST
+   754→
+   755→============================================================
+   756→14. CHECKLIST / A+ SYSTEM
+   757→============================================================
+   758→
+   759→Inspect the current implementation.
+   760→
+   761→Determine exactly:
+   762→
+   763→- source of checklist rules
+   764→- strategy relation
+   765→- generic checklist existence
+   766→- item structure
+   767→- required rules
+   768→- weight
+   769→- scoring
+   770→- grade calculation
+   771→- thresholds
+   772→- grade caps
+   773→- server validation
+   774→- raw answers
+   775→- snapshot
+   776→- historical version preservation
+   777→
+   778→Trace:
+   779→
+   780→RAW ANSWERS
+   781→→ SCORE
+   782→→ GRADE
+   783→→ STORED EVALUATION
+   784→
+   785→============================================================
+   786→15. INSTRUMENT SYSTEM
+   787→============================================================
+   788→
+   789→Inspect the actual current instrument implementation.
+   790→
+   791→Document:
+   792→
+   793→- catalog source
+   794→- database model
+   795→- categories
+   796→- market types
+   797→- supported symbols
+   798→- capitalization behavior
+   799→- search
+   800→- dropdown
+   801→- favorites
+   802→- defaults
+   803→- custom instruments
+   804→- price precision
+   805→- quantity precision
+   806→- pip size
+   807→- tick size
+   808→- point value
+   809→- contract size
+   810→- currencies
+   811→
+   812→Trace how instruments affect:
+   813→
+   814→- trade form
+   815→- calculations
+   816→- risk
+   817→- display
+   818→- analytics
+   819→- filters
+   820→- settings
+   821→
+   822→============================================================
+   823→16. FINANCIAL ENGINE
+   824→============================================================
+   825→
+   826→Inspect every financial calculation.
+   827→
+   828→Document:
+   829→
+   830→- entry
+   831→- exit
+   832→- average price
+   833→- quantity
+   834→- partial exits
+   835→- gross P&L
+   836→- fees
+   837→- commissions
+   838→- swap
+   839→- slippage
+   840→- net P&L
+   841→- risk
+   842→- planned R
+   843→- actual R
+   844→- equity
+   845→- drawdown
+   846→- profit factor
+   847→- expectancy
+   848→- win rate
+   849→- streaks
+   850→- other metrics
+   851→
+   852→For each:
+   853→
+   854→INPUT
+   855→→ FORMULA
+   856→→ FUNCTION
+   857→→ STORAGE
+   858→→ API
+   859→→ DISPLAY
+   860→
+   861→Document numeric representations and precision.
+   862→
+   863→Identify client-derived versus server-authoritative values.
+   864→
+   865→============================================================
+   866→17. MEDIA / EVIDENCE
+   867→============================================================
+   868→
+   869→Inspect the actual current media architecture.
+   870→
+   871→Document:
+   872→
+   873→- upload
+   874→- image
+   875→- video
+   876→- file
+   877→- size limits
+   878→- formats
+   879→- progress indicator
+   880→- background/non-blocking upload
+   881→- upload states
+   882→- retry
+   883→- cancel
+   884→- storage
+   885→- signed URLs
+   886→- metadata
+   887→- timeframe
+   888→- descriptions/captions
+   889→- thumbnails
+   890→- preview
+   891→- download
+   892→- annotations
+   893→- deletion
+   894→- trade relationship
+   895→
+   896→Trace:
+   897→
+   898→SELECT
+   899→→ UPLOAD
+   900→→ PROGRESS
+   901→→ STORAGE
+   902→→ DATABASE
+   903→→ TRADE
+   904→→ DISPLAY
+   905→
+   906→Determine whether uploads block the trade form.
+   907→
+   908→============================================================
+   909→18. TIMEFRAME SYSTEM
+   910→============================================================
+   911→
+   912→Inspect exact supported timeframes.
+   913→
+   914→Document:
+   915→
+   916→- values
+   917→- labels
+   918→- categories/groups
+   919→- where used
+   920→- default
+   921→- persistence
+   922→- filtering
+   923→- media grouping
+   924→- trade-level timeframe
+   925→- chart timeframe
+   926→- analytics use
+   927→
+   928→============================================================
+   929→19. NEWS SYSTEM
+   930→============================================================
+   931→
+   932→Inspect:
+   933→
+   934→- field
+   935→- selector
+   936→- values
+   937→- default
+   938→- validation
+   939→- storage
+   940→- single/multiple
+   941→- UI display
+   942→- analytics
+   943→- historical records
+   944→
+   945→============================================================
+   946→20. PSYCHOLOGY / BEHAVIOR
+   947→============================================================
+   948→
+   949→Inspect all psychological data.
+   950→
+   951→Document:
+   952→
+   953→- emotions
+   954→- confidence
+   955→- discipline
+   956→- tags
+   957→- behavior flags
+   958→- mistakes
+   959→- notes
+   960→- before/after
+   961→- score
+   962→- analytics
+   963→- correlations
+   964→
+   965→============================================================
+   966→21. DAILY PLANS
+   967→============================================================
+   968→
+   969→Determine the CURRENT status.
+   970→
+   971→Is the UI active?
+   972→
+   973→Is it hidden?
+   974→
+   975→Is it only API/model-level?
+   976→
+   977→Document:
+   978→
+   979→- navigation
+   980→- creation
+   981→- fields
+   982→- editing
+   983→- date
+   984→- instrument
+   985→- bias
+   986→- liquidity
+   987→- levels
+   988→- sessions
+   989→- risk
+   990→- max trades
+   991→- invalidation
+   992→- strategy
+   993→- trade linkage
+   994→- adherence
+   995→
+   996→Do not assume Daily Plans exist in UI.
+   997→
+   998→============================================================
+   999→22. CALENDAR
+  1000→============================================================
+  1001→
+  1002→Inspect actual calendar behavior.
+  1003→
+  1004→Document:
+  1005→
+  1006→- layout
+  1007→- month navigation
+  1008→- timezone
+  1009→- day aggregation
+  1010→- P&L
+  1011→- R
+  1012→- trades
+  1013→- wins
+  1014→- losses
+  1015→- grades
+  1016→- A+
+  1017→- violations
+  1018→- sessions
+  1019→- planned trades
+  1020→- day popup/page
+  1021→- actions
+  1022→
+  1023→Document exactly what happens when a day is clicked.
+  1024→
+  1025→============================================================
+  1026→23. ANALYTICS
+  1027→============================================================
+  1028→
+  1029→Inspect every analytics tab, chart, table and metric.
+  1030→
+  1031→For each:
+  1032→
+  1033→- name
+  1034→- purpose
+  1035→- source
+  1036→- formula
+  1037→- filters
+  1038→- dimensions
+  1039→- aggregation
+  1040→- sample-size gating
+  1041→- date range
+  1042→- cache
+  1043→- UI display
+  1044→- drilldown
+  1045→- account filter
+  1046→
+  1047→Determine whether analytics are:
+  1048→
+  1049→- client-side
+  1050→- server-side
+  1051→- cached
+  1052→- background
+  1053→- synchronous
+  1054→
+  1055→============================================================
+  1056→24. DASHBOARD
+  1057→============================================================
+  1058→
+  1059→Document EVERY dashboard element.
+  1060→
+  1061→Include:
+  1062→
+  1063→- metric cards
+  1064→- charts
+  1065→- recent trades
+  1066→- performance summaries
+  1067→- insight cards
+  1068→- filters
+  1069→- account selector
+  1070→- date ranges
+  1071→- planned/open/closed treatment
+  1072→- empty state
+  1073→- actions
+  1074→- links
+  1075→
+  1076→Explain the data source for each major element.
+  1077→
+  1078→============================================================
+  1079→25. REVIEWS
+  1080→============================================================
+  1081→
+  1082→Determine the actual current state.
+  1083→
+  1084→If active:
+  1085→
+  1086→document:
+  1087→
+  1088→- daily
+  1089→- weekly
+  1090→- monthly
+  1091→- reflections
+  1092→- auto metrics
+  1093→- patterns
+  1094→- action items
+  1095→- trade links
+  1096→
+  1097→If inactive:
+  1098→
+  1099→state clearly.
+  1100→
+  1101→============================================================
+  1102→26. ONBOARDING
+  1103→============================================================
+  1104→
+  1105→Inspect the EXACT current new-user flow.
+  1106→
+  1107→Document:
+  1108→
+  1109→SIGNUP
+  1110→→ LEGAL
+  1111→→ WELCOME
+  1112→→ SETUP
+  1113→→ TOUR
+  1114→→ DASHBOARD
+  1115→
+  1116→For setup:
+  1117→
+  1118→- exact welcome text
+  1119→- number of steps
+  1120→- each step
+  1121→- fields
+  1122→- defaults
+  1123→- required/optional
+  1124→- skip
+  1125→- back
+  1126→- completion
+  1127→- persistence
+  1128→- resume
+  1129→
+  1130→For tour:
+  1131→
+  1132→- exact number of steps
+  1133→- every step
+  1134→- target
+  1135→- selector
+  1136→- spotlight behavior
+  1137→- tooltip
+  1138→- navigation
+  1139→- mobile behavior
+  1140→- skip
+  1141→- replay
+  1142→- completion
+  1143→
+  1144→============================================================
+  1145→27. SETTINGS
+  1146→============================================================
+  1147→
+  1148→Inspect EVERY current Settings tab.
+  1149→
+  1150→For each tab:
+  1151→
+  1152→- exact label
+  1153→- section order
+  1154→- field
+  1155→- type
+  1156→- default
+  1157→- description
+  1158→- storage
+  1159→- effect on application
+  1160→
+  1161→Document:
+  1162→
+  1163→Profile
+  1164→
+  1165→Trading
+  1166→
+  1167→Appearance
+  1168→
+  1169→Legal
+  1170→
+  1171→and any additional current tabs.
+  1172→
+  1173→============================================================
+  1174→28. SETTINGS → TIME / MARKET CLOCK
+  1175→============================================================
+  1176→
+  1177→Inspect the current New York market clock.
+  1178→
+  1179→Document:
+  1180→
+  1181→- where it appears
+  1182→- displayed time
+  1183→- update frequency
+  1184→- UTC-4
+  1185→- UTC-5
+  1186→- selector
+  1187→- persisted preference
+  1188→- session indicator
+  1189→- session definitions
+  1190→- DST behavior
+  1191→- mobile behavior
+  1192→- relationship to user timezone
+  1193→
+  1194→============================================================
+  1195→29. AUTHENTICATION
+  1196→============================================================
+  1197→
+  1198→Trace exact:
+  1199→
+  1200→SIGNUP
+  1201→LOGIN
+  1202→LOGOUT
+  1203→SESSION
+  1204→COOKIE
+  1205→PASSWORD
+  1206→RECOVERY
+  1207→VERIFICATION
+  1208→MFA
+  1209→
+  1210→Document:
+  1211→
+  1212→- provider
+  1213→- token/session
+  1214→- expiry
+  1215→- cookie attributes
+  1216→- password hashing
+  1217→- rate limit
+  1218→- redirects
+  1219→- signout
+  1220→- errors
+  1221→
+  1222→============================================================
+  1223→30. LEGAL / COOKIE CONSENT
+  1224→============================================================
+  1225→
+  1226→Document:
+  1227→
+  1228→- Terms
+  1229→- Privacy
+  1230→- Cookies
+  1231→- cookie banner
+  1232→- categories
+  1233→- persistence
+  1234→- version
+  1235→- timestamp
+  1236→- signup acceptance
+  1237→- reacceptance
+  1238→- settings management
+  1239→
+  1240→============================================================
+  1241→31. DATABASE
+  1242→============================================================
+  1243→
+  1244→Inspect current Prisma/schema/database.
+  1245→
+  1246→For EVERY model:
+  1247→
+  1248→- exact model name
+  1249→- purpose
+  1250→- fields
+  1251→- types
+  1252→- required/optional
+  1253→- primary key
+  1254→- foreign keys
+  1255→- relations
+  1256→- indexes
+  1257→- unique constraints
+  1258→- enums
+  1259→- defaults
+  1260→- cascading
+  1261→- SetNull
+  1262→- soft delete
+  1263→- ownership
+  1264→- timestamps
+  1265→
+  1266→Create complete relationship map.
+  1267→
+  1268→============================================================
+  1269→32. API INVENTORY
+  1270→============================================================
+  1271→
+  1272→Inventory EVERY current API route.
+  1273→
+  1274→For each:
+  1275→
+  1276→METHOD
+  1277→
+  1278→PATH
+  1279→
+  1280→AUTH
+  1281→
+  1282→OWNER CHECK
+  1283→
+  1284→INPUT
+  1285→
+  1286→VALIDATION
+  1287→
+  1288→DATABASE
+  1289→
+  1290→RESPONSE
+  1291→
+  1292→ERRORS
+  1293→
+  1294→SIDE EFFECTS
+  1295→
+  1296→AUDIT
+  1297→
+  1298→CACHE
+  1299→
+  1300→Include auth, trade, media, settings, analytics, legal, backup, imports and everything else.
+  1301→
+  1302→============================================================
+  1303→33. SERVER BUSINESS LOGIC
+  1304→============================================================
+  1305→
+  1306→Identify important server functions.
+  1307→
+  1308→For each:
+  1309→
+  1310→- name
+  1311→- file
+  1312→- inputs
+  1313→- outputs
+  1314→- callers
+  1315→- database interaction
+  1316→- financial importance
+  1317→- security importance
+  1318→- side effects
+  1319→
+  1320→Prioritize:
+  1321→
+  1322→- P&L
+  1323→- risk
+  1324→- R
+  1325→- checklist
+  1326→- grade
+  1327→- instrument handling
+  1328→- session/timezone
+  1329→- close trade
+  1330→- plan adherence
+  1331→- analytics
+  1332→- auth
+  1333→- authorization
+  1334→- consent
+  1335→
+  1336→============================================================
+  1337→34. FRONTEND STATE
+  1338→============================================================
+  1339→
+  1340→Inventory:
+  1341→
+  1342→- Zustand stores
+  1343→- React Query
+  1344→- local state
+  1345→- persisted state
+  1346→- localStorage
+  1347→- sessionStorage
+  1348→- URL state
+  1349→
+  1350→For each:
+  1351→
+  1352→- what it stores
+  1353→- persistence
+  1354→- hydration
+  1355→- ownership
+  1356→- invalidation
+  1357→- synchronization
+  1358→
+  1359→============================================================
+  1360→35. COMPLETE DATA FLOW
+  1361→============================================================
+  1362→
+  1363→Create diagrams for:
+  1364→
+  1365→Signup
+  1366→
+  1367→Login
+  1368→
+  1369→Onboarding
+  1370→
+  1371→Strategy creation
+  1372→
+  1373→Strategy version
+  1374→
+  1375→Daily Plan
+  1376→
+  1377→Add Trade
+  1378→
+  1379→Planned Trade
+  1380→
+  1381→Open Trade
+  1382→
+  1383→Close Trade
+  1384→
+  1385→Media Upload
+  1386→
+  1387→Checklist
+  1388→
+  1389→Calendar
+  1390→
+  1391→Analytics
+  1392→
+  1393→Settings
+  1394→
+  1395→Cookie Consent
+  1396→
+  1397→Legal Acceptance
+  1398→
+  1399→For each:
+  1400→
+  1401→USER
+  1402→→ UI
+  1403→→ STATE
+  1404→→ SERVER/API
+  1405→→ BUSINESS LOGIC
+  1406→→ DATABASE/STORAGE
+  1407→→ RESPONSE
+  1408→→ UI
+  1409→
+  1410→============================================================
+  1411→36. ERROR HANDLING
+  1412→============================================================
+  1413→
+  1414→Inspect:
+  1415→
+  1416→- validation
+  1417→- API errors
+  1418→- auth errors
+  1419→- database failures
+  1420→- media errors
+  1421→- network errors
+  1422→- empty states
+  1423→- loading
+  1424→- unexpected errors
+  1425→- destructive confirmations
+  1426→
+  1427→Record where behavior is missing.
+  1428→
+  1429→============================================================
+  1430→37. RESPONSIVE DESIGN
+  1431→============================================================
+  1432→
+  1433→Inspect:
+  1434→
+  1435→DESKTOP
+  1436→
+  1437→TABLET
+  1438→
+  1439→MOBILE
+  1440→
+  1441→Document:
+  1442→
+  1443→- sidebar
+  1444→- top bar
+  1445→- mobile nav
+  1446→- forms
+  1447→- tables
+  1448→- charts
+  1449→- dialogs
+  1450→- trade flow
+  1451→- onboarding
+  1452→- media
+  1453→- calendar
+  1454→
+  1455→Identify UI degradation.
+  1456→
+  1457→============================================================
+  1458→38. ACCESSIBILITY
+  1459→============================================================
+  1460→
+  1461→Inspect:
+  1462→
+  1463→- focus
+  1464→- keyboard
+  1465→- screen readers
+  1466→- aria
+  1467→- contrast
+  1468→- labels
+  1469→- dialogs
+  1470→- touch targets
+  1471→- reduced motion
+  1472→
+  1473→============================================================
+  1474→39. SECURITY AUDIT
+  1475→============================================================
+  1476→
+  1477→Static inspection only.
+  1478→
+  1479→Inspect:
+  1480→
+  1481→- auth
+  1482→- authorization
+  1483→- ownership
+  1484→- sessions
+  1485→- cookies
+  1486→- CSRF
+  1487→- XSS
+  1488→- injection
+  1489→- validation
+  1490→- upload security
+  1491→- signed URLs
+  1492→- secrets
+  1493→- rate limits
+  1494→- headers
+  1495→- CSP
+  1496→- HSTS
+  1497→- CORS
+  1498→- mass assignment
+  1499→- information leakage
+  1500→
+  1501→Classify:
+  1502→
+  1503→SAFE
+  1504→WARNING
+  1505→CRITICAL
+  1506→NOT VERIFIED
+  1507→BLOCKED
+  1508→
+  1509→Do not perform destructive security testing.
+  1510→
+  1511→============================================================
+  1512→40. PERFORMANCE
+  1513→============================================================
+  1514→
+  1515→Inspect:
+  1516→
+  1517→- database queries
+  1518→- N+1
+  1519→- pagination
+  1520→- filters
+  1521→- client aggregation
+  1522→- analytics
+  1523→- charts
+  1524→- media
+  1525→- large video
+  1526→- upload behavior
+  1527→- bundle
+  1528→- rendering
+  1529→- caching
+  1530→
+  1531→If actual measurement is possible without modification, record it.
+  1532→
+  1533→Otherwise mark NOT VERIFIED.
+  1534→
+  1535→============================================================
+  1536→41. TESTING
+  1537→============================================================
+  1538→
+  1539→Inventory every actual test.
+  1540→
+  1541→Include:
+  1542→
+  1543→- unit
+  1544→- integration
+  1545→- E2E
+  1546→- browser
+  1547→- database
+  1548→- financial
+  1549→- auth
+  1550→- authorization
+  1551→- security
+  1552→
+  1553→Determine whether tests actually execute.
+  1554→
+  1555→============================================================
+  1556→42. BUILD / DEPLOYMENT
+  1557→============================================================
+  1558→
+  1559→Inspect:
+  1560→
+  1561→- development
+  1562→- build
+  1563→- production
+  1564→- hosting
+  1565→- reverse proxy
+  1566→- database
+  1567→- file storage
+  1568→- authentication
+  1569→- environment variables
+  1570→- CI/CD
+  1571→- monitoring
+  1572→- cron
+  1573→- workers
+  1574→
+  1575→Document actual current deployment.
+  1576→
+  1577→============================================================
+  1578→43. ENVIRONMENT VARIABLES
+  1579→============================================================
+  1580→
+  1581→List names only.
+  1582→
+  1583→Never show values.
+  1584→
+  1585→For each:
+  1586→
+  1587→- purpose
+  1588→- required
+  1589→- client/server
+  1590→- fallback
+  1591→- sensitivity
+  1592→
+  1593→============================================================
+  1594→44. DEPENDENCIES
+  1595→============================================================
+  1596→
+  1597→Inventory major dependencies.
+  1598→
+  1599→Group:
+  1600→
+  1601→Framework
+  1602→
+  1603→UI
+  1604→
+  1605→State
+  1606→
+  1607→Database
+  1608→
+  1609→Auth
+  1610→
+  1611→Validation
+  1612→
+  1613→Charts
+  1614→
+  1615→Media
+  1616→
+  1617→Security
+  1618→
+  1619→Testing
+  1620→
+  1621→Other
+  1622→
+  1623→Identify clearly unused/phantom dependencies.
+  1624→
+  1625→============================================================
+  1626→45. BACKUP / IMPORT / EXPORT
+  1627→============================================================
+  1628→
+  1629→Document:
+  1630→
+  1631→- export
+  1632→- import
+  1633→- CSV
+  1634→- JSON
+  1635→- backup
+  1636→- restore
+  1637→- merge
+  1638→- replace
+  1639→- validation
+  1640→- ownership
+  1641→- duplicates
+  1642→- destructive operations
+  1643→
+  1644→============================================================
+  1645→46. AUDIT TRAIL
+  1646→============================================================
+  1647→
+  1648→Document:
+  1649→
+  1650→- event types
+  1651→- resource types
+  1652→- mutations
+  1653→- actor
+  1654→- timestamp
+  1655→- metadata
+  1656→- immutability
+  1657→- missing coverage
+  1658→
+  1659→============================================================
+  1660→47. KNOWN BUGS
+  1661→============================================================
+  1662→
+  1663→Find REAL bugs.
+  1664→
+  1665→For each:
+  1666→
+  1667→ID
+  1668→
+  1669→SEVERITY
+  1670→
+  1671→FEATURE
+  1672→
+  1673→DESCRIPTION
+  1674→
+  1675→EVIDENCE
+  1676→
+  1677→USER IMPACT
+  1678→
+  1679→TECHNICAL IMPACT
+  1680→
+  1681→REPRODUCIBILITY
+  1682→
+  1683→Do NOT fix them.
+  1684→
+  1685→============================================================
+  1686→48. MISSING FEATURES
+  1687→============================================================
+  1688→
+  1689→Separate:
+  1690→
+  1691→CONFIRMED MISSING
+  1692→
+  1693→POSSIBLY MISSING
+  1694→
+  1695→NOT VERIFIED
+  1696→
+  1697→Do not infer missing functionality merely because it isn't visible in navigation.
+  1698→
+  1699→============================================================
+  1700→49. ARCHITECTURAL RISKS
+  1701→============================================================
+  1702→
+  1703→Identify:
+  1704→
+  1705→- scalability risks
+  1706→- security risks
+  1707→- data-loss risks
+  1708→- financial correctness risks
+  1709→- maintainability risks
+  1710→- UX risks
+  1711→- deployment risks
+  1712→- performance risks
+  1713→
+  1714→Provide evidence.
+  1715→
+  1716→============================================================
+  1717→50. CURRENT VS HISTORICAL
+  1718→============================================================
+  1719→
+  1720→Create:
+  1721→
+  1722→CURRENT SYSTEM
+  1723→
+  1724→PREVIOUS / HISTORICAL
+  1725→
+  1726→CHANGES
+  1727→
+  1728→IMPORTANT DIFFERENCES
+  1729→
+  1730→This section exists specifically to prevent future AI models from accidentally using outdated DnD assumptions.
+  1731→
+  1732→============================================================
+  1733→51. FEATURE TRACEABILITY MATRIX
+  1734→============================================================
+  1735→
+  1736→Create:
+  1737→
+  1738→FEATURE
+  1739→→ SCREEN
+  1740→→ COMPONENT
+  1741→→ STATE
+  1742→→ API
+  1743→→ BUSINESS LOGIC
+  1744→→ DATABASE
+  1745→→ AUTHORIZATION
+  1746→→ AUDIT
+  1747→→ ANALYTICS
+  1748→→ TESTS
+  1749→
+  1750→Cover all major features.
+  1751→
+  1752→============================================================
+  1753→52. SCREEN INVENTORY TABLE
+  1754→============================================================
+  1755→
+  1756→Create:
+  1757→
+  1758→SCREEN
+  1759→VIEW/ROUTE
+  1760→AUTH
+  1761→PURPOSE
+  1762→MAIN COMPONENTS
+  1763→PRIMARY ACTION
+  1764→DATA
+  1765→API
+  1766→MOBILE
+  1767→STATUS
+  1768→
+  1769→============================================================
+  1770→53. FORM INVENTORY TABLE
+  1771→============================================================
+  1772→
+  1773→Create:
+  1774→
+  1775→FORM
+  1776→SCREEN
+  1777→STEP
+  1778→FIELDS
+  1779→VALIDATION
+  1780→SUBMISSION
+  1781→SERVER
+  1782→DATABASE
+  1783→STATE
+  1784→STATUS
+  1785→
+  1786→============================================================
+  1787→54. DATABASE INVENTORY TABLE
+  1788→============================================================
+  1789→
+  1790→Create:
+  1791→
+  1792→MODEL
+  1793→PURPOSE
+  1794→KEY FIELDS
+  1795→OWNER
+  1796→RELATIONSHIPS
+  1797→LIFECYCLE
+  1798→IMPORTANT NOTES
+  1799→
+  1800→============================================================
+  1801→55. API INVENTORY TABLE
+  1802→============================================================
+  1803→
+  1804→Create:
+  1805→
+  1806→METHOD
+  1807→ENDPOINT
+  1808→AUTH
+  1809→INPUT
+  1810→VALIDATION
+  1811→DATABASE
+  1812→RESPONSE
+  1813→SIDE EFFECTS
+  1814→ERRORS
+  1815→
+  1816→============================================================
+  1817→56. MASTER ARCHITECTURE DIAGRAM
+  1818→============================================================
+  1819→
+  1820→Create a current architecture diagram showing:
+  1821→
+  1822→USER
+  1823→↓
+  1824→PUBLIC UI
+  1825→↓
+  1826→AUTH
+  1827→↓
+  1828→APP SHELL
+  1829→↓
+  1830→FRONTEND STATE
+  1831→↓
+  1832→API / SERVER
+  1833→↓
+  1834→BUSINESS LOGIC
+  1835→↓
+  1836→DATABASE / STORAGE
+  1837→↓
+  1838→ANALYTICS
+  1839→
+  1840→Use actual current components.
+  1841→
+  1842→============================================================
+  1843→57. MASTER PRODUCT MAP
+  1844→============================================================
+  1845→
+  1846→Create a current feature hierarchy.
+  1847→
+  1848→Example only:
+  1849→
+  1850→DnD
+  1851→├── Public
+  1852→├── Authentication
+  1853→├── Onboarding
+  1854→├── Dashboard
+  1855→├── Trading
+  1856→├── Strategies
+  1857→├── Planning
+  1858→├── Evidence
+  1859→├── Calendar
+  1860→├── Analytics
+  1861→├── Settings
+  1862→└── Infrastructure
+  1863→
+  1864→Replace with actual current structure.
+  1865→
+  1866→============================================================
+  1867→58. MASTER TRADE FLOW
+  1868→============================================================
+  1869→
+  1870→Create exact current flow:
+  1871→
+  1872→PLAN
+  1873→→ TRADE
+  1874→→ EXECUTION
+  1875→→ EVIDENCE
+  1876→→ RESULT
+  1877→→ REVIEW
+  1878→→ ANALYSIS
+  1879→
+  1880→Only include stages that actually exist.
+  1881→
+  1882→============================================================
+  1883→59. AI HANDOFF
+  1884→============================================================
+  1885→
+  1886→Create a final section:
+  1887→
+  1888→# AI HANDOFF: CURRENT DnD SYSTEM
+  1889→
+  1890→This should be the most useful section for another AI.
+  1891→
+  1892→Explain:
+  1893→
+  1894→- what DnD is
+  1895→- exact current architecture
+  1896→- exact UI
+  1897→- exact navigation
+  1898→- exact forms
+  1899→- trade workflow
+  1900→- planned/open/closed states
+  1901→- strategy system
+  1902→- checklist
+  1903→- instrument system
+  1904→- financial engine
+  1905→- evidence/media
+  1906→- Daily Plans
+  1907→- Calendar
+  1908→- Analytics
+  1909→- Settings
+  1910→- Onboarding
+  1911→- Authentication
+  1912→- Database
+  1913→- APIs
+  1914→- security
+  1915→- deployment
+  1916→- important constraints
+  1917→- dangerous areas
+  1918→- known bugs
+  1919→- important things not to break
+  1920→
+  1921→Write this as practical engineering context.
+  1922→
+  1923→============================================================
+  1924→60. FINAL ASSESSMENT
+  1925→============================================================
+  1926→
+  1927→Score 0-10:
+  1928→
+  1929→Product maturity
+  1930→
+  1931→UX maturity
+  1932→
+  1933→Frontend maturity
+  1934→
+  1935→Backend maturity
+  1936→
+  1937→Database maturity
+  1938→
+  1939→Financial correctness
+  1940→
+  1941→Security
+  1942→
+  1943→Testing
+  1944→
+  1945→Performance
+  1946→
+  1947→Responsive design
+  1948→
+  1949→Production readiness
+  1950→
+  1951→Every score must contain evidence.
+  1952→
+  1953→============================================================
+  1954→61. TOP FINDINGS
+  1955→============================================================
+  1956→
+  1957→Provide:
+  1958→
+  1959→TOP 10 STRENGTHS
+  1960→
+  1961→TOP 10 BUGS
+  1962→
+  1963→TOP 10 RISKS
+  1964→
+  1965→TOP 10 ARCHITECTURAL CONCERNS
+  1966→
+  1967→TOP 10 MISSING FEATURES
+  1968→
+  1969→TOP 10 AREAS THAT MUST BE PRESERVED
+  1970→
+  1971→============================================================
+  1972→62. FINAL OUTPUT FILE
+  1973→============================================================
+  1974→
+  1975→Create ONE Markdown document:
+  1976→
+  1977→DnD_CURRENT_BUILD_ULTIMATE_REVERSE_ENGINEERING_REPORT.md
+  1978→
+  1979→The report must be comprehensive.
+  1980→
+  1981→Do not sacrifice completeness for brevity.
+  1982→
+  1983→Use:
+  1984→
+  1985→- headings
+  1986→- tables
+  1987→- diagrams
+  1988→- exact paths
+  1989→- exact labels
+  1990→- exact model names
+  1991→- exact API paths
+  1992→- exact field names
+  1993→- exact formulas
+  1994→
+  1995→where available.
+  1996→
+  1997→============================================================
+  1998→63. FINAL CONFIRMATION
+  1999→============================================================
+  2000→
+
+[showing lines 1-2000 of 2013; use offset=2001 with limit to continue reading]

@@ -1,0 +1,936 @@
+     1→/**
+     2→ * DnD — Financial calculation engine.
+     3→ * Pure functions. Authoritative server-side computation per spec section 31.
+     4→ * NEVER produces NaN or Infinity (spec section 110).
+     5→ */
+     6→
+     7→import {
+     8→  Decimal,
+     9→  dAdd, dSub, dMul, dDiv, dAbs, dCmp, dNormalize, dIsZero, dToNumber, dMax,
+    10→} from "./decimal";
+    11→import { Cents, toCents, addCents, subCents, negCents } from "./money";
+    12→
+    13→// ---------------------------------------------------------------------------
+    14→// Types
+    15→// ---------------------------------------------------------------------------
+    16→
+    17→export type Direction = "long" | "short";
+    18→export type TradeStatus = "open" | "win" | "loss" | "breakeven" | "partial_win" | "partial_loss" | "cancelled";
+    19→
+    20→export interface ExecutionFill {
+    21→  kind: "entry" | "exit";
+    22→  price: Decimal;
+    23→  quantity: Decimal;
+    24→  timestamp?: string;
+    25→  notes?: string;
+    26→}
+    27→
+    28→export interface TradeCalcInput {
+    29→  direction: Direction;
+    30→  plannedEntryPrice?: Decimal | null;
+    31→  plannedStopPrice?: Decimal | null;
+    32→  plannedTargetPrice?: Decimal | null;
+    33→  fills: ExecutionFill[];
+    34→  feesCents?: Cents;
+    35→  commissionCents?: Cents;
+    36→  swapCents?: Cents;
+    37→  slippageCents?: Cents;
+    38→  contractSize?: Decimal; // e.g. 100000 for standard forex lot
+    39→  pipSize?: Decimal; // e.g. 0.0001 for forex
+    40→  /**
+    41→   * Value per 1.0 price unit per 1.0 quantity, in cents.
+    42→   * Defaults to 100 (i.e. $1 per 1.0 price move per 1.0 qty) — backward compatible
+    43→   * with the original hardcoded behaviour for stocks/crypto where price * qty
+    44→   * directly equals the dollar P&L. Callers may override this with an
+    45→   * instrument-derived value (see `computePointValueCents` below) so that
+    46→   * forex/metals/indices/futures whose "1.0 price move" semantics differ from
+    47→   * a 1-share stock are scaled correctly.
+    48→   */
+    49→  pointValueCents?: Cents;
+    50→}
+    51→
+    52→/**
+    53→ * Compute the pointValueCents from instrument metadata.
+    54→ *
+    55→ * pointValueCents = monetary value (in cents) of a 1.0 price move per 1.0 quantity.
+    56→ *
+    57→ * For futures: this is the dollar-per-point value (e.g. NQ = $20/point = 2000 cents).
+    58→ * For forex: this is contractSize × 100 (e.g. 100,000 × $1 = $100,000 = 10,000,000 cents).
+    59→ * For stocks/crypto: 100 ($1 per $1 move).
+    60→ *
+    61→ * The old implementation computed TICK value (tickSize × contractSize × 100)
+    62→ * and mislabeled it as pointValueCents. This is now corrected.
+    63→ */
+    64→export function computePointValueCents(
+    65→  contractSize: string | number | null | undefined,
+    66→  tickSize: string | number | null | undefined,
+    67→  pipSize: string | number | null | undefined,
+    68→): Cents {
+    69→  const cs = Number(contractSize ?? "1");
+    70→  if (!Number.isFinite(cs) || cs <= 0) return 100;
+    71→
+    72→  // For forex (cs = 100000): pointValueCents = cs × 100 = 10,000,000
+    73→  // For gold (cs = 100): pointValueCents = cs × 100 = 10,000
+    74→  // For futures NQ (cs = 20, $20/point): pointValueCents = cs × 100 = 2000
+    75→  // For futures ES (cs = 50, $50/point): pointValueCents = cs × 100 = 5000
+    76→  // For crypto/stocks (cs = 1): pointValueCents = 100
+    77→  const cents = Math.round(cs * 100);
+    78→  if (!Number.isFinite(cents) || cents <= 0) return 100;
+    79→  return cents;
+    80→}
+    81→
+    82→export interface TradeCalcResult {
+    83→  entryPriceAvg: Decimal | null;
+    84→  exitPriceAvg: Decimal | null;
+    85→  totalQuantity: Decimal | null;
+    86→  grossPnlCents: Cents;
+    87→  totalCostsCents: Cents;
+    88→  netPnlCents: Cents;
+    89→  stopDistance: Decimal | null;
+    90→  targetDistance: Decimal | null;
+    91→  plannedRR: Decimal | null;
+    92→  actualR: Decimal | null;
+    93→  riskAmountCents: Cents | null;
+    94→  rewardAmountCents: Cents | null;
+    95→  status: TradeStatus;
+    96→}
+    97→
+    98→// ---------------------------------------------------------------------------
+    99→// Psychology tag parsing (spec section 22 — psychBeforeJson shape)
+   100→// ---------------------------------------------------------------------------
+   101→
+   102→/**
+   103→ * Extract mood-tag strings from a `psychBeforeJson` (or `psychAfterJson`)
+   104→ * column. The column is stored as a JSON **object** whose `moodTags` field is
+   105→ * an array of strings (per spec section 38), but legacy rows may store a
+   106→ * bare array — both shapes are supported. Any other shape yields `[]`.
+   107→ *
+   108→ * Never throws: malformed JSON, null, or unexpected shapes degrade to `[]`.
+   109→ */
+   110→export function safeParsePsychTags(json: string | null | undefined): string[] {
+   111→  if (!json) return [];
+   112→  let v: unknown;
+   113→  try {
+   114→    v = JSON.parse(json);
+   115→  } catch {
+   116→    return [];
+   117→  }
+   118→  if (Array.isArray(v)) {
+   119→    // Backward-compat: legacy rows stored a bare array of tags.
+   120→    return v.filter((x): x is string => typeof x === "string");
+   121→  }
+   122→  if (v && typeof v === "object") {
+   123→    const tags = (v as { moodTags?: unknown }).moodTags;
+   124→    if (Array.isArray(tags)) {
+   125→      return tags.filter((x): x is string => typeof x === "string");
+   126→    }
+   127→  }
+   128→  return [];
+   129→}
+   130→
+   131→// ---------------------------------------------------------------------------
+   132→// Core: compute trade P&L from execution ledger (spec section 33)
+   133→// ---------------------------------------------------------------------------
+   134→
+   135→/**
+   136→ * Calculate the gross P&L in cents from a list of fills.
+   137→ * Method: volume-weighted average entry and exit prices, signed by direction.
+   138→ * gross = (exitAvg - entryAvg) * qty * contractSize * pointValue  (long)
+   139→ * gross = (entryAvg - exitAvg) * qty * contractSize * pointValue  (short)
+   140→ * Only matches qty between entries and exits.
+   141→ */
+   142→export function calculateTradePnl(input: TradeCalcInput): TradeCalcResult {
+   143→  // pointValueCents is the authoritative monetary value of a 1.0 price move
+   144→  // per 1.0 quantity, in cents. It already encodes contractSize economics.
+   145→  // Formula: grossPnlCents = priceDiff × matchedQty × pointValueCents
+   146→  // DO NOT multiply by contractSize again — it's already in pointValueCents.
+   147→  const pointValueCents = input.pointValueCents ?? 100;
+   148→
+   149→  const entries = input.fills.filter((f) => f.kind === "entry");
+   150→  const exits = input.fills.filter((f) => f.kind === "exit");
+   151→
+   152→  // Volume-weighted average entry price
+   153→  const entryAvg = vwap(entries);
+   154→  const exitAvg = vwap(exits);
+   155→
+   156→  // Matched quantity (min of total entry qty and total exit qty)
+   157→  const entryQty = sumQty(entries);
+   158→  const exitQty = sumQty(exits);
+   159→  const matchedQty = dCmp(entryQty, exitQty) <= 0 ? entryQty : exitQty;
+   160→
+   161→  let grossPnlCents: Cents = 0;
+   162→  if (!dIsZero(matchedQty) && entryAvg && exitAvg) {
+   163→    // CANONICAL FORMULA (spec §9):
+   164→    // grossPnlCents = directionalMove × matchedQuantity × pointValueCents
+   165→    // pointValueCents is ALREADY in cents (no /100, no toCents conversion).
+   166→    const diff = input.direction === "long"
+   167→      ? dSub(exitAvg, entryAvg)
+   168→      : dSub(entryAvg, exitAvg);
+   169→    const grossDecimal = dMul(dMul(diff, matchedQty), dNormalize(String(pointValueCents)));
+   170→    // pointValueCents is already in cents, so just round — do NOT call toCents
+   171→    grossPnlCents = Math.round(dToNumber(grossDecimal));
+   172→  }
+   173→
+   174→  // Costs
+   175→  const fees = input.feesCents ?? 0;
+   176→  const commission = input.commissionCents ?? 0;
+   177→  const swap = input.swapCents ?? 0;
+   178→  const slippage = input.slippageCents ?? 0;
+   179→  const totalCostsCents = addCents(addCents(addCents(fees, commission), swap), slippage);
+   180→
+   181→  // Net = gross - costs (costs always reduce PnL)
+   182→  const netPnlCents = subCents(grossPnlCents, totalCostsCents);
+   183→
+   184→  // Stop & target distances
+   185→  const stopDistance = (input.plannedStopPrice && input.plannedEntryPrice && !dIsZero(dSub(input.plannedEntryPrice, input.plannedStopPrice)))
+   186→    ? dAbs(dSub(input.plannedEntryPrice, input.plannedStopPrice))
+   187→    : null;
+   188→  const targetDistance = (input.plannedTargetPrice && input.plannedEntryPrice && !dIsZero(dSub(input.plannedTargetPrice, input.plannedEntryPrice)))
+   189→    ? dAbs(dSub(input.plannedTargetPrice, input.plannedEntryPrice))
+   190→    : null;
+   191→
+   192→  // Planned R:R
+   193→  const plannedRR = (stopDistance && targetDistance)
+   194→    ? dDiv(targetDistance, stopDistance)
+   195→    : null;
+   196→
+   197→  // Risk amount: stopDistance × plannedQty × pointValueCents
+   198→  // (no contractSize — already encoded in pointValueCents)
+   199→  const plannedQty = entryQty;
+   200→  let riskAmountCents: Cents | null = null;
+   201→  let rewardAmountCents: Cents | null = null;
+   202→  if (stopDistance && !dIsZero(plannedQty)) {
+   203→    const riskDecimal = dMul(dMul(stopDistance, plannedQty), dNormalize(String(pointValueCents)));
+   204→    riskAmountCents = Math.round(dToNumber(riskDecimal));
+   205→  }
+   206→  if (targetDistance && !dIsZero(plannedQty)) {
+   207→    const rewardDecimal = dMul(dMul(targetDistance, plannedQty), dNormalize(String(pointValueCents)));
+   208→    rewardAmountCents = Math.round(dToNumber(rewardDecimal));
+   209→  }
+   210→
+   211→  // Actual R: netPnlCents / riskAmountCents (both in cents, ratio is unitless)
+   212→  let actualR: Decimal | null = null;
+   213→  if (riskAmountCents && riskAmountCents > 0) {
+   214→    actualR = dDiv(String(netPnlCents), String(riskAmountCents));
+   215→  }
+   216→
+   217→  // Status
+   218→  const status = deriveStatus(netPnlCents, entryQty, exitQty);
+   219→
+   220→  return {
+   221→    entryPriceAvg: entryAvg,
+   222→    exitPriceAvg: exitAvg,
+   223→    totalQuantity: entryQty, // sum of ALL entry fill quantities (not first fill)
+   224→    grossPnlCents,
+   225→    totalCostsCents,
+   226→    netPnlCents,
+   227→    stopDistance,
+   228→    targetDistance,
+   229→    plannedRR,
+   230→    actualR,
+   231→    riskAmountCents,
+   232→    rewardAmountCents,
+   233→    status,
+   234→  };
+   235→}
+   236→
+   237→function vwap(fills: ExecutionFill[]): Decimal | null {
+   238→  if (fills.length === 0) return null;
+   239→  let pq = 0; // sum of price*qty
+   240→  let q = 0;  // sum of qty
+   241→  for (const f of fills) {
+   242→    const p = dToNumber(f.price);
+   243→    const qt = dToNumber(f.quantity);
+   244→    if (!Number.isFinite(p) || !Number.isFinite(qt)) continue;
+   245→    pq += p * qt;
+   246→    q += qt;
+   247→  }
+   248→  if (q === 0) return null;
+   249→  return dNormalize(String(+(pq / q).toFixed(10)));
+   250→}
+   251→
+   252→function sumQty(fills: ExecutionFill[]): Decimal {
+   253→  let s = 0;
+   254→  for (const f of fills) s += dToNumber(f.quantity);
+   255→  return dNormalize(String(+s.toFixed(10)));
+   256→}
+   257→
+   258→function deriveStatus(netPnl: Cents, entryQty: Decimal, exitQty: Decimal): TradeStatus {
+   259→  if (dIsZero(entryQty)) return "open";
+   260→  if (dIsZero(exitQty)) return "open";
+   261→  const cmp = dCmp(exitQty, entryQty);
+   262→  if (cmp < 0) {
+   263→    return netPnl > 0 ? "partial_win" : netPnl < 0 ? "partial_loss" : "breakeven";
+   264→  }
+   265→  if (netPnl > 0) return "win";
+   266→  if (netPnl < 0) return "loss";
+   267→  return "breakeven";
+   268→}
+   269→
+   270→// ---------------------------------------------------------------------------
+   271→// Position sizing (spec section 79)
+   272→// ---------------------------------------------------------------------------
+   273→
+   274→export interface PositionSizeInput {
+   275→  accountBalanceCents: Cents;
+   276→  riskPct: Decimal;       // e.g. 0.005 for 0.5%
+   277→  entryPrice: Decimal;
+   278→  stopPrice: Decimal;
+   279→  contractSize: Decimal;
+   280→  pointValueCents: Cents;
+   281→}
+   282→
+   283→export interface PositionSizeResult {
+   284→  riskAmountCents: Cents;
+   285→  stopDistance: Decimal;
+   286→  positionSize: Decimal | null;
+   287→  plannedLossCents: Cents;
+   288→  plannedRewardCents: Cents | null; // only if target provided
+   289→}
+   290→
+   291→export function calculatePositionSize(input: PositionSizeInput): PositionSizeResult {
+   292→  const riskAmountCents = Math.round((input.accountBalanceCents * dToNumber(input.riskPct)) / 100) * 100 / 100;
+   293→  // careful: Math.round(balance * pct) gives cents directly
+   294→  const riskCents = Math.round((input.accountBalanceCents / 100) * dToNumber(input.riskPct) * 100);
+   295→  const stopDistance = dAbs(dSub(input.entryPrice, input.stopPrice));
+   296→  // position size = riskAmount / (stopDistance * contractSize * pointValue)
+   297→  let positionSize: Decimal | null = null;
+   298→  if (!dIsZero(stopDistance)) {
+   299→    const denom = dToNumber(dMul(dMul(stopDistance, input.contractSize), dNormalize(String(input.pointValueCents / 100))));
+   300→    if (denom > 0) {
+   301→      positionSize = dDiv(String(riskCents / 100), String(denom));
+   302→    }
+   303→  }
+   304→  return {
+   305→    riskAmountCents: riskCents,
+   306→    stopDistance,
+   307→    positionSize,
+   308→    plannedLossCents: negCents(riskCents),
+   309→    plannedRewardCents: null,
+   310→  };
+   311→}
+   312→
+   313→// ---------------------------------------------------------------------------
+   314→// Aggregate metrics (spec section 70)
+   315→// ---------------------------------------------------------------------------
+   316→
+   317→export interface TradeMetricRow {
+   318→  id: string;
+   319→  netPnlCents: Cents;
+   320→  actualR: Decimal | null;
+   321→  status: TradeStatus;
+   322→  entryTime?: Date | string | null;
+   323→  setupGrade?: string | null;
+   324→  instrumentSymbol?: string;
+   325→  session?: string | null;
+   326→  strategyId?: string | null;
+   327→  strategyVersionId?: string | null;
+   328→  behaviorFlags?: string[];
+   329→  psychTags?: string[];
+   330→  ruleCompliant?: boolean;
+   331→}
+   332→
+   333→export interface AggregateMetrics {
+   334→  totalTrades: number;
+   335→  closedTrades: number;
+   336→  wins: number;
+   337→  losses: number;
+   338→  breakevens: number;
+   339→  winRate: Decimal | null;
+   340→  totalPnlCents: Cents;
+   341→  avgPnlCents: Cents | null;
+   342→  avgWinCents: Cents | null;
+   343→  avgLossCents: Cents | null;
+   344→  avgR: Decimal | null;
+   345→  expectancyR: Decimal | null;
+   346→  profitFactor: Decimal | null;
+   347→  maxDrawdownCents: Cents;
+   348→  currentDrawdownCents: Cents;
+   349→  largestWinCents: Cents;
+   350→  largestLossCents: Cents;
+   351→  consecutiveWins: number;
+   352→  consecutiveLosses: number;
+   353→  recoveryPeriod: number | null;
+   354→}
+   355→
+   356→export function computeAggregateMetrics(trades: TradeMetricRow[]): AggregateMetrics {
+   357→  // CANONICAL CLOSED SET (spec §17): only WIN + LOSS + BREAKEVEN.
+   358→  // Partial trades (partial_win, partial_loss) are EXCLUDED from closed metrics.
+   359→  const closed = trades.filter((t) => t.status === "win" || t.status === "loss" || t.status === "breakeven");
+   360→  const wins = closed.filter((t) => t.netPnlCents > 0);
+   361→  const losses = closed.filter((t) => t.netPnlCents < 0);
+   362→  const bes = closed.filter((t) => t.netPnlCents === 0);
+   363→
+   364→  const totalPnl = closed.reduce((s, t) => s + t.netPnlCents, 0);
+   365→
+   366→  const winRate = closed.length > 0 ? dNormalize(String(wins.length / closed.length)) : null;
+   367→
+   368→  const avgPnl = closed.length > 0 ? Math.round(totalPnl / closed.length) : null;
+   369→
+   370→  const avgWin = wins.length > 0 ? Math.round(wins.reduce((s, t) => s + t.netPnlCents, 0) / wins.length) : null;
+   371→  const avgLoss = losses.length > 0 ? Math.round(losses.reduce((s, t) => s + t.netPnlCents, 0) / losses.length) : null;
+   372→
+   373→  // Avg R over trades with valid R
+   374→  const rValues = closed.map((t) => t.actualR).filter((r): r is Decimal => r != null && Number.isFinite(dToNumber(r)));
+   375→  const avgR = rValues.length > 0 ? dNormalize(String(+(rValues.reduce((s, r) => s + dToNumber(r), 0) / rValues.length).toFixed(10))) : null;
+   376→
+   377→  // Expectancy = avg realized R (per spec section 73)
+   378→  const expectancyR = avgR;
+   379→
+   380→  // Profit factor (spec section 72): gross profits / abs(gross losses)
+   381→  const grossProfit = wins.reduce((s, t) => s + t.netPnlCents, 0);
+   382→  const grossLoss = Math.abs(losses.reduce((s, t) => s + t.netPnlCents, 0));
+   383→  const profitFactor = grossLoss > 0 ? dNormalize(String(+(grossProfit / grossLoss).toFixed(10))) : null;
+   384→
+   385→  // Drawdown (spec §23): based on realized equity, ordered by EXIT timestamp
+   386→  const sorted = [...closed].sort((a, b) => {
+   387→    const ad = a.exitTime ? new Date(a.exitTime).getTime() : (a.entryTime ? new Date(a.entryTime).getTime() : 0);
+   388→    const bd = b.exitTime ? new Date(b.exitTime).getTime() : (b.entryTime ? new Date(b.entryTime).getTime() : 0);
+   389→    return ad - bd;
+   390→  });
+   391→  let equity = 0;
+   392→  let peak = 0;
+   393→  let maxDD = 0;
+   394→  let currentDD = 0;
+   395→  let recoveryStart: number | null = null;
+   396→  let recoveryPeriod: number | null = null;
+   397→  let inDD = false;
+   398→  let ddStartIdx = -1;
+   399→  for (let i = 0; i < sorted.length; i++) {
+   400→    equity += sorted[i].netPnlCents;
+   401→    if (equity > peak) {
+   402→      peak = equity;
+   403→      if (inDD) {
+   404→        // recovered
+   405→        inDD = false;
+   406→        recoveryPeriod = recoveryStart != null ? i - recoveryStart : null;
+   407→        recoveryStart = null;
+   408→      }
+   409→    }
+   410→    const dd = peak - equity;
+   411→    if (dd > maxDD) maxDD = dd;
+   412→    currentDD = dd;
+   413→    if (dd > 0 && !inDD) {
+   414→      inDD = true;
+   415→      recoveryStart = i;
+   416→    }
+   417→  }
+   418→
+   419→  const largestWin = wins.length > 0 ? Math.max(...wins.map((t) => t.netPnlCents)) : 0;
+   420→  const largestLoss = losses.length > 0 ? Math.min(...losses.map((t) => t.netPnlCents)) : 0;
+   421→
+   422→  // Streaks
+   423→  let cw = 0, cl = 0, maxCw = 0, maxCl = 0;
+   424→  for (const t of sorted) {
+   425→    if (t.netPnlCents > 0) { cw++; cl = 0; maxCw = Math.max(maxCw, cw); }
+   426→    else if (t.netPnlCents < 0) { cl++; cw = 0; maxCl = Math.max(maxCl, cl); }
+   427→    else { cw = 0; cl = 0; }
+   428→  }
+   429→
+   430→  return {
+   431→    totalTrades: trades.length,
+   432→    closedTrades: closed.length,
+   433→    wins: wins.length,
+   434→    losses: losses.length,
+   435→    breakevens: bes.length,
+   436→    winRate,
+   437→    totalPnlCents: totalPnl,
+   438→    avgPnlCents: avgPnl,
+   439→    avgWinCents: avgWin,
+   440→    avgLossCents: avgLoss,
+   441→    avgR,
+   442→    expectancyR,
+   443→    profitFactor,
+   444→    maxDrawdownCents: maxDD,
+   445→    currentDrawdownCents: currentDD,
+   446→    largestWinCents: largestWin,
+   447→    largestLossCents: largestLoss,
+   448→    consecutiveWins: maxCw,
+   449→    consecutiveLosses: maxCl,
+   450→    recoveryPeriod,
+   451→  };
+   452→}
+   453→
+   454→// ---------------------------------------------------------------------------
+   455→// Equity curve (spec section 22)
+   456→// ---------------------------------------------------------------------------
+   457→
+   458→export interface EquityPoint {
+   459→  date: string; // ISO date
+   460→  label: string;
+   461→  pnlCents: Cents;
+   462→  cumulativeCents: Cents;
+   463→  tradeId: string;
+   464→}
+   465→
+   466→export function buildEquityCurve(trades: TradeMetricRow[], startingBalanceCents: Cents = 0): EquityPoint[] {
+   467→  // Use only closed trades (WIN/LOSS/BREAKEVEN), ordered by EXIT timestamp
+   468→  const sorted = [...trades]
+   469→    .filter((t) => (t.status === "win" || t.status === "loss" || t.status === "breakeven") && (t.exitTime || t.entryTime))
+   470→    .sort((a, b) => {
+   471→      const ad = a.exitTime ? new Date(a.exitTime).getTime() : (a.entryTime ? new Date(a.entryTime).getTime() : 0);
+   472→      const bd = b.exitTime ? new Date(b.exitTime).getTime() : (b.entryTime ? new Date(b.entryTime).getTime() : 0);
+   473→      return ad - bd;
+   474→    });
+   475→  let cumulative = startingBalanceCents;
+   476→  return sorted.map((t) => {
+   477→    cumulative += t.netPnlCents;
+   478→    const d = new Date(t.exitTime || t.entryTime!);
+   479→    return {
+   480→      date: d.toISOString(),
+   481→      label: d.toLocaleDateString("en-US", { month: "short", day: "numeric" }),
+   482→      pnlCents: t.netPnlCents,
+   483→      cumulativeCents: cumulative,
+   484→      tradeId: t.id,
+   485→    };
+   486→  });
+   487→}
+   488→
+   489→// ---------------------------------------------------------------------------
+   490→// Daily P&L aggregation (spec section 22)
+   491→// ---------------------------------------------------------------------------
+   492→
+   493→export interface DailyPnlPoint {
+   494→  date: string;
+   495→  label: string;
+   496→  pnlCents: Cents;
+   497→  tradeCount: number;
+   498→}
+   499→
+   500→export function buildDailyPnl(trades: TradeMetricRow[]): DailyPnlPoint[] {
+   501→  // Use only closed trades (WIN/LOSS/BREAKEVEN), grouped by EXIT timestamp
+   502→  const map = new Map<string, { pnl: Cents; count: number; ts: number }>();
+   503→  for (const t of trades) {
+   504→    if (t.status !== "win" && t.status !== "loss" && t.status !== "breakeven") continue;
+   505→    const ts = t.exitTime || t.entryTime;
+   506→    if (!ts) continue;
+   507→    const d = new Date(ts);
+   508→    const key = d.toISOString().slice(0, 10);
+   509→    const entry = map.get(key) ?? { pnl: 0, count: 0, ts: d.getTime() };
+   510→    entry.pnl += t.netPnlCents;
+   511→    entry.count += 1;
+   512→    map.set(key, entry);
+   513→  }
+   514→  return [...map.entries()]
+   515→    .sort((a, b) => a[1].ts - b[1].ts)
+   516→    .map(([date, e]) => ({
+   517→      date,
+   518→      label: new Date(date).toLocaleDateString("en-US", { month: "short", day: "numeric" }),
+   519→      pnlCents: e.pnl,
+   520→      tradeCount: e.count,
+   521→    }));
+   522→}
+   523→
+   524→// ---------------------------------------------------------------------------
+   525→// R distribution (spec section 22)
+   526→// ---------------------------------------------------------------------------
+   527→
+   528→export interface RDistributionBucket {
+   529→  bucket: string;
+   530→  count: number;
+   531→  minR: number;
+   532→  maxR: number;
+   533→}
+   534→
+   535→export function buildRDistribution(trades: TradeMetricRow[]): RDistributionBucket[] {
+   536→  const buckets: { min: number; max: number; label: string }[] = [
+   537→    { min: -Infinity, max: -2, label: "≤ -2R" },
+   538→    { min: -2, max: -1, label: "-2 to -1R" },
+   539→    { min: -1, max: 0, label: "-1 to 0R" },
+   540→    { min: 0, max: 0.0001, label: "BE" },
+   541→    { min: 0.0001, max: 1, label: "0 to +1R" },
+   542→    { min: 1, max: 2, label: "+1 to +2R" },
+   543→    { min: 2, max: Infinity, label: "≥ +2R" },
+   544→  ];
+   545→  return buckets.map((b) => {
+   546→    const count = trades.filter((t) => {
+   547→      if (t.actualR == null) return false;
+   548→      const r = dToNumber(t.actualR);
+   549→      if (b.min === 0 && b.max === 0.0001) return r === 0;
+   550→      if (b.min === -Infinity) return r <= b.max;
+   551→      if (b.max === Infinity) return r > b.min;
+   552→      return r > b.min && r <= b.max;
+   553→    }).length;
+   554→    return { bucket: b.label, count, minR: b.min, maxR: b.max };
+   555→  });
+   556→}
+   557→
+   558→// ---------------------------------------------------------------------------
+   559→// Group-by analytics (spec sections 75, 76, 74)
+   560→// ---------------------------------------------------------------------------
+   561→
+   562→export interface GroupBreakdown {
+   563→  key: string;
+   564→  label: string;
+   565→  trades: number;
+   566→  wins: number;
+   567→  winRate: Decimal | null;
+   568→  avgR: Decimal | null;
+   569→  expectancyR: Decimal | null;
+   570→  pnlCents: Cents;
+   571→}
+   572→
+   573→export function groupBy<T extends TradeMetricRow>(
+   574→  trades: T[],
+   575→  keyFn: (t: T) => string | null | undefined,
+   576→  labelFn: (k: string) => string = (k) => k,
+   577→): GroupBreakdown[] {
+   578→  const groups = new Map<string, T[]>();
+   579→  for (const t of trades) {
+   580→    const k = keyFn(t);
+   581→    if (k == null) continue;
+   582→    const arr = groups.get(k) ?? [];
+   583→    arr.push(t);
+   584→    groups.set(k, arr);
+   585→  }
+   586→  return [...groups.entries()].map(([key, arr]) => {
+   587→    const m = computeAggregateMetrics(arr);
+   588→    return {
+   589→      key,
+   590→      label: labelFn(key),
+   591→      trades: m.totalTrades,
+   592→      wins: m.wins,
+   593→      winRate: m.winRate,
+   594→      avgR: m.avgR,
+   595→      expectancyR: m.expectancyR,
+   596→      pnlCents: m.totalPnlCents,
+   597→    };
+   598→  }).sort((a, b) => b.trades - a.trades);
+   599→}
+   600→
+   601→// ---------------------------------------------------------------------------
+   602→// Sample-size-aware insights (spec sections 23, 24, 137, 138)
+   603→// ---------------------------------------------------------------------------
+   604→
+   605→export interface Insight {
+   606→  id: string;
+   607→  title: string;
+   608→  body: string;
+   609→  sampleSize: number;
+   610→  metric: string;
+   611→  bucketLabel: string;
+   612→  comparison?: string;
+   613→  tradeIds: string[];
+   614→  warning?: "low_sample" | "missing_data";
+   615→}
+   616→
+   617→export function generateInsights(trades: TradeMetricRow[], minSample = 10): Insight[] {
+   618→  const insights: Insight[] = [];
+   619→  const closed = trades.filter((t) => t.status !== "open" && t.status !== "cancelled" && t.status !== "planned");
+   620→  if (closed.length < minSample) {
+   621→    if (closed.length > 0) {
+   622→      insights.push({
+   623→        id: "low-sample",
+   624→        title: "Not enough data yet",
+   625→        body: `You have ${closed.length} closed trade${closed.length === 1 ? "" : "s"}. DnD starts generating statistical insights once you have at least ${minSample} closed trades, so patterns you see now may not be reliable.`,
+   626→        sampleSize: closed.length,
+   627→        metric: "samples",
+   628→        bucketLabel: "all",
+   629→        tradeIds: closed.map((t) => t.id),
+   630→        warning: "low_sample",
+   631→      });
+   632→    }
+   633→    return insights;
+   634→  }
+   635→
+   636→  // Behavior flag insights
+   637→  const allFlags = new Set<string>();
+   638→  closed.forEach((t) => t.behaviorFlags?.forEach((f) => allFlags.add(f)));
+   639→  for (const flag of allFlags) {
+   640→    const withFlag = closed.filter((t) => t.behaviorFlags?.includes(flag));
+   641→    const withoutFlag = closed.filter((t) => !t.behaviorFlags?.includes(flag));
+   642→    if (withFlag.length < minSample) continue;
+   643→    const withR = withFlag.map((t) => t.actualR).filter((r): r is Decimal => r != null);
+   644→    const withoutR = withoutFlag.map((t) => t.actualR).filter((r): r is Decimal => r != null);
+   645→    if (withR.length === 0) continue;
+   646→    const withAvg = withR.reduce((s, r) => s + dToNumber(r), 0) / withR.length;
+   647→    const withoutAvg = withoutR.length > 0 ? withoutR.reduce((s, r) => s + dToNumber(r), 0) / withoutR.length : null;
+   648→    const flagLabel = humanizeFlag(flag);
+   649→    if (withoutAvg != null && Math.abs(withAvg - withoutAvg) > 0.05) {
+   650→      const direction = withAvg < withoutAvg ? "lower" : "higher";
+   651→      insights.push({
+   652→        id: `flag-${flag}`,
+   653→        title: `Trades tagged "${flagLabel}"`,
+   654→        body: `Trades tagged "${flagLabel}" have historically produced ${direction} average R (${withAvg.toFixed(2)}R across ${withFlag.length} trades) compared to ${withoutAvg.toFixed(2)}R across ${withoutFlag.length} trades without that flag.`,
+   655→        sampleSize: withFlag.length,
+   656→        metric: "avgR",
+   657→        bucketLabel: flagLabel,
+   658→        comparison: `vs ${withoutAvg.toFixed(2)}R`,
+   659→        tradeIds: withFlag.map((t) => t.id),
+   660→      });
+   661→    } else {
+   662→      insights.push({
+   663→        id: `flag-${flag}`,
+   664→        title: `Trades tagged "${flagLabel}"`,
+   665→        body: `Trades tagged "${flagLabel}" have an average realized R of ${withAvg.toFixed(2)}R across ${withFlag.length} trades.`,
+   666→        sampleSize: withFlag.length,
+   667→        metric: "avgR",
+   668→        bucketLabel: flagLabel,
+   669→        tradeIds: withFlag.map((t) => t.id),
+   670→      });
+   671→    }
+   672→  }
+   673→
+   674→  // Session insights
+   675→  const sessions = groupBy(closed, (t) => t.session, (k) => sessionLabel(k));
+   676→  for (const s of sessions) {
+   677→    if (s.trades < minSample) continue;
+   678→    if (s.avgR == null) continue;
+   679→    insights.push({
+   680→      id: `session-${s.key}`,
+   681→      title: `${s.label} session`,
+   682→      body: `${s.label} trades have produced an average of ${dToNumber(s.avgR).toFixed(2)}R across ${s.trades} trades, with a ${dToNumber(s.winRate).toFixed(1)}% win rate.`,
+   683→      sampleSize: s.trades,
+   684→      metric: "avgR",
+   685→      bucketLabel: s.label,
+   686→      tradeIds: closed.filter((t) => t.session === s.key).map((t) => t.id),
+   687→    });
+   688→  }
+   689→
+   690→  // A+ vs non-A+
+   691→  const aplus = closed.filter((t) => t.setupGrade === "A+");
+   692→  const nonAplus = closed.filter((t) => t.setupGrade && t.setupGrade !== "A+" && t.setupGrade !== "Invalid");
+   693→  if (aplus.length >= minSample && nonAplus.length >= minSample) {
+   694→    const aR = aplus.map((t) => t.actualR).filter((r): r is Decimal => r != null);
+   695→    const nR = nonAplus.map((t) => t.actualR).filter((r): r is Decimal => r != null);
+   696→    if (aR.length > 0 && nR.length > 0) {
+   697→      const aAvg = aR.reduce((s, r) => s + dToNumber(r), 0) / aR.length;
+   698→      const nAvg = nR.reduce((s, r) => s + dToNumber(r), 0) / nR.length;
+   699→      insights.push({
+   700→        id: "aplus-vs-non",
+   701→        title: "A+ vs non-A+ setups",
+   702→        body: `A+ setups have produced ${aAvg.toFixed(2)}R on average across ${aplus.length} trades, compared to ${nAvg.toFixed(2)}R across ${nonAplus.length} non-A+ trades.`,
+   703→        sampleSize: aplus.length + nonAplus.length,
+   704→        metric: "avgR",
+   705→        bucketLabel: "A+ vs non-A+",
+   706→        tradeIds: [...aplus, ...nonAplus].map((t) => t.id),
+   707→      });
+   708→    }
+   709→  }
+   710→
+   711→  return insights.sort((a, b) => b.sampleSize - a.sampleSize);
+   712→}
+   713→
+   714→function humanizeFlag(flag: string): string {
+   715→  return flag
+   716→    .split("_")
+   717→    .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+   718→    .join(" ");
+   719→}
+   720→
+   721→function sessionLabel(s: string): string {
+   722→  const map: Record<string, string> = {
+   723→    asia: "Asia",
+   724→    london: "London",
+   725→    ny_am: "New York AM",
+   726→    ny_pm: "New York PM",
+   727→    custom: "Custom",
+   728→  };
+   729→  return map[s] ?? s;
+   730→}
+   731→
+   732→// ---------------------------------------------------------------------------
+   733→// Plan adherence (spec section 23 — planned vs actual execution)
+   734→// ---------------------------------------------------------------------------
+   735→
+   736→/**
+   737→ * Result of comparing a trade's planned values against its actual execution.
+   738→ *
+   739→ * `adherenceScore` is a 0–1 number representing the fraction of binary checks
+   740→ * (session match, target hit, risk-within-tolerance, positive R achieved) that
+   741→ * passed. Checks that can't be evaluated (e.g. no planned session recorded, no
+   742→ * target price, no account balance) are excluded from the denominator — so a
+   743→ * trade with only one check evaluated and that check passed scores 1.0, not
+   744→ * 0.25. If no checks can be evaluated at all, the score is 0.
+   745→ */
+   746→export interface PlanAdherenceCheck {
+   747→  label: string;
+   748→  passed: boolean | null;
+   749→  detail?: string;
+   750→}
+   751→
+   752→export interface PlanAdherence {
+   753→  plannedRR: Decimal | null;
+   754→  actualRR: Decimal | null;
+   755→  plannedRiskPct: Decimal | null;
+   756→  actualRiskPct: Decimal | null;
+   757→  sessionMatch: boolean | null;
+   758→  targetMatch: boolean | null;
+   759→  adherenceScore: number;
+   760→  adherencePct: number;
+   761→  checks: PlanAdherenceCheck[];
+   762→}
+   763→
+   764→/**
+   765→ * Trade-shape accepted by `calculatePlanAdherence`. Accepts the loose shape
+   766→ * produced by Prisma's `Trade` row (decimal strings + nullable fields) plus an
+   767→ * optional `accountBalanceCents` so we can derive `actualRiskPct` from the
+   768→ * risk amount vs the account balance.
+   769→ */
+   770→export interface PlanAdherenceTrade {
+   771→  direction?: string | null;
+   772→  /** Actual session the trade was taken in (from `Trade.session`). */
+   773→  session?: string | null;
+   774→  /** Planned session (from `setupJson.session` or a daily plan). */
+   775→  plannedSession?: string | null;
+   776→  plannedEntryPrice?: Decimal | null;
+   777→  plannedStopPrice?: Decimal | null;
+   778→  plannedTargetPrice?: Decimal | null;
+   779→  plannedRiskPct?: Decimal | null;
+   780→  entryPriceAvg?: Decimal | null;
+   781→  exitPriceAvg?: Decimal | null;
+   782→  /** Pre-computed actual R (decimal string). */
+   783→  actualR?: Decimal | null;
+   784→  /** Risk amount in cents — typically from `calculateTradePnl.riskAmountCents`. */
+   785→  riskAmountCents?: number | null;
+   786→  /** Account balance in cents — used to derive `actualRiskPct`. */
+   787→  accountBalanceCents?: number | null;
+   788→}
+   789→
+   790→/**
+   791→ * Compute plan adherence for a single trade. Pure function — no I/O.
+   792→ *
+   793→ * Binary checks (each 0/1 or null when undeterminable):
+   794→ *   - `sessionMatch`: planned session === actual session
+   795→ *   - `targetMatch`: |exitPrice - target| / |target| <= 5% (within 5% of target)
+   796→ *   - `riskWithinTolerance`: actual risk is within 50% of planned risk
+   797→ *     (ratio of actual/planned between 0.5 and 1.5)
+   798→ *   - `rrAchieved`: actualR > 0 (the trade was profitable)
+   799→ *
+   800→ * `adherenceScore` = mean of the non-null checks (or 0 if all null).
+   801→ */
+   802→export function calculatePlanAdherence(trade: PlanAdherenceTrade): PlanAdherence {
+   803→  // Planned R:R = |target - entry| / |entry - stop|
+   804→  let plannedRR: Decimal | null = null;
+   805→  if (trade.plannedEntryPrice && trade.plannedStopPrice && trade.plannedTargetPrice) {
+   806→    const stopDist = dAbs(dSub(trade.plannedEntryPrice, trade.plannedStopPrice));
+   807→    const targetDist = dAbs(dSub(trade.plannedTargetPrice, trade.plannedEntryPrice));
+   808→    if (!dIsZero(stopDist)) {
+   809→      plannedRR = dDiv(targetDist, stopDist);
+   810→    }
+   811→  }
+   812→
+   813→  // Actual R: already computed server-side — normalize and pass through.
+   814→  const actualRR: Decimal | null =
+   815→    trade.actualR != null && trade.actualR !== "" ? dNormalize(trade.actualR) : null;
+   816→
+   817→  // Planned risk %
+   818→  const plannedRiskPct: Decimal | null =
+   819→    trade.plannedRiskPct != null && trade.plannedRiskPct !== ""
+   820→      ? dNormalize(trade.plannedRiskPct)
+   821→      : null;
+   822→
+   823→  // Actual risk %: riskAmount / accountBalance (if both available and balance > 0)
+   824→  let actualRiskPct: Decimal | null = null;
+   825→  if (
+   826→    trade.riskAmountCents != null &&
+   827→    trade.accountBalanceCents != null &&
+   828→    trade.accountBalanceCents > 0 &&
+   829→    trade.riskAmountCents >= 0
+   830→  ) {
+   831→    actualRiskPct = dDiv(
+   832→      String(trade.riskAmountCents / 100),
+   833→      String(trade.accountBalanceCents / 100),
+   834→    );
+   835→  }
+   836→
+   837→  // Session match — null when either planned or actual session is missing.
+   838→  const plannedSession = trade.plannedSession ?? null;
+   839→  const actualSession = trade.session ?? null;
+   840→  const sessionMatch: boolean | null =
+   841→    plannedSession && actualSession ? plannedSession === actualSession : null;
+   842→
+   843→  // Target match — exit price within 5% of planned target.
+   844→  let targetMatch: boolean | null = null;
+   845→  if (trade.exitPriceAvg && trade.plannedTargetPrice) {
+   846→    const exit = dToNumber(trade.exitPriceAvg);
+   847→    const target = dToNumber(trade.plannedTargetPrice);
+   848→    if (Number.isFinite(exit) && Number.isFinite(target) && target !== 0) {
+   849→      const deviation = Math.abs(exit - target) / Math.abs(target);
+   850→      targetMatch = deviation <= 0.05;
+   851→    }
+   852→  }
+   853→
+   854→  // Risk-within-tolerance — actual risk is within 50% of planned risk
+   855→  // (i.e. ratio of actual/planned is between 0.5 and 1.5).
+   856→  let riskWithinTolerance: boolean | null = null;
+   857→  if (plannedRiskPct && actualRiskPct) {
+   858→    const planned = dToNumber(plannedRiskPct);
+   859→    const actual = dToNumber(actualRiskPct);
+   860→    if (planned > 0) {
+   861→      const ratio = actual / planned;
+   862→      riskWithinTolerance = ratio >= 0.5 && ratio <= 1.5;
+   863→    }
+   864→  }
+   865→
+   866→  // R:R achieved — actualR > 0 (i.e. the trade was profitable).
+   867→  const rrAchieved: boolean | null =
+   868→    actualRR != null ? dToNumber(actualRR) > 0 : null;
+   869→
+   870→  const checks: PlanAdherenceCheck[] = [
+   871→    {
+   872→      label: "Session match",
+   873→      passed: sessionMatch,
+   874→      detail:
+   875→        sessionMatch === null
+   876→          ? "No planned session recorded"
+   877→          : sessionMatch
+   878→            ? "Traded in the planned session"
+   879→            : "Traded outside the planned session",
+   880→    },
+   881→    {
+   882→      label: "Target hit",
+   883→      passed: targetMatch,
+   884→      detail:
+   885→        targetMatch === null
+   886→          ? "No target or exit price recorded"
+   887→          : targetMatch
+   888→            ? "Exit price within 5% of planned target"
+   889→            : "Exit price deviated more than 5% from target",
+   890→    },
+   891→    {
+   892→      label: "Risk within tolerance",
+   893→      passed: riskWithinTolerance,
+   894→      detail:
+   895→        riskWithinTolerance === null
+   896→          ? "Planned or actual risk unavailable"
+   897→          : riskWithinTolerance
+   898→            ? "Actual risk within 50% of planned risk"
+   899→            : "Actual risk outside 50% tolerance of planned risk",
+   900→    },
+   901→    {
+   902→      label: "Positive R achieved",
+   903→      passed: rrAchieved,
+   904→      detail:
+   905→        rrAchieved === null
+   906→          ? "No R-multiple computed"
+   907→          : rrAchieved
+   908→            ? "Trade was profitable (R > 0)"
+   909→            : "Trade was not profitable (R ≤ 0)",
+   910→    },
+   911→  ];
+   912→
+   913→  // Adherence score: average of non-null binary checks. Each check contributes
+   914→  // 1 (passed) or 0 (failed); null checks are excluded from the denominator.
+   915→  const evaluatedChecks = checks
+   916→    .map((c) => c.passed)
+   917→    .filter((v): v is boolean => v !== null);
+   918→  const adherenceScore =
+   919→    evaluatedChecks.length > 0
+   920→      ? evaluatedChecks.reduce((sum, v) => sum + (v ? 1 : 0), 0) / evaluatedChecks.length
+   921→      : 0;
+   922→  const adherencePct = adherenceScore * 100;
+   923→
+   924→  return {
+   925→    plannedRR,
+   926→    actualRR,
+   927→    plannedRiskPct,
+   928→    actualRiskPct,
+   929→    sessionMatch,
+   930→    targetMatch,
+   931→    adherenceScore,
+   932→    adherencePct,
+   933→    checks,
+   934→  };
+   935→}
+   936→

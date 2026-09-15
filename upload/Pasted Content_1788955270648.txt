@@ -1,0 +1,1968 @@
+DN D CURRENT VERSION MASTER REVERSE-ENGINEERING AUDIT
+
+READ THIS CAREFULLY:
+
+You are NOT being asked to modify, improve, redesign, refactor, fix, optimize, or rewrite the DnD application.
+
+Your ONLY task is to inspect the CURRENT DnD project exactly as it exists RIGHT NOW and produce a complete, exhaustive reverse-engineering report.
+
+This is a documentation and observation task only.
+
+DO NOT CHANGE ANY CODE.
+
+DO NOT CREATE ANY NEW FEATURES.
+
+DO NOT FIX BUGS.
+
+DO NOT REFACTOR.
+
+DO NOT CLEAN UP.
+
+DO NOT UPDATE DEPENDENCIES.
+
+DO NOT ALTER DATABASE SCHEMA.
+
+DO NOT MODIFY DATA.
+
+DO NOT CHANGE UI.
+
+DO NOT CHANGE CONFIGURATION.
+
+DO NOT CHANGE ENVIRONMENT VARIABLES.
+
+DO NOT CHANGE ROUTES.
+
+DO NOT CHANGE COMPONENTS.
+
+DO NOT CHANGE STYLING.
+
+DO NOT RUN commands that modify project state.
+
+Read, inspect, trace, run safely for observation, and document.
+
+The purpose of this report is to give another AI model complete knowledge of the CURRENT DnD application after the latest major redesign.
+
+The current codebase and running application are the ONLY source of truth.
+
+Do NOT rely on older DnD specifications, previous audits, previous prompts, old architecture, memory, or assumptions unless the current code confirms them.
+
+--------------------------------------------------
+PRIMARY OBJECTIVE
+--------------------------------------------------
+
+Produce a complete CURRENT-STATE intelligence report answering:
+
+"What exactly is DnD right now?"
+
+The report must allow another senior engineer or AI model to understand the project without needing to rediscover the entire codebase.
+
+The report must cover:
+
+1. Product
+2. Frontend
+3. UI/UX
+4. Design system
+5. Every page/screen
+6. Every form
+7. Every component
+8. Navigation
+9. Responsive behavior
+10. User flows
+11. Authentication
+12. Authorization
+13. Backend
+14. API/server actions
+15. Database
+16. Business logic
+17. Trading logic
+18. Financial calculations
+19. Strategy system
+20. Checklist system
+21. Daily planning
+22. Psychology
+23. Media/evidence
+24. Calendar
+25. Analytics
+26. Reviews
+27. Onboarding
+28. Settings
+29. Legal/cookie consent
+30. State management
+31. Data flow
+32. Validation
+33. Error handling
+34. Loading/empty states
+35. Security
+36. Performance
+37. Testing
+38. Deployment
+39. Environment configuration
+40. Dependencies
+41. Current bugs/risks
+42. Missing features
+43. Actual versus historical/intended architecture
+
+--------------------------------------------------
+RULE #1: CURRENT VERSION ONLY
+--------------------------------------------------
+
+The current implementation is the source of truth.
+
+If an old document says one thing but the current app does something else:
+
+DOCUMENT THE CURRENT APP.
+
+You may mention the discrepancy under a separate "Historical / Previous Architecture Difference" section.
+
+Do not merge old and new implementations.
+
+--------------------------------------------------
+RULE #2: VERIFY, DON'T GUESS
+--------------------------------------------------
+
+Every important statement must be classified as one of:
+
+VERIFIED
+Confirmed directly from code, runtime behavior, database/schema, configuration, or browser inspection.
+
+PARTIALLY VERIFIED
+Some parts confirmed, others not.
+
+INFERRED
+Strongly suggested but not directly confirmed.
+
+NOT FOUND
+Searched for it and found no implementation.
+
+NOT VERIFIED
+Could not confirm.
+
+BLOCKED
+Could not inspect because infrastructure/tooling was unavailable.
+
+Never call something VERIFIED if you only inferred it.
+
+Never hide uncertainty.
+
+--------------------------------------------------
+RULE #3: NO CODE MODIFICATION
+--------------------------------------------------
+
+Before doing anything:
+
+DO NOT make a backup by modifying the project.
+
+DO NOT create temporary files inside the project.
+
+DO NOT generate migrations.
+
+DO NOT install packages.
+
+DO NOT update packages.
+
+DO NOT run formatting.
+
+DO NOT run auto-fix lint.
+
+DO NOT change generated files.
+
+DO NOT change database contents.
+
+DO NOT alter configuration.
+
+Safe commands for inspection/build/test are allowed only when they do not modify project state.
+
+--------------------------------------------------
+PHASE 1: PROJECT DISCOVERY
+--------------------------------------------------
+
+Inspect the complete project structure.
+
+Document:
+
+- project root
+- source directories
+- app structure
+- components
+- utilities
+- services
+- database
+- API/server code
+- configuration
+- public assets
+- styles
+- tests
+- scripts
+- deployment files
+
+Create a directory architecture tree.
+
+Do NOT dump every file.
+
+Focus on meaningful architectural files.
+
+--------------------------------------------------
+PHASE 2: CURRENT PRODUCT IDENTITY
+--------------------------------------------------
+
+Document:
+
+PRODUCT NAME
+
+CURRENT PRODUCT DESCRIPTION
+
+TARGET USER
+
+PRIMARY PROBLEM
+
+CORE VALUE PROPOSITION
+
+MAIN PRODUCT DIFFERENTIATOR
+
+CURRENT PRODUCT POSITIONING
+
+CURRENT USER MENTAL MODEL
+
+CURRENT MAJOR WORKFLOW
+
+Do not use historical product descriptions unless the current implementation confirms them.
+
+--------------------------------------------------
+PHASE 3: COMPLETE RUNNING APPLICATION INSPECTION
+--------------------------------------------------
+
+Run the application in the safest available read-only inspection mode.
+
+Then inspect the actual application as a real user.
+
+Do NOT rely only on source code.
+
+Open every accessible screen.
+
+Document exactly what is visible.
+
+--------------------------------------------------
+PHASE 4: COMPLETE CURRENT ROUTE / VIEW MAP
+--------------------------------------------------
+
+Identify the actual navigation architecture.
+
+Determine whether the current application uses:
+
+- real Next.js routes
+- client-side view switching
+- nested routing
+- modals
+- drawers
+- overlays
+- query-state navigation
+- other mechanisms
+
+Create a complete map.
+
+For EVERY current view/screen document:
+
+- route or view key
+- public/authenticated
+- parent
+- entry point
+- purpose
+- primary action
+- secondary actions
+- destination links
+- backend dependencies
+
+Do NOT assume route names.
+
+--------------------------------------------------
+PHASE 5: EXACT CURRENT NAVIGATION
+--------------------------------------------------
+
+Inspect:
+
+- desktop sidebar
+- top navigation
+- mobile navigation
+- command palette
+- profile/user menu
+- contextual navigation
+- breadcrumbs
+- menus
+- dropdown navigation
+
+Document the exact current structure.
+
+For sidebar:
+
+- groups
+- item order
+- labels
+- icons
+- collapsed behavior
+- active state
+- hover state
+- badges
+- nested items
+- mobile behavior
+
+Do not describe an older sidebar.
+
+--------------------------------------------------
+PHASE 6: SCREEN-BY-SCREEN UI DOCUMENTATION
+--------------------------------------------------
+
+This is one of the MOST IMPORTANT sections.
+
+For EVERY screen document exactly what the user sees.
+
+Use this format:
+
+SCREEN NAME
+
+PURPOSE
+
+LAYOUT
+
+HEADER
+
+NAVIGATION
+
+SECTIONS
+
+CARDS
+
+TABLES
+
+CHARTS
+
+FORMS
+
+FILTERS
+
+BUTTONS
+
+MODALS
+
+DRAWERS
+
+TABS
+
+DROPDOWNS
+
+SEARCH
+
+EMPTY STATE
+
+LOADING STATE
+
+ERROR STATE
+
+SUCCESS STATE
+
+PRIMARY ACTION
+
+SECONDARY ACTIONS
+
+RESPONSIVE BEHAVIOR
+
+DATA SOURCES
+
+BACKEND CONNECTIONS
+
+NOTES
+
+Every important visible component must be documented.
+
+--------------------------------------------------
+PHASE 7: SCREENSHOTS / VISUAL EVIDENCE
+--------------------------------------------------
+
+Where the environment allows screenshots:
+
+capture representative screenshots of major screens.
+
+Include:
+
+- landing page
+- signup
+- signin
+- onboarding
+- dashboard
+- journal/trades
+- add trade
+- every major trade form step
+- trade detail
+- strategy/playbooks
+- daily plans
+- calendar
+- analytics
+- reviews if present
+- media/evidence
+- settings
+- legal
+- mobile navigation
+
+Screenshots are supplementary evidence.
+
+The written report remains the primary source.
+
+--------------------------------------------------
+PHASE 8: COMPLETE FORM INVENTORY
+--------------------------------------------------
+
+Inspect EVERY form in the application.
+
+This is critical.
+
+For every form document:
+
+FORM NAME
+
+LOCATION
+
+PURPOSE
+
+STEP/TAB
+
+FIELD NAME
+
+FIELD TYPE
+
+REQUIRED/OPTIONAL
+
+DEFAULT VALUE
+
+PLACEHOLDER
+
+OPTIONS
+
+ENUM VALUES
+
+VALIDATION
+
+FORMAT
+
+AUTO-FORMATTING
+
+DEPENDENCIES
+
+CONDITIONAL FIELDS
+
+CALCULATED FIELDS
+
+CLIENT VALIDATION
+
+SERVER VALIDATION
+
+SUBMIT ACTION
+
+SUCCESS BEHAVIOR
+
+ERROR BEHAVIOR
+
+EDIT BEHAVIOR
+
+RESET BEHAVIOR
+
+AUTOSAVE IF PRESENT
+
+UNSAVED-CHANGES HANDLING
+
+Do this for:
+
+- Signup
+- Signin
+- account setup
+- trading account
+- instruments
+- strategy
+- strategy rules
+- checklist
+- daily plan
+- trade
+- trade edit
+- trade execution
+- risk
+- psychology
+- media upload
+- annotations
+- reviews
+- settings
+- profile
+- legal/consent
+- other forms discovered
+
+--------------------------------------------------
+PHASE 9: ADD TRADE COMPLETE DOCUMENTATION
+--------------------------------------------------
+
+Reverse-engineer the entire trade logging workflow.
+
+Document every step/tab in exact current order.
+
+For each step:
+
+- title
+- fields
+- controls
+- defaults
+- dependencies
+- validation
+- calculated values
+- next/back behavior
+- save behavior
+
+Trace the complete flow:
+
+OPEN ADD TRADE
+→ STEP 1
+→ STEP 2
+→ STEP 3
+→ STEP 4
+→ STEP 5
+→ SUBMIT
+→ SERVER
+→ DATABASE
+→ RESULT
+
+Document:
+
+- instrument selection
+- strategy selection
+- setup/checklist
+- risk
+- execution
+- targets
+- psychology
+- news
+- evidence/media
+- timeframe handling
+- annotations
+- partial exits
+- calculated P&L
+- R multiple
+- grade
+- validation
+
+Do NOT assume old trade-form structure.
+
+Inspect the CURRENT trade form.
+
+--------------------------------------------------
+PHASE 10: EXACT TRADING DOMAIN MODEL
+--------------------------------------------------
+
+Document the current concepts the application uses.
+
+For example, only if they exist:
+
+Trade
+
+Instrument
+
+TradingAccount
+
+Strategy
+
+StrategyVersion
+
+Rule
+
+Checklist
+
+ChecklistEvaluation
+
+Execution
+
+Target
+
+DailyPlan
+
+Psychology
+
+Media
+
+Annotation
+
+Review
+
+Tag
+
+etc.
+
+For every entity:
+
+- meaning
+- fields
+- relationships
+- lifecycle
+- ownership
+- creation
+- update
+- deletion
+
+--------------------------------------------------
+PHASE 11: INSTRUMENT SYSTEM
+--------------------------------------------------
+
+Reverse-engineer the CURRENT instrument architecture.
+
+Determine:
+
+- where instruments are defined
+- database model
+- enums
+- categories
+- market types
+- symbol representation
+- capitalization
+- search
+- selection
+- favorite/default behavior
+- custom instruments
+- price precision
+- tick size
+- pip size
+- point value
+- contract size
+- quantity precision
+- currency
+
+Trace how instrument selection affects:
+
+- Add Trade
+- risk
+- P&L
+- display
+- analytics
+- filtering
+- settings
+
+--------------------------------------------------
+PHASE 12: FINANCIAL ENGINE
+--------------------------------------------------
+
+Inspect every financial calculation.
+
+Document:
+
+- entry
+- exit
+- average entry
+- average exit
+- quantity
+- partial exits
+- fees
+- commissions
+- swap
+- slippage
+- gross P&L
+- net P&L
+- risk amount
+- R
+- win/loss
+- equity
+- drawdown
+- profit factor
+- expectancy
+- streaks
+- any other calculated metric
+
+For each:
+
+INPUTS
+→ FORMULA
+→ FUNCTION
+→ STORAGE
+→ API
+→ UI
+
+Identify precision handling.
+
+Identify money representation.
+
+Identify rounding.
+
+Identify currency conversion.
+
+Identify possible overflow.
+
+Identify authoritative source.
+
+--------------------------------------------------
+PHASE 13: STRATEGY SYSTEM
+--------------------------------------------------
+
+Document the exact current strategy architecture.
+
+Include:
+
+- strategy creation
+- editing
+- activation
+- deactivation
+- versioning
+- rules
+- rule order
+- rule weight
+- rule necessity
+- rule descriptions
+- checklist generation
+- strategy/trade linkage
+- historical version behavior
+
+Trace:
+
+STRATEGY
+→ VERSION
+→ RULES
+→ TRADE
+→ CHECKLIST
+→ SCORE
+→ GRADE
+
+--------------------------------------------------
+PHASE 14: CHECKLIST / A+ SYSTEM
+--------------------------------------------------
+
+Document exactly how the current checklist works.
+
+Determine:
+
+- where checklist rules originate
+- whether checklist is strategy-specific
+- whether generic checklist exists
+- weights
+- required rules
+- scoring
+- grade thresholds
+- grade caps
+- raw answers
+- evaluation snapshot
+- server re-evaluation
+- editing behavior
+- historical preservation
+
+Do not assume an A+ system exists just because an older DnD version had one.
+
+Inspect the CURRENT implementation.
+
+--------------------------------------------------
+PHASE 15: DAILY PLAN
+--------------------------------------------------
+
+Document the current Daily Plan system.
+
+Determine whether it is:
+
+- primary navigation
+- secondary feature
+- integrated with trades
+- optional
+- mandatory in onboarding
+
+Document every field and flow.
+
+Trace:
+
+CREATE PLAN
+→ SAVE
+→ VIEW
+→ EDIT
+→ TRADE LINK
+→ ADHERENCE
+→ REVIEW
+→ ANALYTICS
+
+--------------------------------------------------
+PHASE 16: EVIDENCE / MEDIA
+--------------------------------------------------
+
+Document the current media system.
+
+Include:
+
+- image upload
+- video upload
+- file limits
+- formats
+- metadata
+- timeframe
+- grouping
+- filtering
+- descriptions
+- captions
+- annotation
+- storage
+- retrieval
+- signed URLs
+- access control
+- delete
+- preview
+- download
+
+Inspect actual behavior.
+
+--------------------------------------------------
+PHASE 17: PSYCHOLOGY
+--------------------------------------------------
+
+Document exactly what the user can record.
+
+Include:
+
+- emotions
+- tags
+- confidence
+- discipline
+- mistakes
+- behavior flags
+- notes
+- scoring
+- analytics
+- correlations
+
+--------------------------------------------------
+PHASE 18: NEWS
+--------------------------------------------------
+
+Document the current news/event implementation.
+
+Include:
+
+- field name
+- selector type
+- available values
+- default
+- storage
+- validation
+- single/multi-value
+- analytics use
+- display
+- historical behavior
+
+--------------------------------------------------
+PHASE 19: CALENDAR
+--------------------------------------------------
+
+Document:
+
+- calendar layout
+- date behavior
+- timezone
+- daily aggregation
+- P&L
+- R
+- win/loss
+- A+ / grades
+- best/worst
+- sessions
+- news
+- Daily Plan
+- day modal/page
+- trade list
+- actions
+
+Describe exactly what happens when a user clicks a day.
+
+--------------------------------------------------
+PHASE 20: ANALYTICS
+--------------------------------------------------
+
+Inspect the CURRENT analytics implementation.
+
+Document every:
+
+- metric
+- chart
+- table
+- filter
+- dimension
+- comparison
+- date range
+- grouping
+- insight
+- minimum sample size
+- drilldown
+
+For each metric:
+
+SOURCE
+
+FORMULA
+
+QUERY
+
+AGGREGATION
+
+CACHE IF ANY
+
+DISPLAY LOCATION
+
+--------------------------------------------------
+PHASE 21: REVIEWS
+--------------------------------------------------
+
+Determine whether Reviews currently exist and are actually exposed.
+
+If present, document:
+
+- Daily
+- Weekly
+- Monthly
+- reflections
+- automatic metrics
+- patterns
+- action items
+- trade links
+- strategy links
+
+If removed or unavailable, state that clearly.
+
+--------------------------------------------------
+PHASE 22: ONBOARDING
+--------------------------------------------------
+
+Inspect the CURRENT signup → onboarding experience.
+
+Do not rely on previous onboarding documentation.
+
+Document:
+
+SIGNUP
+
+→ LEGAL CONSENT
+
+→ WELCOME
+
+→ SETUP
+
+→ TOUR
+
+→ DASHBOARD
+
+For the current onboarding setup:
+
+- exact popup text
+- exact number of steps
+- each step
+- fields
+- buttons
+- skip behavior
+- completion behavior
+- persistence
+- user binding
+- resume behavior
+- replay behavior
+
+For the current walkthrough:
+
+document every step.
+
+For each step:
+
+- title
+- description
+- target component
+- selector/target method
+- spotlight behavior
+- tooltip behavior
+- navigation behavior
+- mobile behavior
+- whether user can interact with the actual feature
+
+IMPORTANT:
+
+Determine whether the spotlight actually highlights the real component.
+
+--------------------------------------------------
+PHASE 23: SETTINGS
+--------------------------------------------------
+
+Reverse-engineer EVERY current Settings tab and field.
+
+Document the exact current structure.
+
+For each:
+
+- section
+- field
+- type
+- default
+- storage
+- effect on application
+
+Do not use the old Settings structure.
+
+Inspect the current UI.
+
+--------------------------------------------------
+PHASE 24: LEGAL / COOKIES / CONSENT
+--------------------------------------------------
+
+Document:
+
+- Terms
+- Privacy
+- Cookie Policy
+- cookie consent
+- consent categories
+- consent persistence
+- consent version
+- timestamps
+- signup acceptance
+- re-acceptance
+- settings access
+- legal documents UI
+
+--------------------------------------------------
+PHASE 25: AUTHENTICATION
+--------------------------------------------------
+
+Trace:
+
+SIGNUP
+LOGIN
+LOGOUT
+SESSION
+PASSWORD
+RECOVERY
+EMAIL VERIFICATION
+RESET
+MFA
+PROTECTED VIEW ACCESS
+
+Document:
+
+- provider
+- session type
+- cookie behavior
+- expiry
+- hashing
+- validation
+- rate limits
+- redirect behavior
+
+--------------------------------------------------
+PHASE 26: AUTHORIZATION
+--------------------------------------------------
+
+For every important resource determine:
+
+- owner
+- ownership field
+- create authorization
+- read authorization
+- update authorization
+- delete authorization
+- server-side check
+- database-level check
+
+Create:
+
+RESOURCE | READ | CREATE | UPDATE | DELETE | OWNER CHECK
+
+--------------------------------------------------
+PHASE 27: DATABASE
+--------------------------------------------------
+
+Fully inspect the current schema.
+
+For EVERY model/table:
+
+- name
+- purpose
+- fields
+- types
+- primary key
+- foreign keys
+- indexes
+- unique constraints
+- enums
+- defaults
+- nullable fields
+- relations
+- cascade behavior
+- deletion behavior
+- ownership
+- timestamps
+- soft delete
+- audit fields
+
+Then create a complete relationship map.
+
+--------------------------------------------------
+PHASE 28: BACKEND / API
+--------------------------------------------------
+
+Inventory every:
+
+- API route
+- server action
+- server function
+- database function
+- upload endpoint
+- background route
+- cron route
+- webhook
+
+For every endpoint:
+
+METHOD
+
+PATH
+
+AUTH
+
+OWNER CHECK
+
+INPUT
+
+VALIDATION
+
+DATABASE OPERATION
+
+RESPONSE
+
+ERRORS
+
+SIDE EFFECTS
+
+AUDIT
+
+CACHE
+
+--------------------------------------------------
+PHASE 29: STATE MANAGEMENT
+--------------------------------------------------
+
+Identify ALL frontend state.
+
+Document:
+
+- global stores
+- local state
+- server state
+- persistence
+- hydration
+- invalidation
+- synchronization
+- optimistic behavior
+- stale-state behavior
+
+--------------------------------------------------
+PHASE 30: DATA FLOW
+--------------------------------------------------
+
+Create end-to-end flows for:
+
+AUTH
+
+SIGNUP
+
+ONBOARDING
+
+ADD TRADE
+
+EDIT TRADE
+
+DELETE TRADE
+
+STRATEGY
+
+CHECKLIST
+
+DAILY PLAN
+
+MEDIA
+
+ANALYTICS
+
+CALENDAR
+
+REVIEW
+
+SETTINGS
+
+LEGAL
+
+COOKIE CONSENT
+
+For every flow:
+
+USER
+→ UI
+→ STATE
+→ API/SERVER
+→ BUSINESS LOGIC
+→ DATABASE/STORAGE
+→ RESPONSE
+→ UI
+
+--------------------------------------------------
+PHASE 31: COMPONENT ARCHITECTURE
+--------------------------------------------------
+
+Create the actual component tree.
+
+Identify:
+
+- app shell
+- layout
+- navigation
+- feature components
+- reusable UI
+- forms
+- dialogs
+- charts
+- tables
+- media components
+- onboarding components
+
+For important components:
+
+- path
+- purpose
+- props
+- state
+- data
+- events
+- API interaction
+- reuse
+
+--------------------------------------------------
+PHASE 32: DESIGN SYSTEM
+--------------------------------------------------
+
+Inspect the CURRENT visual implementation.
+
+Document exact values wherever possible:
+
+COLORS
+
+TYPOGRAPHY
+
+FONTS
+
+SPACING
+
+BORDERS
+
+RADIUS
+
+SHADOWS
+
+SURFACES
+
+ICONS
+
+BUTTONS
+
+INPUTS
+
+CARDS
+
+TABLES
+
+CHARTS
+
+TABS
+
+DIALOGS
+
+TOOLTIPS
+
+FOCUS STATES
+
+HOVER STATES
+
+ACTIVE STATES
+
+DISABLED STATES
+
+MOBILE BREAKPOINTS
+
+THEMES
+
+ANIMATIONS
+
+Do not use the old design system.
+
+Inspect current styles.
+
+--------------------------------------------------
+PHASE 33: RESPONSIVE DESIGN
+--------------------------------------------------
+
+Inspect actual:
+
+- desktop
+- tablet
+- mobile
+
+Document:
+
+- sidebar behavior
+- mobile menu
+- bottom nav
+- stacking
+- cards
+- tables
+- forms
+- charts
+- dialogs
+- onboarding
+- trade workflow
+
+Identify screens that degrade on mobile.
+
+--------------------------------------------------
+PHASE 34: UX BEHAVIOR
+--------------------------------------------------
+
+Document:
+
+- loading indicators
+- skeletons
+- empty states
+- errors
+- notifications
+- confirmations
+- toasts
+- destructive-action confirmations
+- autosave
+- unsaved changes
+- optimistic updates
+- hover interactions
+- keyboard shortcuts
+
+--------------------------------------------------
+PHASE 35: SECURITY
+--------------------------------------------------
+
+Perform a static inspection only.
+
+Do NOT perform destructive security testing.
+
+Inspect:
+
+- auth
+- authorization
+- sessions
+- cookies
+- CSRF
+- XSS exposure
+- SQL injection protections
+- validation
+- file upload
+- storage access
+- rate limiting
+- secrets
+- headers
+- CSP
+- HSTS
+- CORS
+- mass assignment
+- logging
+- error leakage
+
+Classify each:
+
+SAFE
+
+WARNING
+
+CRITICAL
+
+NOT VERIFIED
+
+BLOCKED
+
+Never claim a runtime security guarantee that was not tested.
+
+--------------------------------------------------
+PHASE 36: PERFORMANCE
+--------------------------------------------------
+
+Inspect:
+
+- bundle
+- client rendering
+- server rendering
+- database queries
+- pagination
+- N+1 queries
+- charts
+- media
+- large files
+- analytics
+- caching
+- React Query
+- expensive client calculations
+
+If actual benchmarks can be safely collected without changing anything, record them.
+
+Otherwise write:
+
+NOT VERIFIED.
+
+Never invent performance numbers.
+
+--------------------------------------------------
+PHASE 37: TESTING
+--------------------------------------------------
+
+Inventory all existing tests.
+
+Determine:
+
+- what exists
+- what actually runs
+- what is verified
+- what is missing
+- what is blocked
+
+Include:
+
+unit
+integration
+database
+security
+E2E
+browser
+financial
+authorization
+
+--------------------------------------------------
+PHASE 38: BUILD + DEPLOYMENT
+--------------------------------------------------
+
+Inspect:
+
+- build scripts
+- deployment
+- hosting
+- reverse proxy
+- database
+- storage
+- environment variables
+- CI/CD
+- monitoring
+- cron
+- workers
+
+Document:
+
+LOCAL
+→ BUILD
+→ DEPLOY
+→ RUN
+→ DATABASE
+→ STORAGE
+→ AUTH
+
+--------------------------------------------------
+PHASE 39: ENVIRONMENT VARIABLES
+--------------------------------------------------
+
+List variable NAMES only.
+
+Never expose values.
+
+For each:
+
+- name
+- purpose
+- required
+- client/server
+- fallback
+- security sensitivity
+
+--------------------------------------------------
+PHASE 40: DEPENDENCIES
+--------------------------------------------------
+
+Inventory major packages and services.
+
+Group:
+
+Framework
+
+UI
+
+State
+
+Database
+
+Auth
+
+Validation
+
+Charts
+
+Media
+
+Storage
+
+Security
+
+Testing
+
+Monitoring
+
+Other
+
+--------------------------------------------------
+PHASE 41: KNOWN BUGS
+--------------------------------------------------
+
+Find actual bugs from:
+
+- browser behavior
+- code inspection
+- console output
+- build warnings
+- type errors
+- broken flows
+- data mismatches
+
+For each:
+
+- severity
+- evidence
+- affected feature
+- user impact
+- technical impact
+- reproducibility
+
+DO NOT FIX THEM.
+
+--------------------------------------------------
+PHASE 42: MISSING FEATURES
+--------------------------------------------------
+
+Separate:
+
+CONFIRMED MISSING
+
+POSSIBLY MISSING
+
+NOT VERIFIED
+
+Do not confuse missing from navigation with missing from code.
+
+--------------------------------------------------
+PHASE 43: CODE QUALITY
+--------------------------------------------------
+
+Assess:
+
+- architecture
+- separation of concerns
+- maintainability
+- duplication
+- naming
+- typing
+- server/client separation
+- business-logic placement
+- database coupling
+- reusable components
+
+Provide evidence.
+
+--------------------------------------------------
+PHASE 44: FEATURE TRACEABILITY MATRIX
+--------------------------------------------------
+
+Create a comprehensive matrix:
+
+FEATURE
+→ SCREEN
+→ COMPONENT
+→ STATE
+→ API
+→ DATABASE
+→ BUSINESS LOGIC
+→ AUTHORIZATION
+→ AUDIT
+→ TESTS
+
+Include ALL major DnD features.
+
+--------------------------------------------------
+PHASE 45: MASTER USER JOURNEYS
+--------------------------------------------------
+
+Document the actual current user journeys.
+
+At minimum:
+
+1. First visit
+2. Cookie consent
+3. Signup
+4. Legal acceptance
+5. Onboarding
+6. Workspace setup
+7. First dashboard visit
+8. Create account
+9. Add instrument
+10. Create strategy
+11. Create Daily Plan
+12. Add trade
+13. Select instrument
+14. Select strategy
+15. Complete checklist
+16. Add evidence
+17. Finish trade
+18. Review trade
+19. Calendar
+20. Analytics
+21. Settings
+22. Logout/login
+
+Only include flows actually present.
+
+--------------------------------------------------
+PHASE 46: CURRENT VS HISTORICAL
+--------------------------------------------------
+
+Create a dedicated section:
+
+CURRENT SYSTEM
+
+Then:
+
+PREVIOUS / HISTORICAL SYSTEM
+
+Then:
+
+WHAT CHANGED
+
+This is essential because DnD has gone through several major versions.
+
+Do not allow old assumptions to contaminate the current architecture.
+
+--------------------------------------------------
+PHASE 47: MASTER ARCHITECTURE DIAGRAM
+--------------------------------------------------
+
+Create a complete current architecture diagram.
+
+Include:
+
+USER
+
+PUBLIC UI
+
+AUTH
+
+APP SHELL
+
+FRONTEND STATE
+
+SERVER/API
+
+BUSINESS LOGIC
+
+DATABASE
+
+FILE STORAGE
+
+ANALYTICS
+
+OTHER SERVICES
+
+Use the actual architecture.
+
+--------------------------------------------------
+PHASE 48: MASTER PRODUCT MAP
+--------------------------------------------------
+
+Create the final current product tree.
+
+Example structure only:
+
+DnD
+├── Public
+├── Authentication
+├── Onboarding
+├── Dashboard
+├── Trading
+├── Strategies
+├── Planning
+├── Evidence
+├── Analytics
+├── Reviews
+├── Settings
+└── Infrastructure
+
+Replace it with the actual current structure.
+
+--------------------------------------------------
+PHASE 49: MASTER DATABASE MAP
+--------------------------------------------------
+
+Create one clean domain relationship diagram.
+
+--------------------------------------------------
+PHASE 50: MASTER TRADE FLOW
+--------------------------------------------------
+
+Create one exact current trade lifecycle diagram:
+
+USER ACTION
+→ FORM
+→ VALIDATION
+→ API
+→ BUSINESS LOGIC
+→ DATABASE
+→ ANALYTICS
+→ UI
+
+--------------------------------------------------
+PHASE 51: MASTER SCREEN INVENTORY
+--------------------------------------------------
+
+Create a table:
+
+SCREEN
+ROUTE/VIEW
+AUTH
+PURPOSE
+MAIN COMPONENTS
+PRIMARY ACTION
+BACKEND
+MOBILE
+STATUS
+
+Include every important current screen.
+
+--------------------------------------------------
+PHASE 52: MASTER FORM INVENTORY
+--------------------------------------------------
+
+Create a table:
+
+FORM
+SCREEN
+STEP
+FIELDS
+VALIDATION
+SUBMIT
+SERVER
+DATABASE
+NOTES
+
+--------------------------------------------------
+PHASE 53: MASTER API INVENTORY
+--------------------------------------------------
+
+Create a table:
+
+METHOD
+ENDPOINT
+AUTH
+INPUT
+VALIDATION
+DATABASE
+SIDE EFFECTS
+RESPONSE
+ERRORS
+
+--------------------------------------------------
+PHASE 54: MASTER DATA MODEL
+--------------------------------------------------
+
+Create a compact table of every major entity:
+
+ENTITY
+PURPOSE
+OWNER
+KEY RELATIONS
+LIFECYCLE
+IMPORTANT FIELDS
+
+--------------------------------------------------
+PHASE 55: FINAL ASSESSMENT
+--------------------------------------------------
+
+Score the CURRENT implementation from 0-10:
+
+Product maturity
+
+Frontend maturity
+
+Backend maturity
+
+Database maturity
+
+Financial correctness
+
+Security maturity
+
+Testing maturity
+
+Performance maturity
+
+UX maturity
+
+Responsive maturity
+
+Production readiness
+
+Every score must contain evidence.
+
+--------------------------------------------------
+PHASE 56: TOP FINDINGS
+--------------------------------------------------
+
+End with:
+
+TOP 10 STRENGTHS
+
+TOP 10 RISKS
+
+TOP 10 BUGS
+
+TOP 10 ARCHITECTURAL CONCERNS
+
+TOP 10 MISSING FEATURES
+
+TOP 10 THINGS THAT SHOULD NOT BE CHANGED CASUALLY
+
+This last section is important because another AI will use the report before modifying DnD.
+
+--------------------------------------------------
+PHASE 57: FINAL HANDOFF SUMMARY
+--------------------------------------------------
+
+Create a section titled:
+
+"AI HANDOFF: EVERYTHING ANOTHER AI MUST KNOW BEFORE MODIFYING DnD"
+
+This should summarize:
+
+- current architecture
+- current UI
+- current navigation
+- current forms
+- current data model
+- current business logic
+- current trade flow
+- current strategy flow
+- current onboarding
+- current settings
+- current authentication
+- current security
+- current deployment
+- important constraints
+- dangerous areas
+- areas where modifications can break existing functionality
+
+This section should be written as practical context for another engineering AI.
+
+--------------------------------------------------
+REPORT FORMAT
+--------------------------------------------------
+
+Produce ONE comprehensive Markdown file:
+
+DnD_CURRENT_VERSION_MASTER_REVERSE_ENGINEERING_REPORT.md
+
+The document should be detailed.
+
+Do not prioritize brevity over completeness.
+
+Use tables where useful.
+
+Use diagrams in text where useful.
+
+Use exact file paths wherever relevant.
+
+Use exact route/view names.
+
+Use exact component names.
+
+Use exact database model names.
+
+Use exact field names.
+
+Use exact UI labels when important.
+
+Use exact enum values where important.
+
+Use exact formulas for financial logic.
+
+--------------------------------------------------
+EVIDENCE RULE
+--------------------------------------------------
+
+For each major claim, provide evidence.
+
+Example:
+
+Dashboard
+
+Status: VERIFIED
+
+Implementation:
+src/components/...
+
+Data source:
+...
+
+API:
+...
+
+Database:
+...
+
+UI behavior:
+...
+
+Do not write:
+
+"The dashboard securely loads user data."
+
+Instead explain exactly how.
+
+--------------------------------------------------
+IMPORTANT SAFETY RULE
+--------------------------------------------------
+
+Never expose:
+
+- passwords
+- JWTs
+- cookies
+- API keys
+- secret environment values
+- private tokens
+- credentials
+- private user data
+
+Environment variable names are allowed.
+
+Secret VALUES are never allowed.
+
+--------------------------------------------------
+FINAL RULE
+--------------------------------------------------
+
+DO NOT CHANGE THE PROJECT.
+
+At the end explicitly confirm:
+
+"No application code, database schema, configuration, dependencies, or user data were modified during this audit."
+
+The goal is a COMPLETE factual snapshot of the CURRENT DnD application.
+
+Not a redesign.
+
+Not an improvement plan.
+
+Not a future architecture.
+
+Not a historical reconstruction.
+
+A precise CURRENT-STATE reverse-engineering report.

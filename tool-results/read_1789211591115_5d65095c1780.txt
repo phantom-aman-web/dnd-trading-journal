@@ -1,0 +1,2002 @@
+     1→DnD BACKEND + DATABASE REBUILD
+     2→AUTHORITATIVE FINANCIAL ENGINE + ANALYTICS ENGINE SPECIFICATION
+     3→
+     4→You are rebuilding the DnD backend, database, persistence layer, calculation engine, and analytics layer from scratch.
+     5→
+     6→The current frontend/product is valuable and should remain the product-facing source.
+     7→
+     8→The old backend implementation is REFERENCE ONLY.
+     9→
+    10→Do NOT blindly copy its database model, calculation formulas, API logic, or analytics implementation.
+    11→
+    12→I have identified multiple conceptual problems in the old implementation, especially around instrument monetary semantics, partial exits, aggregation scope, checklist adherence, and analytics definitions.
+    13→
+    14→The purpose of this task is to establish ONE authoritative data model, ONE authoritative financial calculation model, and ONE authoritative analytics model.
+    15→
+    16→============================================================
+    17→0. NON-NEGOTIABLE PRINCIPLES
+    18→============================================================
+    19→
+    20→1. The backend is authoritative.
+    21→2. The database is authoritative for persisted state.
+    22→3. The client never supplies authoritative calculations.
+    23→4. The client never supplies authoritative status.
+    24→5. The client never supplies authoritative analytics.
+    25→6. Every financial value must have an explicit unit.
+    26→7. Every calculation must have one canonical implementation.
+    27→8. Every analytics metric must have one canonical definition.
+    28→9. Every persisted field must survive:
+    29→   form
+    30→   -> request
+    31→   -> validation
+    32→   -> backend
+    33→   -> database
+    34→   -> GET
+    35→   -> reload
+    36→   -> login again
+    37→10. No calculation should be duplicated across frontend, backend, and analytics code with subtly different formulas.
+    38→11. Historical trade results must remain stable.
+    39→12. Instrument metadata changes must never silently rewrite historical P&L.
+    40→13. Partial trades must never be silently counted as fully closed trades.
+    41→14. Checklist adherence must never be inferred from win rate.
+    42→15. A successful API response is NOT proof of correctness.
+    43→16. A successful database write is NOT proof of correct semantics.
+    44→17. Every metric must be testable from known input data.
+    45→
+    46→============================================================
+    47→1. PRESERVE CURRENT FRONTEND / PRODUCT
+    48→============================================================
+    49→
+    50→Do not redesign the current UI.
+    51→
+    52→Preserve the current DnD product behavior and visual language.
+    53→
+    54→The frontend should continue supporting the current workflows:
+    55→
+    56→- landing
+    57→- authentication
+    58→- onboarding
+    59→- accounts
+    60→- strategies
+    61→- strategy versions
+    62→- new trade
+    63→- checklist
+    64→- risk/sizing
+    65→- partial exits
+    66→- trade execution
+    67→- trade closing
+    68→- trade detail
+    69→- dashboard
+    70→- analytics
+    71→- calendar
+    72→- settings
+    73→- media
+    74→- legal
+    75→
+    76→Do not reintroduce intentionally removed modules such as:
+    77→
+    78→- Daily Plans
+    79→- Reviews
+    80→- separate Media Library module
+    81→- CSV Import UI
+    82→- Notifications UI
+    83→- Audit UI
+    84→- server-side backup restore UI
+    85→
+    86→unless explicitly requested later.
+    87→
+    88→The backend must be designed to serve the current frontend cleanly.
+    89→
+    90→============================================================
+    91→2. CREATE A CLEAN DOMAIN MODEL
+    92→============================================================
+    93→
+    94→Before coding, define the domain model.
+    95→
+    96→Core entities should cover the actual product concepts:
+    97→
+    98→User
+    99→UserSettings
+   100→TradingAccount
+   101→Instrument
+   102→Strategy
+   103→StrategyVersion
+   104→ChecklistConfig
+   105→ChecklistVersion
+   106→Trade
+   107→TradeExecution
+   108→TradeTarget
+   109→TradeChecklistEvaluation
+   110→TradeMedia
+   111→MediaAnnotation
+   112→LegalAcceptance
+   113→and only other entities actually needed by the current product.
+   114→
+   115→Every entity must clearly define:
+   116→
+   117→- owner
+   118→- identity
+   119→- lifecycle
+   120→- mutable fields
+   121→- immutable fields
+   122→- derived fields
+   123→- relationships
+   124→- deletion semantics
+   125→
+   126→============================================================
+   127→3. TRADE MUST HAVE ONE SOURCE OF TRUTH
+   128→============================================================
+   129→
+   130→The trade should distinguish clearly between:
+   131→
+   132→A. PLANNING DATA
+   133→B. EXECUTION DATA
+   134→C. DERIVED FINANCIAL DATA
+   135→D. DOCUMENTATION DATA
+   136→E. PSYCHOLOGY DATA
+   137→F. CHECKLIST DATA
+   138→G. MEDIA DATA
+   139→
+   140→Do not mix these concepts.
+   141→
+   142→Planning fields:
+   143→
+   144→planned entry
+   145→planned stop
+   146→planned target
+   147→planned risk percentage
+   148→planned quantity
+   149→planned R:R
+   150→
+   151→Execution ledger:
+   152→
+   153→entry fills
+   154→exit fills
+   155→
+   156→Derived:
+   157→
+   158→entry average
+   159→exit average
+   160→matched quantity
+   161→gross P&L
+   162→costs
+   163→net P&L
+   164→planned risk
+   165→actual R
+   166→status
+   167→
+   168→Documentation:
+   169→
+   170→thesis
+   171→notes
+   172→lessons
+   173→setup
+   174→plan adherence
+   175→
+   176→Psychology:
+   177→
+   178→before
+   179→after
+   180→behavior flags
+   181→
+   182→Checklist:
+   183→
+   184→strategy version
+   185→checklist version
+   186→answers
+   187→weighted score
+   188→grade
+   189→evaluation snapshot
+   190→
+   191→============================================================
+   192→4. FINANCIAL UNIT MODEL
+   193→============================================================
+   194→
+   195→This is CRITICAL.
+   196→
+   197→Every financial calculation must declare its unit.
+   198→
+   199→Canonical storage:
+   200→
+   201→Money:
+   202→integer minor units, normally cents.
+   203→
+   204→Price:
+   205→decimal, stored exactly enough for the instrument.
+   206→
+   207→Quantity:
+   208→decimal string where fractional quantity is allowed.
+   209→
+   210→Ratios:
+   211→decimal string.
+   212→
+   213→Percentage:
+   214→decimal representation with explicit convention.
+   215→
+   216→============================================================
+   217→5. FIX INSTRUMENT SEMANTICS
+   218→============================================================
+   219→
+   220→The previous implementation mixed:
+   221→
+   222→- tick value
+   223→- point value
+   224→- contract size
+   225→
+   226→This must not happen again.
+   227→
+   228→Choose a single authoritative model.
+   229→
+   230→Recommended model:
+   231→
+   232→contractSize:
+   233→underlying units represented by one quantity unit OR the contract multiplier.
+   234→
+   235→pointValue:
+   236→monetary value of ONE FULL PRICE UNIT for ONE contract/quantity unit, expressed in account/base calculation currency.
+   237→
+   238→tickSize:
+   239→minimum price increment.
+   240→
+   241→tickValue:
+   242→derived value of one tick.
+   243→
+   244→DO NOT use a field named pointValueCents to secretly mean tick value.
+   245→
+   246→If a value represents tick value, call it tickValueCents.
+   247→
+   248→If it represents full-point monetary value, call it pointValueCents.
+   249→
+   250→Never mix them.
+   251→
+   252→============================================================
+   253→6. FUTURES EXAMPLES
+   254→============================================================
+   255→
+   256→Use actual futures economics.
+   257→
+   258→NQ:
+   259→
+   260→1 contract
+   261→= $20 per full index point
+   262→
+   263→Therefore:
+   264→
+   265→pointValueCents = 2000 cents per point per contract
+   266→
+   267→tickSize = 0.25
+   268→
+   269→tickValue = $5
+   270→
+   271→Do NOT multiply $20/point by another $20 contract multiplier.
+   272→
+   273→ES:
+   274→
+   275→1 contract
+   276→= $50 per full index point
+   277→
+   278→pointValueCents = 5000 cents per point
+   279→
+   280→tickSize = 0.25
+   281→
+   282→tickValue = $12.50
+   283→
+   284→YM:
+   285→
+   286→$5 per point
+   287→
+   288→CL:
+   289→
+   290→$1000 per $1 move per contract
+   291→
+   292→GC:
+   293→
+   294→$100 per $1 move per contract
+   295→
+   296→Use one coherent representation.
+   297→
+   298→============================================================
+   299→7. FOREX MODEL
+   300→============================================================
+   301→
+   302→Forex requires special attention.
+   303→
+   304→EURUSD:
+   305→
+   306→1 standard lot = 100,000 EUR
+   307→
+   308→A 1.0 price move corresponds to 100,000 USD.
+   309→
+   310→Therefore:
+   311→
+   312→P&L in USD
+   313→=
+   314→price difference
+   315→× quantity
+   316→× contractSize
+   317→
+   318→For:
+   319→
+   320→EURUSD
+   321→entry 1.1000
+   322→exit 1.1080
+   323→quantity 1 standard lot
+   324→
+   325→difference = 0.0080
+   326→
+   327→P&L = 0.0080 × 100000
+   328→= $800
+   329→
+   330→= 80,000 cents.
+   331→
+   332→For non-USD quote currencies, explicitly define how conversion occurs.
+   333→
+   334→Do not pretend USDJPY can be treated identically to EURUSD without a conversion rule.
+   335→
+   336→Define:
+   337→
+   338→- quote currency
+   339→- base currency
+   340→- account currency
+   341→- conversion source
+   342→- conversion timing
+   343→- historical conversion behavior
+   344→
+   345→Historical P&L must remain reproducible.
+   346→
+   347→============================================================
+   348→8. GOLD
+   349→============================================================
+   350→
+   351→For XAUUSD:
+   352→
+   353→Assuming:
+   354→
+   355→1 contract/lot = 100 oz
+   356→
+   357→$1 move in gold
+   358→= $100 per contract
+   359→
+   360→Therefore:
+   361→
+   362→entry 2000
+   363→exit 1990
+   364→qty 1
+   365→
+   366→difference = 10
+   367→
+   368→P&L = 10 × $100
+   369→= $1,000
+   370→= 100,000 cents.
+   371→
+   372→Do not multiply the $100 contract value twice.
+   373→
+   374→============================================================
+   375→9. CANONICAL P&L FORMULA
+   376→============================================================
+   377→
+   378→Define the canonical formula mathematically before implementation.
+   379→
+   380→Conceptually:
+   381→
+   382→directionalMove
+   383→=
+   384→LONG ? exit - entry : entry - exit
+   385→
+   386→grossPnl
+   387→=
+   388→directionalMove
+   389→× matchedQuantity
+   390→× monetaryValuePerPriceUnit
+   391→
+   392→Where monetaryValuePerPriceUnit is already authoritative.
+   393→
+   394→Do not multiply unrelated monetary multipliers twice.
+   395→
+   396→If the instrument model uses:
+   397→
+   398→contractSize
+   399→× pointValue
+   400→
+   401→then pointValue must represent value per price unit per underlying unit.
+   402→
+   403→If the instrument model uses direct pointValue per contract:
+   404→
+   405→do NOT multiply contractSize again.
+   406→
+   407→Choose one model and enforce it throughout the system.
+   408→
+   409→============================================================
+   410→10. COST MODEL
+   411→============================================================
+   412→
+   413→Costs:
+   414→
+   415→fees
+   416→commission
+   417→swap
+   418→slippage
+   419→
+   420→All stored as integer cents.
+   421→
+   422→Total:
+   423→
+   424→totalCosts
+   425→=
+   426→fees
+   427→+
+   428→commission
+   429→+
+   430→swap
+   431→+
+   432→slippage
+   433→
+   434→Net:
+   435→
+   436→netPnl
+   437→=
+   438→grossPnl
+   439→-
+   440→totalCosts
+   441→
+   442→Costs must never be double-counted.
+   443→
+   444→Do not subtract slippage from both execution price and costs unless explicitly modeled that way.
+   445→
+   446→============================================================
+   447→11. RISK
+   448→============================================================
+   449→
+   450→Planned risk must be based on:
+   451→
+   452→planned stop distance
+   453→planned quantity
+   454→instrument monetary value per price unit
+   455→
+   456→Risk is not:
+   457→
+   458→balance × risk percentage
+   459→
+   460→unless the user is explicitly using percentage-based position sizing.
+   461→
+   462→When risk percentage is used:
+   463→
+   464→riskAmount
+   465→=
+   466→accountBalance
+   467→× riskPct
+   468→
+   469→Then position size can be derived from:
+   470→
+   471→positionSize
+   472→=
+   473→riskAmount
+   474→/
+   475→riskPerUnit
+   476→
+   477→Keep:
+   478→
+   479→risk budget
+   480→
+   481→separate from:
+   482→
+   483→trade's planned monetary stop risk
+   484→
+   485→and clearly document the relationship.
+   486→
+   487→============================================================
+   488→12. POSITION SIZE
+   489→============================================================
+   490→
+   491→Position sizing must be derived consistently.
+   492→
+   493→Inputs:
+   494→
+   495→account balance
+   496→risk percentage
+   497→entry
+   498→stop
+   499→instrument metadata
+   500→
+   501→Calculate:
+   502→
+   503→risk budget
+   504→stop distance
+   505→risk per unit
+   506→position size
+   507→
+   508→Handle:
+   509→
+   510→zero stop distance
+   511→negative quantities
+   512→invalid prices
+   513→unsupported precision
+   514→fractional quantity constraints
+   515→
+   516→Do not silently default invalid quantities to 1.
+   517→
+   518→============================================================
+   519→13. ENTRY / EXIT LEDGER
+   520→============================================================
+   521→
+   522→Trade execution history is authoritative.
+   523→
+   524→Support multiple entry fills.
+   525→
+   526→Do NOT use:
+   527→
+   528→first entry quantity
+   529→
+   530→as total quantity.
+   531→
+   532→Total entry quantity must equal:
+   533→
+   534→sum(all entry fill quantities)
+   535→
+   536→Total exit quantity:
+   537→
+   538→sum(all exit fill quantities)
+   539→
+   540→VWAP entry:
+   541→
+   542→Σ(price × quantity) / Σ(quantity)
+   543→
+   544→VWAP exit:
+   545→
+   546→Σ(price × quantity) / Σ(quantity)
+   547→
+   548→Matched quantity:
+   549→
+   550→min(totalEntryQty, totalExitQty)
+   551→
+   552→============================================================
+   553→14. PARTIAL EXITS MUST ACTUALLY SAVE
+   554→============================================================
+   555→
+   556→The current implementation incorrectly stores target quantity allocation as zero.
+   557→
+   558→Fix the data model.
+   559→
+   560→Each planned target should support:
+   561→
+   562→- id
+   563→- label
+   564→- price
+   565→- allocation quantity or percentage
+   566→- order/index
+   567→- optional notes
+   568→
+   569→If allocation is percentage:
+   570→
+   571→quantityPct must be persisted exactly.
+   572→
+   573→Example:
+   574→
+   575→TP1 = 25%
+   576→TP2 = 25%
+   577→TP3 = 50%
+   578→
+   579→After:
+   580→
+   581→save
+   582→reload
+   583→logout
+   584→login
+   585→edit
+   586→
+   587→the values must remain:
+   588→
+   589→25%
+   590→25%
+   591→50%
+   592→
+   593→Do not replace them with zero.
+   594→
+   595→Validate allocations.
+   596→
+   597→Explicitly define whether:
+   598→
+   599→- allocation may total exactly 100%
+   600→- allocation may be below 100%
+   601→- allocation may exceed 100%
+   602→
+   603→Recommended:
+   604→
+   605→must not exceed 100%.
+   606→
+   607→============================================================
+   608→15. PARTIAL EXECUTION
+   609→============================================================
+   610→
+   611→When actual exits are recorded:
+   612→
+   613→Realized P&L only belongs to matched/closed quantity.
+   614→
+   615→Unclosed quantity remains open.
+   616→
+   617→Example:
+   618→
+   619→Entry = 4 contracts
+   620→
+   621→Exit 1 = 1
+   622→Exit 2 = 1
+   623→
+   624→Realized quantity = 2
+   625→
+   626→Open quantity = 2
+   627→
+   628→Do not treat the trade as fully closed.
+   629→
+   630→============================================================
+   631→16. STATUS DERIVATION
+   632→============================================================
+   633→
+   634→Never accept authoritative status from client.
+   635→
+   636→Derive from execution ledger.
+   637→
+   638→Rules:
+   639→
+   640→DRAFT:
+   641→isDraft=true
+   642→
+   643→PLANNED:
+   644→no entry execution
+   645→
+   646→OPEN:
+   647→entry exists but not fully exited
+   648→
+   649→PARTIAL_WIN:
+   650→0 < exitQty < entryQty and realized P&L > 0
+   651→
+   652→PARTIAL_LOSS:
+   653→0 < exitQty < entryQty and realized P&L < 0
+   654→
+   655→WIN:
+   656→exitQty >= entryQty and realized P&L > 0
+   657→
+   658→LOSS:
+   659→exitQty >= entryQty and realized P&L < 0
+   660→
+   661→BREAKEVEN:
+   662→exitQty >= entryQty and realized P&L = 0
+   663→
+   664→"closed" is not a canonical persisted status.
+   665→
+   666→============================================================
+   667→17. IMPORTANT PARTIAL ANALYTICS RULE
+   668→============================================================
+   669→
+   670→Partial trades must NOT be treated as closed trades.
+   671→
+   672→Define:
+   673→
+   674→closedSet
+   675→=
+   676→WIN
+   677→+
+   678→LOSS
+   679→+
+   680→BREAKEVEN
+   681→
+   682→partialSet
+   683→=
+   684→PARTIAL_WIN
+   685→+
+   686→PARTIAL_LOSS
+   687→
+   688→openSet
+   689→=
+   690→OPEN
+   691→+
+   692→PLANNED/DRAFT as appropriate
+   693→
+   694→Closed analytics must use ONLY:
+   695→
+   696→WIN
+   697→LOSS
+   698→BREAKEVEN
+   699→
+   700→Never:
+   701→
+   702→status != open
+   703→
+   704→because that accidentally includes partial trades.
+   705→
+   706→============================================================
+   707→18. ANALYTICS MUST HAVE A CANONICAL SCOPE
+   708→============================================================
+   709→
+   710→Every analytics endpoint must explicitly declare:
+   711→
+   712→population
+   713→
+   714→For example:
+   715→
+   716→closedTradePopulation
+   717→openTradePopulation
+   718→partialTradePopulation
+   719→allTradePopulation
+   720→
+   721→Do not let a generic `computeAggregateMetrics()` silently decide scope.
+   722→
+   723→============================================================
+   724→19. TOTAL TRADE COUNT
+   725→============================================================
+   726→
+   727→Stop using ambiguous:
+   728→
+   729→totalTrades
+   730→
+   731→Define explicit metrics:
+   732→
+   733→allTrades
+   734→closedTrades
+   735→openTrades
+   736→partialTrades
+   737→plannedTrades
+   738→draftTrades
+   739→wins
+   740→losses
+   741→breakevens
+   742→
+   743→The UI label must match the actual population.
+   744→
+   745→============================================================
+   746→20. WIN RATE
+   747→============================================================
+   748→
+   749→Win rate:
+   750→
+   751→wins / closedTrades
+   752→
+   753→where closedTrades includes:
+   754→
+   755→wins
+   756→+
+   757→losses
+   758→+
+   759→breakevens
+   760→
+   761→Partial trades excluded.
+   762→
+   763→If no closed trades:
+   764→
+   765→null
+   766→
+   767→Do not return 0 unless product design explicitly wants 0.
+   768→
+   769→============================================================
+   770→21. PROFIT FACTOR
+   771→============================================================
+   772→
+   773→Profit factor:
+   774→
+   775→sum(winning net P&L)
+   776→/
+   777→absolute(sum(losing net P&L))
+   778→
+   779→Only closed trades.
+   780→
+   781→If no losses:
+   782→
+   783→use a defined display-safe representation.
+   784→
+   785→Do NOT serialize Infinity into JSON.
+   786→
+   787→Use:
+   788→
+   789→null + UI "∞"
+   790→
+   791→or an explicit state.
+   792→
+   793→============================================================
+   794→22. EXPECTANCY
+   795→============================================================
+   796→
+   797→Define expectancy clearly.
+   798→
+   799→For R-based expectancy:
+   800→
+   801→avg of valid realized R values across closed trades.
+   802→
+   803→Exclude trades where:
+   804→
+   805→R is null.
+   806→
+   807→Do not count missing-R trades as zero.
+   808→
+   809→============================================================
+   810→23. DRAW DOWN
+   811→============================================================
+   812→
+   813→This is important.
+   814→
+   815→Drawdown must be based on realized equity.
+   816→
+   817→Order trades by:
+   818→
+   819→EXIT TIMESTAMP
+   820→
+   821→not entry timestamp.
+   822→
+   823→Build:
+   824→
+   825→equity_t
+   826→=
+   827→startingBalance
+   828→+
+   829→cumulative realized net P&L
+   830→
+   831→peak_t
+   832→=
+   833→maximum equity so far
+   834→
+   835→drawdown_t
+   836→=
+   837→peak_t - equity_t
+   838→
+   839→maxDrawdown
+   840→=
+   841→maximum drawdown_t
+   842→
+   843→Also define:
+   844→
+   845→currentDrawdown
+   846→
+   847→and:
+   848→
+   849→drawdown percentage
+   850→
+   851→relative to peak equity.
+   852→
+   853→Never calculate drawdown using entry-time ordering when exit ordering is available.
+   854→
+   855→============================================================
+   856→24. EQUITY CURVE
+   857→============================================================
+   858→
+   859→Equity curve points must contain:
+   860→
+   861→timestamp
+   862→tradeId
+   863→netPnl
+   864→cumulative realized P&L
+   865→absolute equity
+   866→drawdown
+   867→drawdown percentage
+   868→
+   869→Use the account's actual starting balance.
+   870→
+   871→If multiple accounts are selected:
+   872→
+   873→explicitly define whether the dashboard combines account balances.
+   874→
+   875→Do not silently add unrelated account starting balances.
+   876→
+   877→============================================================
+   878→25. DAILY P&L
+   879→============================================================
+   880→
+   881→Define daily P&L using:
+   882→
+   883→exit timestamp
+   884→
+   885→because it represents realized outcome.
+   886→
+   887→Group by the user's selected reporting timezone.
+   888→
+   889→Do NOT use raw server local date.
+   890→
+   891→Provide:
+   892→
+   893→date
+   894→pnl
+   895→trade count
+   896→wins
+   897→losses
+   898→average R
+   899→
+   900→where appropriate.
+   901→
+   902→============================================================
+   903→26. MONTHLY P&L
+   904→============================================================
+   905→
+   906→Add proper monthly aggregation.
+   907→
+   908→Group realized closed trades by:
+   909→
+   910→exit timestamp converted into reporting timezone.
+   911→
+   912→Return:
+   913→
+   914→month
+   915→net P&L
+   916→trades
+   917→wins
+   918→losses
+   919→win rate
+   920→avg R
+   921→
+   922→============================================================
+   923→27. R DISTRIBUTION
+   924→============================================================
+   925→
+   926→Use only closed trades with valid R.
+   927→
+   928→Define non-overlapping buckets.
+   929→
+   930→For example:
+   931→
+   932→<= -2R
+   933→-2R to -1R
+   934→-1R to 0R
+   935→0R
+   936→0R to +1R
+   937→+1R to +2R
+   938→>= +2R
+   939→
+   940→Define exact boundary ownership once and use it everywhere.
+   941→
+   942→Test every boundary.
+   943→
+   944→============================================================
+   945→28. STREAKS
+   946→============================================================
+   947→
+   948→Define two different concepts:
+   949→
+   950→Current win streak
+   951→Maximum historical win streak
+   952→
+   953→Current loss streak
+   954→Maximum historical loss streak
+   955→
+   956→Do not return maximum streak as "current streak."
+   957→
+   958→Break-even behavior must be explicitly defined.
+   959→
+   960→Recommended:
+   961→
+   962→BE resets win/loss streak.
+   963→
+   964→Test:
+   965→
+   966→W W L W
+   967→
+   968→current win streak = 1
+   969→max win streak = 2
+   970→
+   971→============================================================
+   972→29. RECOVERY PERIOD
+   973→============================================================
+   974→
+   975→Define recovery period precisely.
+   976→
+   977→From the timestamp of drawdown entry
+   978→to the first point where equity returns to or exceeds the prior peak.
+   979→
+   980→Specify whether output is:
+   981→
+   982→- number of trades
+   983→- elapsed calendar time
+   984→- both
+   985→
+   986→Do not use an ambiguous integer named recoveryPeriod.
+   987→
+   988→============================================================
+   989→30. SETUP ANALYTICS
+   990→============================================================
+   991→
+   992→The current UI calls something "By Setup" but currently groups by strategy.
+   993→
+   994→Fix the semantic model.
+   995→
+   996→If setup is stored inside structured `setupJson`, define a canonical setup identifier/name.
+   997→
+   998→Then provide actual:
+   999→
+  1000→bySetup
+  1001→
+  1002→and separately:
+  1003→
+  1004→byStrategy
+  1005→
+  1006→Each can report:
+  1007→
+  1008→trades
+  1009→closedTrades
+  1010→wins
+  1011→losses
+  1012→winRate
+  1013→netPnl
+  1014→avgR
+  1015→expectancy
+  1016→profitFactor
+  1017→maxDrawdown where meaningful
+  1018→
+  1019→Do not rename strategy analytics as setup analytics.
+  1020→
+  1021→============================================================
+  1022→31. ACCOUNT ANALYTICS
+  1023→============================================================
+  1024→
+  1025→Provide real account-level analytics.
+  1026→
+  1027→For each account:
+  1028→
+  1029→starting balance
+  1030→current balance
+  1031→realized P&L
+  1032→return %
+  1033→closed trades
+  1034→win rate
+  1035→avg R
+  1036→profit factor
+  1037→max drawdown
+  1038→current drawdown
+  1039→largest win
+  1040→largest loss
+  1041→current streak
+  1042→
+  1043→All values must be based on that account only.
+  1044→
+  1045→============================================================
+  1046→32. INSTRUMENT ANALYTICS
+  1047→============================================================
+  1048→
+  1049→For each instrument:
+  1050→
+  1051→trades
+  1052→closed trades
+  1053→wins
+  1054→losses
+  1055→win rate
+  1056→net P&L
+  1057→avg R
+  1058→expectancy
+  1059→profit factor
+  1060→largest win
+  1061→largest loss
+  1062→max drawdown
+  1063→
+  1064→Do not mix instruments with incompatible currencies without conversion.
+  1065→
+  1066→============================================================
+  1067→33. STRATEGY ANALYTICS
+  1068→============================================================
+  1069→
+  1070→For each strategy:
+  1071→
+  1072→trades
+  1073→closed trades
+  1074→wins
+  1075→losses
+  1076→win rate
+  1077→net P&L
+  1078→avg R
+  1079→expectancy
+  1080→profit factor
+  1081→largest win
+  1082→largest loss
+  1083→max drawdown
+  1084→
+  1085→Optionally include:
+  1086→
+  1087→strategy version breakdown
+  1088→
+  1089→but historical trades must remain linked to the strategy version used at the time.
+  1090→
+  1091→============================================================
+  1092→34. STRATEGY VERSION ANALYTICS
+  1093→============================================================
+  1094→
+  1095→Because strategy versions are immutable:
+  1096→
+  1097→report performance by version.
+  1098→
+  1099→Example:
+  1100→
+  1101→Strategy A
+  1102→v1.0
+  1103→v1.1
+  1104→v2.0
+  1105→
+  1106→Each version gets independent metrics.
+  1107→
+  1108→Never recalculate historical trades using the latest strategy rules.
+  1109→
+  1110→============================================================
+  1111→35. CHECKLIST ANALYTICS
+  1112→============================================================
+  1113→
+  1114→This MUST be redesigned.
+  1115→
+  1116→Do NOT define checklist adherence as win rate.
+  1117→
+  1118→Real adherence comes from checklist evaluation data.
+  1119→
+  1120→For each evaluation:
+  1121→
+  1122→actualScore
+  1123→requiredRulesPassed
+  1124→requiredRulesFailed
+  1125→optionalRulesPassed
+  1126→weightedScore
+  1127→finalGrade
+  1128→
+  1129→Aggregate:
+  1130→
+  1131→average checklist score
+  1132→median checklist score if useful
+  1133→distribution by grade
+  1134→required-rule compliance rate
+  1135→average R by score band
+  1136→win rate by score band
+  1137→P&L by score band
+  1138→
+  1139→Example score bands:
+  1140→
+  1141→0.00-0.39
+  1142→0.40-0.59
+  1143→0.60-0.74
+  1144→0.75-0.89
+  1145→0.90-1.00
+  1146→
+  1147→These are analytical bands, not grading rules.
+  1148→
+  1149→============================================================
+  1150→36. CHECKLIST GRADE ANALYTICS
+  1151→============================================================
+  1152→
+  1153→Provide:
+  1154→
+  1155→A+
+  1156→A
+  1157→B
+  1158→C
+  1159→Invalid
+  1160→
+  1161→with:
+  1162→
+  1163→count
+  1164→percentage
+  1165→win rate
+  1166→avg R
+  1167→net P&L
+  1168→
+  1169→Grade thresholds:
+  1170→
+  1171→A+ >= 0.90
+  1172→A >= 0.75
+  1173→B >= 0.60
+  1174→C >= 0.40
+  1175→Invalid < 0.40
+  1176→
+  1177→At exactly:
+  1178→
+  1179→0.90 -> A+
+  1180→0.75 -> A
+  1181→0.60 -> B
+  1182→0.40 -> C
+  1183→
+  1184→Server-derived only.
+  1185→
+  1186→============================================================
+  1187→37. RULE-LEVEL ANALYTICS
+  1188→============================================================
+  1189→
+  1190→For each checklist rule:
+  1191→
+  1192→times shown
+  1193→times passed
+  1194→times failed
+  1195→pass rate
+  1196→average R when passed
+  1197→average R when failed
+  1198→win rate when passed
+  1199→win rate when failed
+  1200→P&L when passed
+  1201→P&L when failed
+  1202→
+  1203→This is actual rule analytics.
+  1204→
+  1205→Do not infer rule performance from behavior flags.
+  1206→
+  1207→============================================================
+  1208→38. BEHAVIOR ANALYTICS
+  1209→============================================================
+  1210→
+  1211→Keep behavior flags separate from checklist compliance.
+  1212→
+  1213→For each behavior flag:
+  1214→
+  1215→count
+  1216→percentage of trades
+  1217→win rate
+  1218→avg R
+  1219→net P&L
+  1220→average loss
+  1221→average win
+  1222→
+  1223→Example:
+  1224→
+  1225→entered_early
+  1226→broke_rules
+  1227→revenge_trade
+  1228→
+  1229→Do not call this checklist adherence.
+  1230→
+  1231→============================================================
+  1232→39. PSYCHOLOGY ANALYTICS
+  1233→============================================================
+  1234→
+  1235→Use actual stored psychology data.
+  1236→
+  1237→Provide meaningful breakdowns:
+  1238→
+  1239→mood tag
+  1240→confidence
+  1241→energy
+  1242→before vs after
+  1243→
+  1244→For example:
+  1245→
+  1246→average R by confidence level
+  1247→win rate by confidence level
+  1248→P&L by mood
+  1249→performance by energy level
+  1250→
+  1251→Always display sample size.
+  1252→
+  1253→Do not make causal claims.
+  1254→
+  1255→============================================================
+  1256→40. SESSION ANALYTICS
+  1257→============================================================
+  1258→
+  1259→Use canonical session derived from New York time.
+  1260→
+  1261→Provide:
+  1262→
+  1263→Asia
+  1264→London
+  1265→NY AM
+  1266→NY PM
+  1267→Custom where applicable
+  1268→
+  1269→For each:
+  1270→
+  1271→closed trades
+  1272→win rate
+  1273→avg R
+  1274→net P&L
+  1275→profit factor
+  1276→sample size
+  1277→
+  1278→Do not infer session from display timezone.
+  1279→
+  1280→============================================================
+  1281→41. TIME ANALYTICS
+  1282→============================================================
+  1283→
+  1284→Provide:
+  1285→
+  1286→weekday
+  1287→hour
+  1288→session
+  1289→date
+  1290→
+  1291→Use the user's reporting timezone for display/time analysis.
+  1292→
+  1293→Session attribution itself remains based on America/New_York.
+  1294→
+  1295→Clearly distinguish:
+  1296→
+  1297→session timezone
+  1298→reporting timezone
+  1299→
+  1300→============================================================
+  1301→42. DIRECTION ANALYTICS
+  1302→============================================================
+  1303→
+  1304→Add:
+  1305→
+  1306→LONG
+  1307→SHORT
+  1308→
+  1309→For each:
+  1310→
+  1311→trades
+  1312→closed
+  1313→win rate
+  1314→net P&L
+  1315→avg R
+  1316→profit factor
+  1317→max drawdown
+  1318→
+  1319→This is especially useful for identifying directional bias.
+  1320→
+  1321→============================================================
+  1322→43. TIMEFRAME ANALYTICS
+  1323→============================================================
+  1324→
+  1325→If timeframe is persisted reliably, provide:
+  1326→
+  1327→1m
+  1328→5m
+  1329→15m
+  1330→1h
+  1331→4h
+  1332→Daily
+  1333→etc.
+  1334→
+  1335→Only include actual supported values.
+  1336→
+  1337→============================================================
+  1338→44. NEWS ANALYTICS
+  1339→============================================================
+  1340→
+  1341→If news event is persisted, allow analysis by:
+  1342→
+  1343→news event
+  1344→no news
+  1345→
+  1346→Metrics:
+  1347→
+  1348→trades
+  1349→win rate
+  1350→avg R
+  1351→net P&L
+  1352→
+  1353→Do not claim news caused performance differences.
+  1354→
+  1355→============================================================
+  1356→45. FILTER COMPOSITION
+  1357→============================================================
+  1358→
+  1359→Analytics must support combinations.
+  1360→
+  1361→Example:
+  1362→
+  1363→Account A
+  1364→+
+  1365→NQ
+  1366→+
+  1367→NY AM
+  1368→+
+  1369→Strategy X
+  1370→+
+  1371→LONG
+  1372→+
+  1373→September
+  1374→
+  1375→Every metric must recalculate from the filtered population.
+  1376→
+  1377→Do not apply filters only visually.
+  1378→
+  1379→============================================================
+  1380→46. DATE RANGE SEMANTICS
+  1381→============================================================
+  1382→
+  1383→Define date filtering once.
+  1384→
+  1385→Use the actual analytics reporting timezone.
+  1386→
+  1387→Handle:
+  1388→
+  1389→inclusive start
+  1390→exclusive end
+  1391→
+  1392→or another explicit consistent convention.
+  1393→
+  1394→Avoid:
+  1395→
+  1396→to = 23:59:59.999
+  1397→
+  1398→as the primary design.
+  1399→
+  1400→Test:
+  1401→
+  1402→midnight
+  1403→DST transitions
+  1404→month boundaries
+  1405→year boundaries
+  1406→
+  1407→============================================================
+  1408→47. ANALYTICS API
+  1409→============================================================
+  1410→
+  1411→Create a clean analytics service.
+  1412→
+  1413→Conceptually:
+  1414→
+  1415→AnalyticsQuery
+  1416→AnalyticsPopulation
+  1417→AnalyticsFilters
+  1418→AnalyticsMetricService
+  1419→AnalyticsAggregationService
+  1420→
+  1421→Do not have each route independently reinvent calculations.
+  1422→
+  1423→All analytics should use shared server-side services.
+  1424→
+  1425→============================================================
+  1426→48. CALCULATION ENGINE
+  1427→============================================================
+  1428→
+  1429→Create one authoritative module/service:
+  1430→
+  1431→financial-calculator
+  1432→
+  1433→It must expose clearly defined operations:
+  1434→
+  1435→calculateExecutionPnl
+  1436→calculateTradePnl
+  1437→calculateRisk
+  1438→calculatePositionSize
+  1439→calculatePlannedRR
+  1440→calculateActualR
+  1441→deriveTradeStatus
+  1442→calculatePartialState
+  1443→
+  1444→No duplicated formulas in:
+  1445→
+  1446→frontend
+  1447→API routes
+  1448→dashboard
+  1449→analytics
+  1450→calendar
+  1451→
+  1452→Frontend calculations may exist for previews, but backend remains authoritative.
+  1453→
+  1454→============================================================
+  1455→49. FINANCIAL SNAPSHOT
+  1456→============================================================
+  1457→
+  1458→When a trade becomes realized/closed, snapshot the necessary instrument economics.
+  1459→
+  1460→Possible snapshot:
+  1461→
+  1462→contractSize
+  1463→pointValue
+  1464→tickSize
+  1465→tickValue
+  1466→currency
+  1467→conversion information where needed
+  1468→
+  1469→Purpose:
+  1470→
+  1471→future instrument metadata changes must not rewrite historical economics.
+  1472→
+  1473→============================================================
+  1474→50. DATABASE PRECISION
+  1475→============================================================
+  1476→
+  1477→Use appropriate PostgreSQL types.
+  1478→
+  1479→Prefer:
+  1480→
+  1481→NUMERIC/DECIMAL
+  1482→
+  1483→for:
+  1484→
+  1485→prices
+  1486→quantities
+  1487→ratios
+  1488→
+  1489→Use:
+  1490→
+  1491→BIGINT
+  1492→
+  1493→for monetary minor units if scale can exceed 32-bit integer.
+  1494→
+  1495→Do not use JavaScript Number as the authoritative precision layer for money.
+  1496→
+  1497→Do not build a fake "decimal" library that immediately converts everything back to Number.
+  1498→
+  1499→Use a real decimal-capable server implementation or PostgreSQL NUMERIC where appropriate.
+  1500→
+  1501→============================================================
+  1502→51. TRANSACTIONAL SAVE
+  1503→============================================================
+  1504→
+  1505→Trade save should be atomic where it creates/updates:
+  1506→
+  1507→Trade
+  1508→Executions
+  1509→Targets
+  1510→Checklist evaluation
+  1511→related records
+  1512→
+  1513→A failure must not leave:
+  1514→
+  1515→trade without required execution
+  1516→execution without trade
+  1517→targets with incorrect allocations
+  1518→checklist snapshot missing when required
+  1519→
+  1520→Use database transactions appropriately.
+  1521→
+  1522→============================================================
+  1523→52. PATCH SEMANTICS
+  1524→============================================================
+  1525→
+  1526→PATCH must distinguish:
+  1527→
+  1528→field not supplied
+  1529→from
+  1530→field supplied as null
+  1531→
+  1532→Changing:
+  1533→
+  1534→notes
+  1535→
+  1536→must not delete:
+  1537→
+  1538→thesis
+  1539→psychology
+  1540→targets
+  1541→executions
+  1542→checklist
+  1543→
+  1544→Changing:
+  1545→
+  1546→one target
+  1547→
+  1548→must not erase all target allocations unless the request explicitly replaces the entire collection.
+  1549→
+  1550→Define collection update semantics clearly.
+  1551→
+  1552→============================================================
+  1553→53. DATA PERSISTENCE CONTRACT
+  1554→============================================================
+  1555→
+  1556→For every persisted field prove:
+  1557→
+  1558→UI
+  1559→=
+  1560→request
+  1561→=
+  1562→validated server value
+  1563→=
+  1564→Neon
+  1565→=
+  1566→GET
+  1567→=
+  1568→reloaded UI
+  1569→
+  1570→Create automated tests for this.
+  1571→
+  1572→============================================================
+  1573→54. GOLDEN FINANCIAL TESTS
+  1574→============================================================
+  1575→
+  1576→Use these as sanity checks.
+  1577→
+  1578→TEST 1 NQ
+  1579→
+  1580→Entry = 20000
+  1581→Exit = 20080
+  1582→Quantity = 2
+  1583→
+  1584→Expected:
+  1585→
+  1586→80 points
+  1587→× 2 contracts
+  1588→× $20/point
+  1589→=
+  1590→$3,200
+  1591→=
+  1592→320,000 cents
+  1593→
+  1594→If costs = 575:
+  1595→
+  1596→Net =
+  1597→319,425 cents
+  1598→
+  1599→Do NOT accept $16,000 for this case.
+  1600→
+  1601→TEST 2 NQ RISK
+  1602→
+  1603→Entry = 20000
+  1604→Stop = 19950
+  1605→Quantity = 2
+  1606→
+  1607→Risk:
+  1608→
+  1609→50
+  1610→× 2
+  1611→× $20
+  1612→
+  1613→=
+  1614→$2,000
+  1615→=
+  1616→200,000 cents
+  1617→
+  1618→Actual R with net 319,425:
+  1619→
+  1620→319425 / 200000
+  1621→=
+  1622→1.597125R
+  1623→
+  1624→TEST 3 ES
+  1625→
+  1626→Entry = 5000
+  1627→Exit = 4990
+  1628→Quantity = 1
+  1629→
+  1630→10 points
+  1631→× $50
+  1632→=
+  1633→$500
+  1634→=
+  1635→50,000 cents
+  1636→
+  1637→TEST 4 EURUSD
+  1638→
+  1639→Entry = 1.1000
+  1640→Exit = 1.1080
+  1641→Qty = 1 standard lot
+  1642→
+  1643→=
+  1644→0.0080 × 100000
+  1645→=
+  1646→$800
+  1647→=
+  1648→80,000 cents
+  1649→
+  1650→TEST 5 XAUUSD
+  1651→
+  1652→Entry = 2000
+  1653→Exit = 1990
+  1654→Qty = 1
+  1655→
+  1656→=
+  1657→10 × $100
+  1658→=
+  1659→$1,000
+  1660→=
+  1661→100,000 cents
+  1662→
+  1663→These are economic reference checks.
+  1664→
+  1665→If the project intentionally uses another instrument convention, document it explicitly and mathematically.
+  1666→
+  1667→============================================================
+  1668→55. ANALYTICS GOLDEN DATASET
+  1669→============================================================
+  1670→
+  1671→Create a controlled test dataset.
+  1672→
+  1673→Trade A:
+  1674→+$100
+  1675→+1R
+  1676→WIN
+  1677→
+  1678→Trade B:
+  1679→-$50
+  1680→-1R
+  1681→LOSS
+  1682→
+  1683→Trade C:
+  1684→+$200
+  1685→+2R
+  1686→WIN
+  1687→
+  1688→Trade D:
+  1689→$0
+  1690→0R
+  1691→BREAKEVEN
+  1692→
+  1693→Trade E:
+  1694→+$300
+  1695→+3R
+  1696→WIN
+  1697→
+  1698→Trade F:
+  1699→partial +$50
+  1700→+0.5R
+  1701→PARTIAL_WIN
+  1702→
+  1703→Expected closed population:
+  1704→
+  1705→A B C D E
+  1706→
+  1707→5 closed trades
+  1708→
+  1709→wins = 3
+  1710→losses = 1
+  1711→breakevens = 1
+  1712→
+  1713→win rate:
+  1714→3 / 5
+  1715→=
+  1716→60%
+  1717→
+  1718→closed P&L:
+  1719→100 - 50 + 200 + 0 + 300
+  1720→=
+  1721→$550
+  1722→
+  1723→Partial trade F must NOT enter closed metrics.
+  1724→
+  1725→Therefore:
+  1726→
+  1727→all trades = 6
+  1728→closed trades = 5
+  1729→partial trades = 1
+  1730→
+  1731→Net closed P&L = $550
+  1732→
+  1733→Average R:
+  1734→(1 - 1 + 2 + 0 + 3) / 5
+  1735→=
+  1736→1.0R
+  1737→
+  1738→Profit factor:
+  1739→(100 + 200 + 300) / 50
+  1740→=
+  1741→12.0
+  1742→
+  1743→Test every analytics screen against this.
+  1744→
+  1745→============================================================
+  1746→56. DRAW DOWN TEST
+  1747→============================================================
+  1748→
+  1749→Use closed P&L sequence:
+  1750→
+  1751→+100
+  1752→+200
+  1753→-150
+  1754→+50
+  1755→-100
+  1756→
+  1757→Starting balance:
+  1758→
+  1759→$10,000
+  1760→
+  1761→Equity:
+  1762→
+  1763→10100
+  1764→10300
+  1765→10150
+  1766→10200
+  1767→10100
+  1768→
+  1769→Peak:
+  1770→
+  1771→10300
+  1772→
+  1773→Maximum drawdown:
+  1774→
+  1775→200
+  1776→
+  1777→Verify:
+  1778→
+  1779→maxDrawdown = $200
+  1780→
+  1781→Then repeat using exit timestamps out of entry order to prove ordering uses exitTime.
+  1782→
+  1783→============================================================
+  1784→57. CHECKLIST TEST
+  1785→============================================================
+  1786→
+  1787→Create rules producing:
+  1788→
+  1789→score 0.99 -> A+
+  1790→score 0.90 -> A+
+  1791→score 0.899999 -> A
+  1792→score 0.75 -> A
+  1793→score 0.749999 -> B
+  1794→score 0.60 -> B
+  1795→score 0.599999 -> C
+  1796→score 0.40 -> C
+  1797→score 0.399999 -> Invalid
+  1798→
+  1799→Send malicious client grades.
+  1800→
+  1801→Server must ignore them.
+  1802→
+  1803→============================================================
+  1804→58. PARTIAL TARGET TEST
+  1805→============================================================
+  1806→
+  1807→Create:
+  1808→
+  1809→TP1 = 20025, 25%
+  1810→TP2 = 20050, 25%
+  1811→TP3 = 20100, 50%
+  1812→
+  1813→Save.
+  1814→
+  1815→Verify Neon.
+  1816→
+  1817→Reload.
+  1818→
+  1819→Verify.
+  1820→
+  1821→Logout/login.
+  1822→
+  1823→Verify:
+  1824→
+  1825→TP1 25
+  1826→TP2 25
+  1827→TP3 50
+  1828→
+  1829→Execute:
+  1830→
+  1831→1 contract at TP1
+  1832→1 contract at TP2
+  1833→2 contracts at TP3
+  1834→
+  1835→Verify exact realized P&L.
+  1836→
+  1837→============================================================
+  1838→59. CROSS-SCREEN CONSISTENCY
+  1839→============================================================
+  1840→
+  1841→For one controlled trade:
+  1842→
+  1843→Trade detail
+  1844→Trade log
+  1845→Dashboard
+  1846→Analytics
+  1847→Calendar
+  1848→
+  1849→must agree on:
+  1850→
+  1851→P&L
+  1852→R
+  1853→status
+  1854→date
+  1855→instrument
+  1856→account
+  1857→strategy
+  1858→
+  1859→No screen may independently recalculate the result differently.
+  1860→
+  1861→============================================================
+  1862→60. ACCOUNT COMBINATION TEST
+  1863→============================================================
+  1864→
+  1865→Create two accounts.
+  1866→
+  1867→Trade A in Account A:
+  1868→+$100
+  1869→
+  1870→Trade B in Account B:
+  1871→-$50
+  1872→
+  1873→All accounts:
+  1874→+$50
+  1875→
+  1876→Account A:
+  1877→+$100
+  1878→
+  1879→Account B:
+  1880→-$50
+  1881→
+  1882→Verify every account filter.
+  1883→
+  1884→Do not accidentally add both starting balances into one account's equity curve.
+  1885→
+  1886→============================================================
+  1887→61. HISTORICAL IMMUTABILITY
+  1888→============================================================
+  1889→
+  1890→Create trade under:
+  1891→
+  1892→Strategy Version 1
+  1893→
+  1894→Then create:
+  1895→
+  1896→Strategy Version 2
+  1897→
+  1898→Verify old trade still references Version 1.
+  1899→
+  1900→Changing Version 2 must not alter:
+  1901→
+  1902→old checklist snapshot
+  1903→old score
+  1904→old grade
+  1905→old trade result
+  1906→
+  1907→============================================================
+  1908→62. AUTOMATED TEST SUITE
+  1909→============================================================
+  1910→
+  1911→Create a real automated suite covering:
+  1912→
+  1913→financial formulas
+  1914→instrument metadata
+  1915→P&L
+  1916→risk
+  1917→position sizing
+  1918→R
+  1919→status
+  1920→partials
+  1921→checklist
+  1922→grade boundaries
+  1923→analytics
+  1924→drawdown
+  1925→streaks
+  1926→daily/monthly grouping
+  1927→timezone
+  1928→filters
+  1929→persistence
+  1930→PATCH behavior
+  1931→authorization
+  1932→
+  1933→Do not rely on manual assertions.
+  1934→
+  1935→Every previously discovered bug gets a regression test.
+  1936→
+  1937→============================================================
+  1938→63. FRONTEND PREVIEW CALCULATIONS
+  1939→============================================================
+  1940→
+  1941→The frontend may show live previews.
+  1942→
+  1943→However:
+  1944→
+  1945→frontend preview
+  1946→!= authoritative financial result
+  1947→
+  1948→The UI should ideally consume shared contracts/constants or calculate using the same domain specification.
+  1949→
+  1950→When the final trade is saved, server values override preview values.
+  1951→
+  1952→Do not allow the preview to disagree silently.
+  1953→
+  1954→============================================================
+  1955→64. API RESPONSE CONTRACT
+  1956→============================================================
+  1957→
+  1958→Return explicit units in field names where ambiguity exists.
+  1959→
+  1960→Examples:
+  1961→
+  1962→grossPnlCents
+  1963→netPnlCents
+  1964→riskAmountCents
+  1965→pointValueCents
+  1966→
+  1967→For ratios:
+  1968→
+  1969→actualR
+  1970→
+  1971→For quantities:
+  1972→
+  1973→quantity
+  1974→
+  1975→For price:
+  1976→
+  1977→entryPrice
+  1978→
+  1979→Document each.
+  1980→
+  1981→============================================================
+  1982→65. DATABASE MIGRATIONS
+  1983→============================================================
+  1984→
+  1985→Do not use destructive:
+  1986→
+  1987→db push --accept-data-loss
+  1988→
+  1989→as the normal production evolution strategy.
+  1990→
+  1991→Create proper migrations.
+  1992→
+  1993→Never silently drop data.
+  1994→
+  1995→============================================================
+  1996→66. OBSERVABILITY
+  1997→============================================================
+  1998→
+  1999→When a calculation/save operation fails:
+  2000→
+
+[showing lines 1-2000 of 2124; use offset=2001 with limit to continue reading]

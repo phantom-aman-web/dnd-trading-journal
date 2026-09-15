@@ -1,0 +1,2002 @@
+     1→"use client";
+     2→
+     3→/**
+     4→ * TradeFormView — 5-step wizard trade form.
+     5→ *
+     6→ * Steps (tabs):
+     7→ *   1. Trade Info        — account, strategy, symbol, direction, status,
+     8→ *                          date/time, session, timeframe, news impact,
+     9→ *                          thesis, evidence uploads, advanced (ICT setup,
+    10→ *                          psychology, behavior flags, tags).
+    11→ *   2. Setup Checklist   — items extracted from the selected strategy's
+    12→ *                          rulesJson, each with checkbox + REQUIRED badge,
+    13→ *                          live adherence %, immutable-snapshot note.
+    14→ *   3. Risk & Sizing     — planned entry/stop/target (required), lot size,
+    15→ *                          risk %, auto-calculated stop distance, R:R,
+    16→ *                          risk amount, planned profit.
+    17→ *   4. Partial Exits     — add/remove named exit levels; weighted exit
+    18→ *                          price + total R derived from planned stop/entry.
+    19→ *   5. Review & Save     — summary cards + Save as Draft / Save Trade.
+    20→ *
+    21→ * Defensive fetching (fetchAccounts / fetchStrategies) returns plain arrays
+    22→ * regardless of whether the API wraps its response in `{ items: [...] }` or
+    23→ * returns a bare array. Query keys include accountId so per-account
+    24→ * invalidation works as expected.
+    25→ */
+    26→
+    27→import { useQuery, useQueryClient } from "@tanstack/react-query";
+    28→import { useEffect, useMemo, useRef, useState } from "react";
+    29→import { useNav } from "@/lib/nav-store";
+    30→import {
+    31→  evaluateChecklist,
+    32→  parseAnswers,
+    33→  type ChecklistItem,
+    34→  type ChecklistAnswerValue,
+    35→  type GradingThresholds,
+    36→  DEFAULT_GRADING_THRESHOLDS,
+    37→} from "@/lib/checklist-evaluation";
+    38→import { NEWS_EVENTS, getNewsEventLabel } from "@/lib/news-events";
+    39→import {
+    40→  TIMEFRAMES as MEDIA_TIMEFRAMES,
+    41→  TIMEFRAME_GROUPS,
+    42→  getTimeframeGroup,
+    43→  getTimeframeLabel,
+    44→} from "@/lib/timeframes";
+    45→import { Button } from "@/components/ui/button";
+    46→import { Input } from "@/components/ui/input";
+    47→import { Label } from "@/components/ui/label";
+    48→import { Textarea } from "@/components/ui/textarea";
+    49→import { Card } from "@/components/ui/card";
+    50→import { Badge } from "@/components/ui/badge";
+    51→import { Checkbox } from "@/components/ui/checkbox";
+    52→import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
+    53→import {
+    54→  Collapsible,
+    55→  CollapsibleContent,
+    56→  CollapsibleTrigger,
+    57→} from "@/components/ui/collapsible";
+    58→import {
+    59→  Select,
+    60→  SelectContent,
+    61→  SelectGroup,
+    62→  SelectItem,
+    63→  SelectLabel,
+    64→  SelectTrigger,
+    65→  SelectValue,
+    66→} from "@/components/ui/select";
+    67→import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+    68→import { FieldLabel } from "@/components/common/field-label";
+    69→import { ImageAnnotator, type ImageAnnotation } from "@/components/common/image-annotator";
+    70→import { toast } from "sonner";
+    71→import { cn } from "@/lib/utils";
+    72→import {
+    73→  ArrowLeft,
+    74→  ArrowRight,
+    75→  ChevronDown,
+    76→  Loader2,
+    77→  Plus,
+    78→  RotateCcw,
+    79→  Save,
+    80→  Sparkles,
+    81→  Trash2,
+    82→  Upload,
+    83→  Image as ImageIcon,
+    84→  AlertTriangle,
+    85→  Lock,
+    86→  X,
+    87→} from "lucide-react";
+    88→import { InstrumentSelector } from "@/components/common/instrument-selector";
+    89→import {
+    90→  findInstrument,
+    91→  normalizeSymbol,
+    92→  resolveInstrument,
+    93→  unitLabel,
+    94→  distanceInUnits,
+    95→  type InstrumentDef,
+    96→} from "@/lib/instrument-catalog";
+    97→
+    98→/* ------------------------------------------------------------------ */
+    99→/* Constants                                                           */
+   100→/* ------------------------------------------------------------------ */
+   101→
+   102→const DRAFT_KEY = "dnd-trade-draft-5step";
+   103→
+   104→const SESSIONS = [
+   105→  { value: "asian_range", label: "Asian Range" },
+   106→  { value: "london_open", label: "London Open" },
+   107→  { value: "ny_am", label: "New York AM" },
+   108→  { value: "ny_lunch", label: "New York Lunch" },
+   109→  { value: "ny_pm", label: "New York PM" },
+   110→  { value: "off_hours", label: "Off Hours" },
+   111→] as const;
+   112→
+   113→const TIMEFRAMES = ["1m", "5m", "15m", "1h", "4h", "1D"] as const;
+   114→
+   115→const STATUSES = [
+   116→  { value: "draft", label: "Draft" },
+   117→  { value: "open", label: "Open" },
+   118→  { value: "closed", label: "Closed" },
+   119→  { value: "planned", label: "Planned" },
+   120→] as const;
+   121→
+   122→const PSYCH_BEFORE = [
+   123→  "calm", "confident", "hesitant", "fearful", "FOMO",
+   124→  "impatient", "distracted", "excited", "tired", "focused",
+   125→];
+   126→const PSYCH_AFTER = [
+   127→  "satisfied", "frustrated", "regret", "relief",
+   128→  "overconfident", "disappointed", "calm", "confused", "angry",
+   129→];
+   130→const BEHAVIOR_FLAGS = [
+   131→  "entered_early", "broke_rules", "moved_stop", "moved_target",
+   132→  "exited_early", "revenge_trade", "overtraded", "increased_size",
+   133→  "chased_price", "ignored_plan",
+   134→];
+   135→
+   136→const ACCEPTED_MEDIA =
+   137→  "image/png,image/jpeg,image/webp,image/gif,video/mp4,video/webm,video/quicktime";
+   138→
+   139→const STEP_ORDER = ["trade-info", "checklist", "risk", "exits", "review"] as const;
+   140→type StepKey = (typeof STEP_ORDER)[number];
+   141→
+   142→/* ------------------------------------------------------------------ */
+   143→/* Helpers                                                             */
+   144→/* ------------------------------------------------------------------ */
+   145→
+   146→async function fetchMe() {
+   147→  const res = await fetch("/api/me", { cache: "no-store" });
+   148→  if (!res.ok) return null;
+   149→  return res.json();
+   150→}
+   151→
+   152→/** Fetch the user's accounts as a plain array (defensive). Returns [] on
+   153→ *  any error or unexpected shape. */
+   154→async function fetchAccounts(accountId?: string) {
+   155→  try {
+   156→    const qs = new URLSearchParams({ ...(accountId ? { accountId } : {}) }).toString();
+   157→    const url = `/api/accounts${qs ? `?${qs}` : ""}`;
+   158→    const res = await fetch(url, { cache: "no-store" });
+   159→    if (!res.ok) return [];
+   160→    const data = await res.json();
+   161→    const arr = data?.items ?? data?.accounts ?? (Array.isArray(data) ? data : []);
+   162→    return Array.isArray(arr) ? arr : [];
+   163→  } catch {
+   164→    return [];
+   165→  }
+   166→}
+   167→
+   168→/** Fetch the user's strategies as a plain array (defensive). Returns [] on
+   169→ *  any error or unexpected shape. */
+   170→async function fetchStrategies() {
+   171→  try {
+   172→    const res = await fetch("/api/strategies", { cache: "no-store" });
+   173→    if (!res.ok) return [];
+   174→    const data = await res.json();
+   175→    const arr = data?.items ?? data?.strategies ?? (Array.isArray(data) ? data : []);
+   176→    return Array.isArray(arr) ? arr : [];
+   177→  } catch {
+   178→    return [];
+   179→  }
+   180→}
+   181→
+   182→/** Extract a flat `ChecklistItem[]` from a strategy version's rulesJson.
+   183→ *  Supports both:
+   184→ *    - flat array:   [{ title, required, description, weight }, ...]
+   185→ *                    [{ text,   required, weight }, ...]
+   186→ *                    ["plain string rule", ...]
+   187→ *    - legacy object: { entry: [...], stop: [...], target: [...],
+   188→ *                       management: [...], invalidation: [...] }
+   189→ */
+   190→function extractChecklist(rulesJson: string | null | undefined): ChecklistItem[] {
+   191→  if (!rulesJson) return [];
+   192→  let parsed: unknown;
+   193→  try {
+   194→    parsed = JSON.parse(rulesJson);
+   195→  } catch {
+   196→    return [];
+   197→  }
+   198→  const items: ChecklistItem[] = [];
+   199→  let idx = 0;
+   200→
+   201→  const pushRule = (rule: unknown) => {
+   202→    if (typeof rule === "string") {
+   203→      const text = rule.trim();
+   204→      if (!text) return;
+   205→      items.push({
+   206→        id: `rule_${idx}`,
+   207→        text,
+   208→        required: true,
+   209→        weight: 1,
+   210→        evidenceRequired: false,
+   211→      });
+   212→      idx++;
+   213→      return;
+   214→    }
+   215→    if (rule && typeof rule === "object") {
+   216→      const r = rule as Record<string, unknown>;
+   217→      const text = String(r.text ?? r.title ?? "").trim();
+   218→      if (!text) return;
+   219→      const weightNum = typeof r.weight === "number" && Number.isFinite(r.weight) ? r.weight : 1;
+   220→      items.push({
+   221→        id: `rule_${idx}`,
+   222→        text,
+   223→        required: r.required !== false,
+   224→        weight: Math.max(0, weightNum),
+   225→        evidenceRequired: r.evidenceRequired === true,
+   226→      });
+   227→      idx++;
+   228→    }
+   229→  };
+   230→
+   231→  if (Array.isArray(parsed)) {
+   232→    parsed.forEach(pushRule);
+   233→    return items;
+   234→  }
+   235→  if (parsed && typeof parsed === "object") {
+   236→    const obj = parsed as Record<string, unknown>;
+   237→    // New playbooks-view format: { items: [...] }
+   238→    if (Array.isArray(obj.items)) {
+   239→      obj.items.forEach(pushRule);
+   240→      return items;
+   241→    }
+   242→    // Legacy category object: { entry, stop, target, management, invalidation }
+   243→    for (const section of ["entry", "stop", "target", "management", "invalidation"]) {
+   244→      const arr = obj[section];
+   245→      if (Array.isArray(arr)) arr.forEach(pushRule);
+   246→    }
+   247→    return items;
+   248→  }
+   249→  return [];
+   250→}
+   251→
+   252→/** Parse a JSON string into the typed fallback; never throws. */
+   253→function safeJsonParse(json: string | null | undefined, fallback: any): any {
+   254→  if (!json) return fallback;
+   255→  try { return JSON.parse(json); } catch { return fallback; }
+   256→}
+   257→
+   258→/** Format a numeric price with the given decimal precision (default 5,
+   259→ *  matching the historical forex-major behaviour). Returns "—" when the
+   260→ *  value is missing or non-finite. Pass the selected instrument's
+   261→ *  `pricePrecision` to render prices with the right number of decimals
+   262→ *  (e.g. 2 for gold, 1 for indices, 0 for YM). */
+   263→function fmtPrice(
+   264→  value: number | string | null | undefined,
+   265→  precision: number = 5,
+   266→): string {
+   267→  if (value == null || value === "") return "—";
+   268→  const n = typeof value === "string" ? Number(value) : value;
+   269→  if (!Number.isFinite(n)) return "—";
+   270→  const p =
+   271→    Number.isFinite(precision) && precision >= 0 && precision <= 8
+   272→      ? Math.round(precision)
+   273→      : 5;
+   274→  return n.toFixed(p);
+   275→}
+   276→
+   277→/** Format a money amount given a dollars-number (NOT cents). */
+   278→function fmtMoney(dollars: number | null | undefined, currency = "USD"): string {
+   279→  if (dollars == null || !Number.isFinite(dollars)) return "—";
+   280→  try {
+   281→    return new Intl.NumberFormat("en-US", {
+   282→      style: "currency",
+   283→      currency,
+   284→      minimumFractionDigits: 2,
+   285→      maximumFractionDigits: 2,
+   286→    }).format(dollars);
+   287→  } catch {
+   288→    return `$${dollars.toFixed(2)}`;
+   289→  }
+   290→}
+   291→
+   292→/** Generate a short random id for client-side list items. */
+   293→function uid(): string {
+   294→  return Math.random().toString(36).slice(2, 10);
+   295→}
+   296→
+   297→/* ------------------------------------------------------------------ */
+   298→/* Component                                                           */
+   299→/* ------------------------------------------------------------------ */
+   300→
+   301→export function TradeFormView() {
+   302→  const { params, navigate } = useNav();
+   303→  const qc = useQueryClient();
+   304→  const editingId = params.id;
+   305→
+   306→  /* ---------- Fetch metadata ---------- */
+   307→  const { data: meta } = useQuery({ queryKey: ["me"], queryFn: fetchMe });
+   308→  const { data: accountsData } = useQuery({
+   309→    queryKey: ["accounts-form", meta?.user?.id ?? "anon"],
+   310→    queryFn: () => fetchAccounts(),
+   311→  });
+   312→  const { data: strategiesData } = useQuery({
+   313→    queryKey: ["strategies-form"],
+   314→    queryFn: fetchStrategies,
+   315→  });
+   316→
+   317→  // Defensive: pick arrays whether the API returns a bare array or an
+   318→  // `{ items: [...] }` envelope. Falls back to /api/me lists too.
+   319→  const accounts: any[] = (Array.isArray(accountsData)
+   320→    ? accountsData
+   321→    : Array.isArray((accountsData as any)?.items)
+   322→      ? (accountsData as any).items
+   323→      : Array.isArray(meta?.accounts)
+   324→        ? meta.accounts
+   325→        : []) as any[];
+   326→  const strategies: any[] = (Array.isArray(strategiesData)
+   327→    ? strategiesData
+   328→    : Array.isArray((strategiesData as any)?.items)
+   329→      ? (strategiesData as any).items
+   330→      : Array.isArray(meta?.strategies)
+   331→        ? meta.strategies
+   332→        : []) as any[];
+   333→  const tags: any[] = Array.isArray(meta?.tags)
+   334→    ? meta.tags
+   335→    : Array.isArray((meta as any)?.tags?.items)
+   336→      ? (meta as any).tags.items
+   337→      : [];
+   338→
+   339→  /* ---------- Existing trade (edit mode) ---------- */
+   340→  const { data: existing } = useQuery({
+   341→    queryKey: ["trade", editingId],
+   342→    queryFn: async () => {
+   343→      const res = await fetch(`/api/trades/${editingId}`, { cache: "no-store" });
+   344→      if (!res.ok) return null;
+   345→      return res.json();
+   346→    },
+   347→    enabled: !!editingId,
+   348→  });
+   349→
+   350→  /* ---------- Form state ---------- */
+   351→  const today = new Date();
+   352→  const [form, setForm] = useState<any>({
+   353→    accountId: "",
+   354→    strategyId: "",
+   355→    instrumentSymbol: "",
+   356→    direction: "long",
+   357→    status: "open",
+   358→    tradeDate: today.toISOString().slice(0, 10),
+   359→    tradeTime: today.toTimeString().slice(0, 5),
+   360→    session: "ny_am",
+   361→    timeframe: "5m",
+   362→    newsEvent: "none",
+   363→    thesisWhy: "",
+   364→    checklistAnswers: {} as Record<string, ChecklistAnswerValue>,
+   365→    plannedEntryPrice: "",
+   366→    plannedStopPrice: "",
+   367→    plannedTargetPrice: "",
+   368→    lotSize: "1",
+   369→    riskPct: "0.005",
+   370→    partialExits: [] as Array<{ id: string; name: string; price: string }>,
+   371→    behaviorFlags: [] as string[],
+   372→    tags: [] as string[],
+   373→    notes: "",
+   374→    lessons: "",
+   375→    psychBefore: { moodTags: [], confidence: 3, energy: 3, impact: "moderate" },
+   376→    psychAfter: { moodTags: [], confidence: 3, energy: 3, impact: "moderate" },
+   377→    setup: {
+   378→      htfContext: { weeklyBias: "bullish", dailyBias: "bullish" },
+   379→      liquidity: [],
+   380→      structure: [],
+   381→      entryModel: "FVG",
+   382→      session: "ny_am",
+   383→      timeframe: "5m",
+   384→    },
+   385→    thesis: {
+   386→      narrative: "",
+   387→      liquidityTarget: "",
+   388→      confirms: [],
+   389→      invalidates: [],
+   390→      target: "",
+   391→      earlyExit: "",
+   392→    },
+   393→    uploadedMedia: [] as any[],
+   394→    isDraft: false,
+   395→  });
+   396→
+   397→  const [activeStep, setActiveStep] = useState<StepKey>("trade-info");
+   398→  const [saving, setSaving] = useState(false);
+   399→  const [advancedOpen, setAdvancedOpen] = useState(false);
+   400→  const fileInputRef = useRef<HTMLInputElement>(null);
+   401→  // Per-upload File + XHR refs, keyed by each placeholder's tempId. Keeping
+   402→  // these in a ref Map (not React state) means progress ticks don't trigger
+   403→  // re-renders of the File objects, and Cancel can abort the in-flight XHR
+   404→  // while Retry can re-send the stored File without the user re-selecting it.
+   405→  const fileRefs = useRef<
+   406→    Map<string, { file: File; xhr: XMLHttpRequest | null }>
+   407→  >(new Map());
+   408→
+   409→  /* ---------- Strategy detail (versions + rulesJson) ---------- */
+   410→  const { data: strategyDetail } = useQuery({
+   411→    queryKey: ["strategy-for-form", form.strategyId],
+   412→    queryFn: async () => {
+   413→      if (!form.strategyId) return null;
+   414→      const res = await fetch(`/api/strategies/${form.strategyId}`, { cache: "no-store" });
+   415→      if (!res.ok) return null;
+   416→      return res.json();
+   417→    },
+   418→    enabled: !!form.strategyId,
+   419→  });
+   420→
+   421→  const selectedStrategyVersion = useMemo(() => {
+   422→    const versions: any[] = strategyDetail?.versions ?? [];
+   423→    if (versions.length === 0) return null;
+   424→    if (form.strategyVersionId) {
+   425→      return (
+   426→        versions.find((v: any) => v.id === form.strategyVersionId) ?? versions[0]
+   427→      );
+   428→    }
+   429→    return versions[0];
+   430→  }, [strategyDetail, form.strategyVersionId]);
+   431→
+   432→  const checklistItems: ChecklistItem[] = useMemo(
+   433→    () => extractChecklist(selectedStrategyVersion?.rulesJson),
+   434→    [selectedStrategyVersion?.rulesJson],
+   435→  );
+   436→
+   437→  const checklistThresholds: GradingThresholds | null = useMemo(() => {
+   438→    if (!selectedStrategyVersion?.rulesJson) return DEFAULT_GRADING_THRESHOLDS;
+   439→    try {
+   440→      const parsed = JSON.parse(selectedStrategyVersion.rulesJson);
+   441→      if (parsed?.gradingThresholds && typeof parsed.gradingThresholds === "object") {
+   442→        return { ...DEFAULT_GRADING_THRESHOLDS, ...parsed.gradingThresholds };
+   443→      }
+   444→    } catch {
+   445→      // fall through
+   446→    }
+   447→    return DEFAULT_GRADING_THRESHOLDS;
+   448→  }, [selectedStrategyVersion?.rulesJson]);
+   449→
+   450→  const evaluation = useMemo(
+   451→    () =>
+   452→      evaluateChecklist(
+   453→        checklistItems,
+   454→        (form.checklistAnswers ?? {}) as Record<string, ChecklistAnswerValue>,
+   455→        checklistThresholds,
+   456→      ),
+   457→    [checklistItems, form.checklistAnswers, checklistThresholds],
+   458→  );
+   459→
+   460→  /* ---------- Instrument catalog lookup ---------- */
+   461→  // Resolve the selected symbol against the static instrument catalog so
+   462→  // the form can drive price-precision formatting, unit labels (pips /
+   463→  // points / ticks), and the per-instrument risk preview without an API
+   464→  // roundtrip. Falls back to a synthetic `custom` def for unknown symbols
+   465→  // so the form always has a usable InstrumentDef.
+   466→  const selectedInstrument: InstrumentDef = useMemo(
+   467→    () => resolveInstrument(form.instrumentSymbol),
+   468→    [form.instrumentSymbol],
+   469→  );
+   470→  const isKnownInstrument = !!findInstrument(form.instrumentSymbol);
+   471→  const pricePrecision = selectedInstrument.pricePrecision;
+   472→  const unitWord = unitLabel(selectedInstrument.market);
+   473→
+   474→  /* ---------- Effects: defaults, edits, drafts ---------- */
+   475→
+   476→  // Default account (first or marked-isDefault) once /api/me resolves.
+   477→  useEffect(() => {
+   478→    if (form.accountId) return;
+   479→    if (accounts.length === 0) return;
+   480→    const def = accounts.find((a: any) => a.isDefault) ?? accounts[0];
+   481→    if (def) setForm((f: any) => ({ ...f, accountId: def.id }));
+   482→  }, [accounts, form.accountId]);
+   483→
+   484→  // Reset checklist answers + versionId when strategy changes (new trades).
+   485→  // When editing, skipStrategyResetRef prevents the load effect's restored
+   486→  // values from being clobbered on the very next strategy-change tick.
+   487→  const skipStrategyResetRef = useRef(false);
+   488→  useEffect(() => {
+   489→    if (skipStrategyResetRef.current) {
+   490→      skipStrategyResetRef.current = false;
+   491→      return;
+   492→    }
+   493→    setForm((f: any) => ({
+   494→      ...f,
+   495→      checklistAnswers: {},
+   496→      strategyVersionId: "",
+   497→    }));
+   498→  }, [form.strategyId]);
+   499→
+   500→  // Default the strategy version to the latest (`versions[0]`) when the
+   501→  // detail loads and no version is currently selected.
+   502→  useEffect(() => {
+   503→    if (!strategyDetail) return;
+   504→    const versions: any[] = strategyDetail.versions ?? [];
+   505→    if (versions.length === 0) return;
+   506→    const matches = versions.some((v: any) => v.id === form.strategyVersionId);
+   507→    if (!matches) {
+   508→      setForm((f: any) => ({ ...f, strategyVersionId: versions[0].id }));
+   509→    }
+   510→  }, [strategyDetail, form.strategyVersionId]);
+   511→
+   512→  // Load existing trade for editing.
+   513→  useEffect(() => {
+   514→    if (!existing) return;
+   515→    skipStrategyResetRef.current = true;
+   516→
+   517→    const evals = Array.isArray(existing.checklistEvaluations)
+   518→      ? [...existing.checklistEvaluations].sort(
+   519→          (a: any, b: any) =>
+   520→            new Date(b.evaluatedAt).getTime() - new Date(a.evaluatedAt).getTime(),
+   521→        )
+   522→      : [];
+   523→    const latestEval = evals[0];
+   524→    const restoredAnswers = latestEval?.rawAnswersJson
+   525→      ? parseAnswers(latestEval.rawAnswersJson)
+   526→      : {};
+   527→
+   528→    const entryTime = existing.entryTime ? new Date(existing.entryTime) : null;
+   529→    const exitTime = existing.exitTime ? new Date(existing.exitTime) : null;
+   530→
+   531→    const setup = safeJsonParse(existing.setupJson, {
+   532→      htfContext: { weeklyBias: "bullish", dailyBias: "bullish" },
+   533→      liquidity: [],
+   534→      structure: [],
+   535→      entryModel: "FVG",
+   536→      session: existing.session ?? "ny_am",
+   537→      timeframe: "5m",
+   538→    });
+   539→    const thesis = safeJsonParse(existing.thesisJson, {
+   540→      narrative: "",
+   541→      liquidityTarget: "",
+   542→      confirms: [],
+   543→      invalidates: [],
+   544→      target: "",
+   545→      earlyExit: "",
+   546→      why: existing.notes ?? "",
+   547→    });
+   548→
+   549→    setForm((f: any) => ({
+   550→      ...f,
+   551→      accountId: existing.accountId,
+   552→      instrumentSymbol: existing.instrumentSymbol,
+   553→      direction: existing.direction,
+   554→      status: existing.isDraft ? "draft" : (existing.status ?? "open"),
+   555→      tradeDate: entryTime ? entryTime.toISOString().slice(0, 10) : f.tradeDate,
+   556→      tradeTime: entryTime ? entryTime.toTimeString().slice(0, 5) : f.tradeTime,
+   557→      session: existing.session ?? "ny_am",
+   558→      timeframe: setup?.timeframe ?? "5m",
+   559→      newsEvent: (existing as any).newsEvent ?? "none",
+   560→      thesisWhy: thesis?.why ?? "",
+   561→      strategyId: existing.strategyId ?? "",
+   562→      strategyVersionId: existing.strategyVersionId ?? "",
+   563→      checklistAnswers: restoredAnswers,
+   564→      plannedEntryPrice: existing.plannedEntryPrice ?? "",
+   565→      plannedStopPrice: existing.plannedStopPrice ?? "",
+   566→      plannedTargetPrice: existing.plannedTargetPrice ?? "",
+   567→      lotSize: existing.positionSize ?? "1",
+   568→      riskPct: existing.plannedRiskPct ?? "0.005",
+   569→      partialExits: Array.isArray(existing.partialExits)
+   570→        ? existing.partialExits
+   571→        : [],
+   572→      behaviorFlags: safeJsonParse(existing.behaviorFlagsJson, []),
+   573→      tags: safeJsonParse(existing.tagsJson, []),
+   574→      notes: existing.notes ?? "",
+   575→      lessons: existing.lessons ?? "",
+   576→      psychBefore: safeJsonParse(existing.psychBeforeJson, f.psychBefore),
+   577→      psychAfter: safeJsonParse(existing.psychAfterJson, f.psychAfter),
+   578→      setup,
+   579→      thesis,
+   580→      uploadedMedia: [],
+   581→      isDraft: existing.isDraft ?? false,
+   582→    }));
+   583→
+   584→    // Fetch signed URLs for existing media in parallel (Fix 3 — N+1 query).
+   585→    if (existing.media?.length > 0) {
+   586→      Promise.all(
+   587→        existing.media.map(async (m: any) => {
+   588→          try {
+   589→            const res = await fetch(`/api/media/${m.id}`);
+   590→            if (res.ok) {
+   591→              const detail = await res.json();
+   592→              // Deserialize the MediaAnnotation rows back into the
+   593→              // ImageAnnotation shape the ImageAnnotator expects
+   594→              // ({ id, kind, x1, y1, x2, y2, text?, color }). The API stores
+   595→              // each row as { id, mediaId, kind, payloadJson }. The payload
+   596→              // is the geometry + style JSON written by either this form or
+   597→              // the trade-detail ImageViewer.
+   598→              const annotations: ImageAnnotation[] = (detail.annotations ?? [])
+   599→                .map((row: any): ImageAnnotation | null => {
+   600→                  let p: any = {};
+   601→                  try { p = row.payloadJson ? JSON.parse(row.payloadJson) : {}; } catch {}
+   602→                  if (!row.kind || typeof p.x1 !== "number") return null;
+   603→                  return {
+   604→                    id: row.id,
+   605→                    kind: row.kind,
+   606→                    x1: p.x1, y1: p.y1, x2: p.x2, y2: p.y2,
+   607→                    text: typeof p.text === "string" ? p.text : undefined,
+   608→                    color: typeof p.color === "string" ? p.color : "#EF4444",
+   609→                  };
+   610→                })
+   611→                .filter((a: ImageAnnotation | null): a is ImageAnnotation => a !== null);
+   612→              return {
+   613→                ...m,
+   614→                url: detail.url,
+   615→                caption: detail.caption ?? m.caption ?? "",
+   616→                timeframe: detail.timeframe ?? m.timeframe ?? "",
+   617→                annotations,
+   618→              };
+   619→            }
+   620→          } catch {
+   621→            // ignore
+   622→          }
+   623→          return m;
+   624→        }),
+   625→      ).then((mediaWithUrls) => {
+   626→        setForm((f: any) => ({ ...f, uploadedMedia: mediaWithUrls }));
+   627→      });
+   628→    }
+   629→  }, [existing]);
+   630→
+   631→  // Deep-link pre-fills: ?date=YYYY-MM-DD (from calendar), ?dailyPlanId=...
+   632→  useEffect(() => {
+   633→    if (editingId) return;
+   634→    if (!params.date && !params.dailyPlanId) return;
+   635→    setForm((f: any) => {
+   636→      const next = { ...f };
+   637→      if (params.date) {
+   638→        next.tradeDate = params.date;
+   639→        if (!next.tradeTime) next.tradeTime = "09:00";
+   640→      }
+   641→      return next;
+   642→    });
+   643→  }, [params.date, params.dailyPlanId, editingId]);
+   644→
+   645→  // Autosave draft (new trades only).
+   646→  useEffect(() => {
+   647→    if (editingId) return;
+   648→    const t = setTimeout(() => {
+   649→      try {
+   650→        localStorage.setItem(DRAFT_KEY, JSON.stringify(form));
+   651→      } catch {
+   652→        // ignore quota errors
+   653→      }
+   654→    }, 500);
+   655→    return () => clearTimeout(t);
+   656→  }, [form, editingId]);
+   657→
+   658→  // Restore draft on mount (new trades only).
+   659→  useEffect(() => {
+   660→    if (editingId) return;
+   661→    const saved = localStorage.getItem(DRAFT_KEY);
+   662→    if (!saved) return;
+   663→    try {
+   664→      const parsed = JSON.parse(saved);
+   665→      // Any media that was mid-upload when the page closed can't be resumed
+   666→      // (the XHR is gone and File objects aren't serializable) — mark them
+   667→      // as failed so the user can retry or remove them, rather than leaving
+   668→      // them stuck at 0% forever.
+   669→      if (Array.isArray(parsed.uploadedMedia)) {
+   670→        parsed.uploadedMedia = parsed.uploadedMedia.map((m: any) =>
+   671→          m?.status === "uploading" ? { ...m, status: "failed" } : m,
+   672→        );
+   673→      }
+   674→      setForm((f: any) => ({ ...f, ...parsed }));
+   675→      toast.info("Restored autosaved draft.");
+   676→    } catch {
+   677→      // ignore
+   678→    }
+   679→  }, [editingId]);
+   680→
+   681→  // Warn before navigating away while media uploads are in-flight. The
+   682→  // uploads use XHR (not service workers / background sync), so closing or
+   683→  // refreshing the tab would abort them and the placeholder items would
+   684→  // never complete.
+   685→  useEffect(() => {
+   686→    const hasUploading = form.uploadedMedia?.some(
+   687→      (m: any) => m.status === "uploading",
+   688→    );
+   689→    if (!hasUploading) return;
+   690→    const handler = (e: BeforeUnloadEvent) => {
+   691→      e.preventDefault();
+   692→      e.returnValue = "";
+   693→    };
+   694→    window.addEventListener("beforeunload", handler);
+   695→    return () => window.removeEventListener("beforeunload", handler);
+   696→  }, [form.uploadedMedia]);
+   697→
+   698→  /* ---------- Field helpers ---------- */
+   699→
+   700→  function setField(path: string, value: any) {
+   701→    setForm((f: any) => {
+   702→      const next = { ...f };
+   703→      const parts = path.split(".");
+   704→      let cur: any = next;
+   705→      for (let i = 0; i < parts.length - 1; i++) {
+   706→        cur[parts[i]] = { ...cur[parts[i]] };
+   707→        cur = cur[parts[i]];
+   708→      }
+   709→      cur[parts[parts.length - 1]] = value;
+   710→      return next;
+   711→    });
+   712→  }
+   713→
+   714→  function toggleArrayField(path: string, value: string) {
+   715→    setForm((f: any) => {
+   716→      const next = { ...f };
+   717→      const parts = path.split(".");
+   718→      let cur: any = next;
+   719→      for (let i = 0; i < parts.length - 1; i++) {
+   720→        cur[parts[i]] = { ...cur[parts[i]] };
+   721→        cur = cur[parts[i]];
+   722→      }
+   723→      const key = parts[parts.length - 1];
+   724→      const arr = Array.isArray(cur[key]) ? [...cur[key]] : [];
+   725→      const idx = arr.indexOf(value);
+   726→      if (idx >= 0) arr.splice(idx, 1);
+   727→      else arr.push(value);
+   728→      cur[key] = arr;
+   729→      return next;
+   730→    });
+   731→  }
+   732→
+   733→  function updateChecklistAnswer(itemId: string, checked: boolean) {
+   734→    setForm((f: any) => {
+   735→      const cur = f.checklistAnswers?.[itemId] ?? { checked: false };
+   736→      const nextAnswers = {
+   737→        ...f.checklistAnswers,
+   738→        [itemId]: { ...cur, checked },
+   739→      };
+   740→      // Drop note when unchecked so storage stays clean.
+   741→      if (!checked && nextAnswers[itemId].note) {
+   742→        delete nextAnswers[itemId].note;
+   743→      }
+   744→      return { ...f, checklistAnswers: nextAnswers };
+   745→    });
+   746→  }
+   747→
+   748→  /* ---------- File upload (non-blocking, concurrent, with progress) ----------
+   749→   *
+   750→   * Each selected file is added to `form.uploadedMedia` immediately as a
+   751→   * placeholder with `status: "uploading"` and a per-item `progress` (0-100).
+   752→   * Uploads run concurrently via XMLHttpRequest so progress events fire per
+   753→   * file without blocking the form (the old implementation awaited each
+   754→   * upload in a sequential for-loop). The File + XHR for each tempId live in
+   755→   * the `fileRefs` ref Map (not state), so Cancel can abort and Retry can
+   756→   * re-send without storing heavy File objects in React state.
+   757→   */
+   758→
+   759→  function handleFileUpload(files: FileList | File[]) {
+   760→    const fileList = Array.from(files);
+   761→    for (const file of fileList) {
+   762→      const tempId = `temp-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+   763→      // Detect kind from MIME type so the form immediately knows whether to
+   764→      // render an <img> (annotation-able) or a <video controls> element.
+   765→      const clientKind = file.type.startsWith("video/") ? "video" : "image";
+   766→      const mediaItem: any = {
+   767→        tempId,
+   768→        filename: file.name,
+   769→        originalName: file.name,
+   770→        kind: clientKind,
+   771→        status: "uploading",
+   772→        progress: 0,
+   773→        fileSize: file.size,
+   774→        annotations: [],
+   775→        caption: "",
+   776→        timeframe: "",
+   777→      };
+   778→      // Add the placeholder immediately so the user sees progress right
+   779→      // away, then kick off the upload in the background (non-blocking).
+   780→      setForm((f: any) => ({
+   781→        ...f,
+   782→        uploadedMedia: [...(f.uploadedMedia ?? []), mediaItem],
+   783→      }));
+   784→      uploadFile(file, tempId);
+   785→    }
+   786→  }
+   787→
+   788→  function uploadFile(file: File, tempId: string) {
+   789→    const formData = new FormData();
+   790→    formData.append("file", file);
+   791→    if (editingId) formData.append("tradeId", editingId);
+   792→
+   793→    const xhr = new XMLHttpRequest();
+   794→    xhr.open("POST", "/api/media");
+   795→    fileRefs.current.set(tempId, { file, xhr });
+   796→
+   797→    // Real upload progress — only XMLHttpRequest exposes this; fetch()
+   798→    // ReadableStream request bodies don't have progress events yet.
+   799→    xhr.upload.onprogress = (e) => {
+   800→      if (e.lengthComputable) {
+   801→        const progress = Math.round((e.loaded / e.total) * 100);
+   802→        setForm((f: any) => ({
+   803→          ...f,
+   804→          uploadedMedia: f.uploadedMedia.map((m: any) =>
+   805→            m.tempId === tempId ? { ...m, progress } : m,
+   806→          ),
+   807→        }));
+   808→      }
+   809→    };
+   810→
+   811→    xhr.onload = () => {
+   812→      if (xhr.status >= 200 && xhr.status < 300) {
+   813→        try {
+   814→          const data = JSON.parse(xhr.responseText);
+   815→          // Fetch the signed URL so the preview can render immediately.
+   816→          fetch(`/api/media/${data.id}`)
+   817→            .then((r) => r.json())
+   818→            .then((detail) => {
+   819→              setForm((f: any) => ({
+   820→                ...f,
+   821→                uploadedMedia: f.uploadedMedia.map((m: any) =>
+   822→                  m.tempId === tempId
+   823→                    ? {
+   824→                        ...m,
+   825→                        ...data,
+   826→                        id: data.id,
+   827→                        url: detail.url,
+   828→                        status: "uploaded",
+   829→                        progress: 100,
+   830→                      }
+   831→                    : m,
+   832→                ),
+   833→              }));
+   834→            })
+   835→            .catch(() => {
+   836→              // Signed-URL fetch failed — still mark uploaded with raw data.
+   837→              setForm((f: any) => ({
+   838→                ...f,
+   839→                uploadedMedia: f.uploadedMedia.map((m: any) =>
+   840→                  m.tempId === tempId
+   841→                    ? {
+   842→                        ...m,
+   843→                        ...data,
+   844→                        id: data.id,
+   845→                        status: "uploaded",
+   846→                        progress: 100,
+   847→                      }
+   848→                    : m,
+   849→                ),
+   850→              }));
+   851→            });
+   852→          // Upload finished — drop the File/XHR ref (Retry not needed).
+   853→          fileRefs.current.delete(tempId);
+   854→          toast.success(`${file.name} uploaded.`);
+   855→        } catch {
+   856→          markUploadFailed(tempId, file.name);
+   857→        }
+   858→      } else {
+   859→        // Surface the server's error message when present (e.g. "File too
+   860→        // large. Max 20 MB.").
+   861→        let msg = `Failed to upload ${file.name}`;
+   862→        try {
+   863→          const err = JSON.parse(xhr.responseText);
+   864→          if (err?.error) msg = err.error;
+   865→        } catch {}
+   866→        markUploadFailed(tempId, file.name, msg);
+   867→      }
+   868→    };
+   869→
+   870→    xhr.onerror = () => markUploadFailed(tempId, file.name);
+   871→    // onabort is fired when cancelUpload calls xhr.abort(); cancelUpload
+   872→    // already removes the item from state and clears the ref, so this is
+   873→    // a no-op kept for completeness.
+   874→    xhr.onabort = () => {};
+   875→
+   876→    xhr.send(formData);
+   877→  }
+   878→
+   879→  function markUploadFailed(tempId: string, filename: string, msg?: string) {
+   880→    setForm((f: any) => ({
+   881→      ...f,
+   882→      uploadedMedia: f.uploadedMedia.map((m: any) =>
+   883→        m.tempId === tempId ? { ...m, status: "failed" } : m,
+   884→      ),
+   885→    }));
+   886→    // Keep the File in the ref (clear the xhr) so Retry can re-send it.
+   887→    const entry = fileRefs.current.get(tempId);
+   888→    if (entry) fileRefs.current.set(tempId, { file: entry.file, xhr: null });
+   889→    toast.error(msg ?? `Failed to upload ${filename}`);
+   890→  }
+   891→
+   892→  function cancelUpload(tempId: string) {
+   893→    const entry = fileRefs.current.get(tempId);
+   894→    if (entry?.xhr) {
+   895→      try { entry.xhr.abort(); } catch {}
+   896→    }
+   897→    fileRefs.current.delete(tempId);
+   898→    setForm((f: any) => ({
+   899→      ...f,
+   900→      uploadedMedia: f.uploadedMedia.filter((m: any) => m.tempId !== tempId),
+   901→    }));
+   902→  }
+   903→
+   904→  function retryUpload(tempId: string) {
+   905→    const entry = fileRefs.current.get(tempId);
+   906→    if (!entry?.file) {
+   907→      toast.error("This file is no longer available to retry. Please re-select it.");
+   908→      return;
+   909→    }
+   910→    setForm((f: any) => ({
+   911→      ...f,
+   912→      uploadedMedia: f.uploadedMedia.map((m: any) =>
+   913→        m.tempId === tempId ? { ...m, status: "uploading", progress: 0 } : m,
+   914→      ),
+   915→    }));
+   916→    uploadFile(entry.file, tempId);
+   917→  }
+   918→
+   919→  function removeMedia(idx: number) {
+   920→    setForm((f: any) => ({
+   921→      ...f,
+   922→      uploadedMedia: f.uploadedMedia.filter((_: any, i: number) => i !== idx),
+   923→    }));
+   924→  }
+   925→
+   926→  function setMediaCaption(idx: number, caption: string) {
+   927→    setForm((f: any) => ({
+   928→      ...f,
+   929→      uploadedMedia: f.uploadedMedia.map((m: any, i: number) =>
+   930→        i === idx ? { ...m, caption } : m,
+   931→      ),
+   932→    }));
+   933→  }
+   934→
+   935→  function setMediaTimeframe(idx: number, timeframe: string) {
+   936→    setForm((f: any) => ({
+   937→      ...f,
+   938→      uploadedMedia: f.uploadedMedia.map((m: any, i: number) =>
+   939→        i === idx ? { ...m, timeframe } : m,
+   940→      ),
+   941→    }));
+   942→  }
+   943→
+   944→  function setMediaAnnotations(idx: number, annotations: ImageAnnotation[]) {
+   945→    setForm((f: any) => ({
+   946→      ...f,
+   947→      uploadedMedia: f.uploadedMedia.map((m: any, i: number) =>
+   948→        i === idx ? { ...m, annotations } : m,
+   949→      ),
+   950→    }));
+   951→  }
+   952→
+   953→  /* ---------- Partial exits ---------- */
+   954→
+   955→  function addExit() {
+   956→    setForm((f: any) => ({
+   957→      ...f,
+   958→      partialExits: [
+   959→        ...f.partialExits,
+   960→        { id: uid(), name: `TP${f.partialExits.length + 1}`, price: "" },
+   961→      ],
+   962→    }));
+   963→  }
+   964→
+   965→  function updateExit(id: string, field: "name" | "price", value: string) {
+   966→    setForm((f: any) => ({
+   967→      ...f,
+   968→      partialExits: f.partialExits.map((e: any) =>
+   969→        e.id === id ? { ...e, [field]: value } : e,
+   970→      ),
+   971→    }));
+   972→  }
+   973→
+   974→  function removeExit(id: string) {
+   975→    setForm((f: any) => ({
+   976→      ...f,
+   977→      partialExits: f.partialExits.filter((e: any) => e.id !== id),
+   978→    }));
+   979→  }
+   980→
+   981→  /* ---------- Risk & sizing calculations ---------- */
+   982→
+   983→  const account = accounts.find((a: any) => a.id === form.accountId);
+   984→  const accountCurrency = account?.currency ?? "USD";
+   985→  const balanceCents = account?.currentBalanceCents ?? account?.startingBalanceCents ?? 0;
+   986→
+   987→  const entryNum = Number(form.plannedEntryPrice);
+   988→  const stopNum = Number(form.plannedStopPrice);
+   989→  const targetNum = Number(form.plannedTargetPrice);
+   990→  const lotNum = Number(form.lotSize) || 1;
+   991→  const riskPctNum = Number(form.riskPct);
+   992→
+   993→  const hasEntry = Number.isFinite(entryNum) && form.plannedEntryPrice !== "";
+   994→  const hasStop = Number.isFinite(stopNum) && form.plannedStopPrice !== "";
+   995→  const hasTarget = Number.isFinite(targetNum) && form.plannedTargetPrice !== "";
+   996→
+   997→  // Stop distance (always positive).
+   998→  const stopDistance = hasEntry && hasStop ? Math.abs(entryNum - stopNum) : null;
+   999→
+  1000→  // Risk per unit / reward per unit (per 1 lot).
+  1001→  const riskPerUnit = hasEntry && hasStop ? Math.abs(entryNum - stopNum) : null;
+  1002→  const rewardPerUnit =
+  1003→    hasEntry && hasTarget ? Math.abs(targetNum - entryNum) : null;
+  1004→
+  1005→  // Planned R:R = reward / risk (1.0 = breakeven, 2.0 = 2R for 1R).
+  1006→  const plannedRR =
+  1007→    riskPerUnit && rewardPerUnit && riskPerUnit > 0
+  1008→      ? rewardPerUnit / riskPerUnit
+  1009→      : null;
+  1010→
+  1011→  // Risk amount ($) = balance * riskPct.
+  1012→  const riskAmountDollars =
+  1013→    Number.isFinite(riskPctNum) && balanceCents > 0
+  1014→      ? (balanceCents / 100) * riskPctNum
+  1015→      : null;
+  1016→
+  1017→  // Planned profit ($) = riskAmount * RR (if RR is known).
+  1018→  const plannedProfitDollars =
+  1019→    riskAmountDollars != null && plannedRR != null
+  1020→      ? riskAmountDollars * plannedRR
+  1021→      : null;
+  1022→
+  1023→  /* ---------- Instrument-aware risk preview ---------- */
+  1024→  // Uses pipSize, contractSize, and pointValueCents from the catalog to
+  1025→  // express the stop distance in the instrument's native unit (pips /
+  1026→  // ticks / points) and to derive a per-instrument dollar risk that is
+  1027→  // consistent with the server-side calculateTradePnl formula:
+  1028→  //   risk$ = stopDistance × qty × contractSize × (pointValueCents/100)
+  1029→  // (See computePointValueCents in src/lib/calculations.ts for the
+  1030→  // convention used to derive pointValueCents from cs × tickSize.)
+  1031→  const stopDistanceUnits = stopDistance != null
+  1032→    ? distanceInUnits(stopDistance, selectedInstrument.pipSize)
+  1033→    : 0;
+  1034→  const contractSizeNum = Number(selectedInstrument.contractSize) || 1;
+  1035→  const pointValueCents = selectedInstrument.pointValueCents;
+  1036→  const instrumentRiskDollars =
+  1037→    stopDistance != null
+  1038→      ? stopDistance * lotNum * contractSizeNum * (pointValueCents / 100)
+  1039→      : null;
+  1040→
+  1041→  /* ---------- Partial exits calculations ---------- */
+  1042→
+  1043→  const validExits = form.partialExits.filter(
+  1044→    (e: any) => e.price !== "" && Number.isFinite(Number(e.price)),
+  1045→  );
+  1046→  const weightedExitPrice =
+  1047→    validExits.length > 0
+  1048→      ? validExits.reduce((sum: number, e: any) => sum + Number(e.price), 0) /
+  1049→        validExits.length
+  1050→      : null;
+  1051→  const totalRExits =
+  1052→    weightedExitPrice != null && riskPerUnit != null && riskPerUnit > 0
+  1053→      ? form.direction === "long"
+  1054→        ? (weightedExitPrice - entryNum) / riskPerUnit
+  1055→        : (entryNum - weightedExitPrice) / riskPerUnit
+  1056→      : null;
+  1057→
+  1058→  /* ---------- Evidence grouping (by chart timeframe) ---------- */
+  1059→
+  1060→  // Bucket each uploaded media item into a timeframe group so the user can
+  1061→  // see at a glance whether their HTF context, execution chart, and entry
+  1062→  // trigger are all captured. Items with no timeframe selected land in an
+  1063→  // "Unassigned" bucket first to nudge the user toward picking one.
+  1064→  const groupedMedia = useMemo(() => {
+  1065→    const items: Array<{ m: any; i: number }> = (form.uploadedMedia ?? []).map(
+  1066→      (m: any, i: number) => ({ m, i }),
+  1067→    );
+  1068→    const buckets: Record<string, Array<{ m: any; i: number }>> = {};
+  1069→    for (const entry of items) {
+  1070→      const g = entry.m.timeframe ? getTimeframeGroup(entry.m.timeframe) : null;
+  1071→      const key = g ?? "__unassigned";
+  1072→      if (!buckets[key]) buckets[key] = [];
+  1073→      buckets[key].push(entry);
+  1074→    }
+  1075→    const ordered: Array<{ group: string; items: Array<{ m: any; i: number }> }> = [];
+  1076→    if (buckets["__unassigned"]) {
+  1077→      ordered.push({ group: "Unassigned", items: buckets["__unassigned"] });
+  1078→    }
+  1079→    for (const g of TIMEFRAME_GROUPS) {
+  1080→      if (buckets[g]) ordered.push({ group: g, items: buckets[g] });
+  1081→    }
+  1082→    // Any leftover custom groups (shouldn't normally happen, but defensive).
+  1083→    for (const key of Object.keys(buckets)) {
+  1084→      if (key === "__unassigned") continue;
+  1085→      if (TIMEFRAME_GROUPS.includes(key)) continue;
+  1086→      ordered.push({ group: key, items: buckets[key] });
+  1087→    }
+  1088→    return ordered;
+  1089→  }, [form.uploadedMedia]);
+  1090→
+  1091→  /* ---------- Submit ---------- */
+  1092→
+  1093→  async function submit(asDraft: boolean = false) {
+  1094→    if (!form.accountId) {
+  1095→      toast.error("Please select an account.");
+  1096→      setActiveStep("trade-info");
+  1097→      setTimeout(
+  1098→        () => document.getElementById("field-account")?.scrollIntoView({ behavior: "smooth", block: "center" }),
+  1099→        80,
+  1100→      );
+  1101→      return;
+  1102→    }
+  1103→    if (!form.instrumentSymbol) {
+  1104→      toast.error("Please enter a symbol / pair.");
+  1105→      setActiveStep("trade-info");
+  1106→      setTimeout(
+  1107→        () => document.getElementById("field-symbol")?.scrollIntoView({ behavior: "smooth", block: "center" }),
+  1108→        80,
+  1109→      );
+  1110→      return;
+  1111→    }
+  1112→    if (!hasEntry || !hasStop || !hasTarget) {
+  1113→      // For planned trades, entry/stop/target are still required (they ARE the plan)
+  1114→      // but executions should not be sent — the trade is not executed yet.
+  1115→      toast.error("Planned entry, stop, and target are required.");
+  1116→      setActiveStep("risk");
+  1117→      setTimeout(
+  1118→        () => document.getElementById("field-entry")?.scrollIntoView({ behavior: "smooth", block: "center" }),
+  1119→        80,
+  1120→      );
+  1121→      return;
+  1122→    }
+  1123→
+  1124→    const isPlanned = form.status === "planned" && !asDraft;
+  1125→
+  1126→    setSaving(true);
+  1127→    try {
+  1128→      const entryDateTime = new Date(`${form.tradeDate}T${form.tradeTime || "09:00"}`);
+  1129→      const executions: any[] = [
+  1130→        {
+  1131→          kind: "entry",
+  1132→          price: String(form.plannedEntryPrice),
+  1133→          quantity: String(form.lotSize || "1"),
+  1134→          timestamp: entryDateTime.toISOString(),
+  1135→        },
+  1136→      ];
+  1137→
+  1138→      const payload: any = {
+  1139→        accountId: form.accountId,
+  1140→        instrumentSymbol: normalizeSymbol(form.instrumentSymbol),
+  1141→        // Derive market from the static catalog when possible (covers
+  1142→        // forex / gold / indices / futures / crypto). Falls back to
+  1143→        // "custom" so unknown symbols still get persisted with a sane
+  1144→        // market tag rather than a null.
+  1145→        market: selectedInstrument.market ?? "custom",
+  1146→        direction: form.direction,
+  1147→        status: asDraft ? "open" : form.status,
+  1148→        session: form.session,
+  1149→        newsEvent: form.newsEvent ?? "none",
+  1150→        strategyId: form.strategyId || null,
+  1151→        strategyVersionId: form.strategyId ? (form.strategyVersionId || null) : null,
+  1152→        // checklistVersionId must reference a ChecklistVersion (from
+  1153→        // ChecklistConfig), NOT a StrategyVersion. The strategy's rules
+  1154→        // live in StrategyVersion.rulesJson and are evaluated inline —
+  1155→        // there is no separate ChecklistVersion for strategy-based rules.
+  1156→        // Send null so the server doesn't try to validate a wrong FK.
+  1157→        checklistVersionId: null,
+  1158→        checklistAnswers:
+  1159→          form.strategyId && form.strategyVersionId ? form.checklistAnswers : null,
+  1160→        setupGrade:
+  1161→          form.strategyId && checklistItems.length > 0 ? evaluation.grade : null,
+  1162→        setupScore:
+  1163→          form.strategyId && checklistItems.length > 0 ? String(evaluation.score) : null,
+  1164→        tags: form.tags,
+  1165→        plannedEntryPrice: form.plannedEntryPrice || null,
+  1166→        plannedStopPrice: form.plannedStopPrice || null,
+  1167→        plannedTargetPrice: form.plannedTargetPrice || null,
+  1168→        plannedRiskPct: form.riskPct || null,
+  1169→        // For planned trades, don't send executions — the trade is not executed yet.
+  1170→        // The server will keep P&L as 0 and status as "planned".
+  1171→        executions: isPlanned ? [] : executions,
+  1172→        feesCents: 0,
+  1173→        commissionCents: 0,
+  1174→        swapCents: 0,
+  1175→        slippageCents: 0,
+  1176→        entryTime: isPlanned ? null : entryDateTime.toISOString(),
+  1177→        exitTime: null,
+  1178→        tradingTimezone: "UTC",
+  1179→        setup: {
+  1180→          ...form.setup,
+  1181→          session: form.session,
+  1182→          timeframe: form.timeframe,
+  1183→        },
+  1184→        thesis: {
+  1185→          ...form.thesis,
+  1186→          why: form.thesisWhy,
+  1187→        },
+  1188→        notes: form.notes || null,
+  1189→        lessons: form.lessons || null,
+  1190→        psychBefore: form.psychBefore,
+  1191→        psychAfter: form.psychAfter,
+  1192→        behaviorFlags: form.behaviorFlags,
+  1193→        partialExits: form.partialExits,
+  1194→        isDraft: asDraft,
+  1195→      };
+  1196→
+  1197→      const url = editingId ? `/api/trades/${editingId}` : "/api/trades";
+  1198→      const method = editingId ? "PATCH" : "POST";
+  1199→      const res = await fetch(url, {
+  1200→        method,
+  1201→        headers: { "Content-Type": "application/json" },
+  1202→        body: JSON.stringify(payload),
+  1203→      });
+  1204→      const data = await res.json();
+  1205→      if (!res.ok) {
+  1206→        toast.error(data?.error ?? "Failed to save trade.");
+  1207→        setSaving(false);
+  1208→        return;
+  1209→      }
+  1210→
+  1211→      // Attach orphaned uploaded media to the newly created trade + save captions.
+  1212→      // Items still uploading (no id yet) or failed are skipped; uploads that
+  1213→      // finish later will attach themselves when editing an existing trade
+  1214→      // (their formData already carries tradeId).
+  1215→      if (form.uploadedMedia?.length > 0) {
+  1216→        for (const m of form.uploadedMedia) {
+  1217→          if (m.id && m.status !== "uploading" && m.status !== "failed") {
+  1218→            const patchBody: any = {};
+  1219→            if (!editingId) patchBody.tradeId = data.id;
+  1220→            // Caption is the form's "Description" textarea value (see Evidence section).
+  1221→            if (m.caption !== undefined && m.caption !== null) patchBody.caption = m.caption;
+  1222→            // Per-screenshot timeframe (5m / 1H / 1D / ...) for chart screenshots.
+  1223→            if (m.timeframe) patchBody.timeframe = m.timeframe;
+  1224→            if (Object.keys(patchBody).length > 0) {
+  1225→              await fetch(`/api/media/${m.id}`, {
+  1226→                method: "PATCH",
+  1227→                headers: { "Content-Type": "application/json" },
+  1228→                body: JSON.stringify(patchBody),
+  1229→              }).catch(() => {});
+  1230→            }
+  1231→
+  1232→            // Persist non-destructive SVG annotations (lines, arrows, rects,
+  1233→            // circles, text) to the MediaAnnotation table via the PUT
+  1234→            // "setAnnotations" action. Without this, drawings made in the
+  1235→            // ImageAnnotator were lost on save because they only lived in
+  1236→            // client state (`m.annotations`). The API stores each annotation
+  1237→            // as `{ kind, payloadJson }`; we follow the same payload shape
+  1238→            // used by the ImageViewer (x1/y1/x2/y2/text/color) so the two
+  1239→            // viewers can read each other's drawings.
+  1240→            if (Array.isArray(m.annotations) && m.annotations.length > 0) {
+  1241→              await fetch(`/api/media/${m.id}`, {
+  1242→                method: "PUT",
+  1243→                headers: { "Content-Type": "application/json" },
+  1244→                body: JSON.stringify({
+  1245→                  action: "setAnnotations",
+  1246→                  annotations: m.annotations.map((a: ImageAnnotation) => ({
+  1247→                    kind: a.kind,
+  1248→                    payload: {
+  1249→                      x1: a.x1,
+  1250→                      y1: a.y1,
+  1251→                      x2: a.x2,
+  1252→                      y2: a.y2,
+  1253→                      text: a.text,
+  1254→                      color: a.color,
+  1255→                    },
+  1256→                  })),
+  1257→                }),
+  1258→              }).catch(() => {});
+  1259→            }
+  1260→          }
+  1261→        }
+  1262→      }
+  1263→
+  1264→      // If some uploads are still in-flight, let the user know. For edits
+  1265→      // (editingId set) the upload's formData already carries tradeId, so the
+  1266→      // media will attach itself when the XHR completes. For new trades the
+  1267→      // trade didn't exist at upload time, so the media is orphaned and would
+  1268→      // need a manual attach later — the toast flags this honestly.
+  1269→      const stillUploading = form.uploadedMedia?.some(
+  1270→        (m: any) => m.status === "uploading",
+  1271→      );
+  1272→      if (stillUploading) {
+  1273→        toast.info("Some media is still uploading and will be attached when complete.");
+  1274→      }
+  1275→
+  1276→      toast.success(asDraft ? "Draft saved." : "Trade saved.");
+  1277→      try { localStorage.removeItem(DRAFT_KEY); } catch {}
+  1278→      qc.invalidateQueries({ queryKey: ["trades"] });
+  1279→      qc.invalidateQueries({ queryKey: ["dashboard"] });
+  1280→      navigate("tradesLog");
+  1281→    } catch (err: any) {
+  1282→      toast.error(err?.message ?? "Network error — please check your connection and try again.");
+  1283→      setSaving(false);
+  1284→    }
+  1285→  }
+  1286→
+  1287→  /* ---------- Step navigation ---------- */
+  1288→
+  1289→  function goPrev() {
+  1290→    const idx = STEP_ORDER.indexOf(activeStep);
+  1291→    if (idx > 0) setActiveStep(STEP_ORDER[idx - 1]);
+  1292→  }
+  1293→  function goNext() {
+  1294→    const idx = STEP_ORDER.indexOf(activeStep);
+  1295→    if (idx < STEP_ORDER.length - 1) setActiveStep(STEP_ORDER[idx + 1]);
+  1296→  }
+  1297→
+  1298→  const checkedCount = checklistItems.filter(
+  1299→    (it) => form.checklistAnswers?.[it.id]?.checked === true,
+  1300→  ).length;
+  1301→  const adherencePct =
+  1302→    checklistItems.length > 0
+  1303→      ? Math.round((checkedCount / checklistItems.length) * 100)
+  1304→      : 0;
+  1305→
+  1306→  /* ------------------------------------------------------------------ */
+  1307→  /* Render                                                              */
+  1308→  /* ------------------------------------------------------------------ */
+  1309→
+  1310→  return (
+  1311→    <div className="p-4 md:p-6 max-w-4xl mx-auto space-y-4">
+  1312→      {/* Header */}
+  1313→      <div className="flex items-center gap-3">
+  1314→        <Button variant="ghost" size="icon" onClick={() => navigate("tradesLog")}>
+  1315→          <ArrowLeft className="h-4 w-4" />
+  1316→        </Button>
+  1317→        <div>
+  1318→          <h1 className="text-2xl font-semibold tracking-tight">
+  1319→            {editingId ? "Edit Trade" : "New Trade"}
+  1320→          </h1>
+  1321→          <p className="text-sm text-muted-foreground">
+  1322→            Walk through the 5 steps to log a structured trade with checklist
+  1323→            scoring, risk sizing, and partial exits.
+  1324→          </p>
+  1325→        </div>
+  1326→      </div>
+  1327→
+  1328→      <Tabs value={activeStep} onValueChange={(v) => setActiveStep(v as StepKey)} className="w-full">
+  1329→        <TabsList className="w-full justify-start overflow-x-auto no-scrollbar h-auto">
+  1330→          <TabsTrigger value="trade-info">1. Trade Info</TabsTrigger>
+  1331→          <TabsTrigger value="checklist">2. Setup Checklist</TabsTrigger>
+  1332→          <TabsTrigger value="risk">3. Risk &amp; Sizing</TabsTrigger>
+  1333→          <TabsTrigger value="exits">4. Partial Exits</TabsTrigger>
+  1334→          <TabsTrigger value="review">5. Review &amp; Save</TabsTrigger>
+  1335→        </TabsList>
+  1336→
+  1337→        {/* ─────────────────────────────────────────────────────────── */}
+  1338→        {/* STEP 1 — Trade Info                                          */}
+  1339→        {/* ─────────────────────────────────────────────────────────── */}
+  1340→        <TabsContent value="trade-info" className="space-y-4 mt-3">
+  1341→          <Card className="p-4 md:p-6 space-y-4 bg-background">
+  1342→            <div>
+  1343→              <h2 className="text-lg font-medium">Trade Basics</h2>
+  1344→              <p className="text-sm text-muted-foreground">
+  1345→                The who/what/when of the trade. Required fields are marked{" "}
+  1346→                <span className="text-loss">*</span>.
+  1347→              </p>
+  1348→            </div>
+  1349→            <div className="grid sm:grid-cols-2 gap-4">
+  1350→              <div className="space-y-2" id="field-account">
+  1351→                <FieldLabel required>Trading Account</FieldLabel>
+  1352→                <Select value={form.accountId || "__none"} onValueChange={(v) => setField("accountId", v === "__none" ? "" : v)}>
+  1353→                  <SelectTrigger><SelectValue placeholder="Select an account" /></SelectTrigger>
+  1354→                  <SelectContent>
+  1355→                    <SelectItem value="__none">—</SelectItem>
+  1356→                    {accounts.map((a: any) => (
+  1357→                      <SelectItem key={a.id} value={a.id}>
+  1358→                        {a.name} ({a.currency})
+  1359→                      </SelectItem>
+  1360→                    ))}
+  1361→                  </SelectContent>
+  1362→                </Select>
+  1363→              </div>
+  1364→
+  1365→              <div className="space-y-2">
+  1366→                <FieldLabel hint="The strategy this trade follows (optional).">Trading Setup</FieldLabel>
+  1367→                <Select
+  1368→                  value={form.strategyId || "__none"}
+  1369→                  onValueChange={(v) => setField("strategyId", v === "__none" ? "" : v)}
+  1370→                >
+  1371→                  <SelectTrigger><SelectValue placeholder="No strategy" /></SelectTrigger>
+  1372→                  <SelectContent>
+  1373→                    <SelectItem value="__none">None</SelectItem>
+  1374→                    {strategies.map((s: any) => (
+  1375→                      <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>
+  1376→                    ))}
+  1377→                  </SelectContent>
+  1378→                </Select>
+  1379→              </div>
+  1380→
+  1381→              <div className="space-y-2" id="field-symbol">
+  1382→                <FieldLabel
+  1383→                  required
+  1384→                  hint="Search by symbol (EURUSD) or name (Euro / US Dollar). Symbols not in the catalog can be used as custom instruments."
+  1385→                >
+  1386→                  Symbol / Pair
+  1387→                </FieldLabel>
+  1388→                <InstrumentSelector
+  1389→                  value={form.instrumentSymbol}
+  1390→                  onChange={(sym) => setField("instrumentSymbol", sym)}
+  1391→                  placeholder="Select instrument…"
+  1392→                />
+  1393→                {/* Instrument metadata preview — helps the user confirm the
+  1394→                    catalog hit and shows the spec that will drive price
+  1395→                    precision / unit labels / risk calc downstream. */}
+  1396→                {form.instrumentSymbol && (
+  1397→                  <div className="flex items-center flex-wrap gap-1.5 text-[11px] text-muted-foreground">
+  1398→                    <Badge
+  1399→                      variant="outline"
+  1400→                      className="text-[10px] uppercase px-1.5 py-0"
+  1401→                    >
+  1402→                      {selectedInstrument.market}
+  1403→                    </Badge>
+  1404→                    {isKnownInstrument ? (
+  1405→                      <>
+  1406→                        <span className="truncate">
+  1407→                          {selectedInstrument.displayName}
+  1408→                        </span>
+  1409→                        <span className="text-muted-foreground/60">·</span>
+  1410→                        <span className="tnum">
+  1411→                          {selectedInstrument.contractSize} units/lot
+  1412→                        </span>
+  1413→                        <span className="text-muted-foreground/60">·</span>
+  1414→                        <span className="tnum">
+  1415→                          {selectedInstrument.pipSize} pip
+  1416→                        </span>
+  1417→                        <span className="text-muted-foreground/60">·</span>
+  1418→                        <span className="tnum">{pricePrecision} dp</span>
+  1419→                      </>
+  1420→                    ) : (
+  1421→                      <span className="italic">
+  1422→                        Custom instrument — defaults applied (0.01 pip, 1 unit,
+  1423→                        2 dp).
+  1424→                      </span>
+  1425→                    )}
+  1426→                  </div>
+  1427→                )}
+  1428→              </div>
+  1429→
+  1430→              <div className="space-y-2">
+  1431→                <FieldLabel required>Direction</FieldLabel>
+  1432→                <RadioGroup
+  1433→                  className="grid grid-cols-2 gap-2"
+  1434→                  value={form.direction}
+  1435→                  onValueChange={(v) => setField("direction", v)}
+  1436→                >
+  1437→                  <label className={cn(
+  1438→                    "flex items-center gap-2 px-3 py-2 rounded-md border cursor-pointer transition-colors",
+  1439→                    form.direction === "long"
+  1440→                      ? "border-profit bg-profit/10"
+  1441→                      : "border-border hover:bg-muted/50",
+  1442→                  )}>
+  1443→                    <RadioGroupItem value="long" id="dir-long" />
+  1444→                    <span className="text-sm font-medium">Long</span>
+  1445→                  </label>
+  1446→                  <label className={cn(
+  1447→                    "flex items-center gap-2 px-3 py-2 rounded-md border cursor-pointer transition-colors",
+  1448→                    form.direction === "short"
+  1449→                      ? "border-loss bg-loss/10"
+  1450→                      : "border-border hover:bg-muted/50",
+  1451→                  )}>
+  1452→                    <RadioGroupItem value="short" id="dir-short" />
+  1453→                    <span className="text-sm font-medium">Short</span>
+  1454→                  </label>
+  1455→                </RadioGroup>
+  1456→              </div>
+  1457→
+  1458→              <div className="space-y-2">
+  1459→                <FieldLabel required hint="Draft, open, closed, or planned.">Trade Status</FieldLabel>
+  1460→                <Select value={form.status} onValueChange={(v) => setField("status", v)}>
+  1461→                  <SelectTrigger><SelectValue /></SelectTrigger>
+  1462→                  <SelectContent>
+  1463→                    {STATUSES.map((s) => (
+  1464→                      <SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>
+  1465→                    ))}
+  1466→                  </SelectContent>
+  1467→                </Select>
+  1468→              </div>
+  1469→
+  1470→              <div className="space-y-2">
+  1471→                <FieldLabel hint="Trading session (asian_range, london_open, ny_am, ny_lunch, ny_pm, off_hours).">Session</FieldLabel>
+  1472→                <Select value={form.session} onValueChange={(v) => setField("session", v)}>
+  1473→                  <SelectTrigger><SelectValue /></SelectTrigger>
+  1474→                  <SelectContent>
+  1475→                    {SESSIONS.map((s) => (
+  1476→                      <SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>
+  1477→                    ))}
+  1478→                  </SelectContent>
+  1479→                </Select>
+  1480→              </div>
+  1481→
+  1482→              <div className="space-y-2">
+  1483→                <FieldLabel hint="Chart timeframe used for the entry.">Timeframe</FieldLabel>
+  1484→                <Select value={form.timeframe} onValueChange={(v) => setField("timeframe", v)}>
+  1485→                  <SelectTrigger><SelectValue /></SelectTrigger>
+  1486→                  <SelectContent>
+  1487→                    {TIMEFRAMES.map((tf) => (
+  1488→                      <SelectItem key={tf} value={tf}>{tf}</SelectItem>
+  1489→                    ))}
+  1490→                  </SelectContent>
+  1491→                </Select>
+  1492→              </div>
+  1493→
+  1494→              <div className="space-y-2">
+  1495→                <FieldLabel hint="Specific news event the trade was taken around (none for no news / non-news setups).">News Event</FieldLabel>
+  1496→                <Select value={form.newsEvent ?? "none"} onValueChange={(v) => setField("newsEvent", v)}>
+  1497→                  <SelectTrigger><SelectValue placeholder="Select a news event" /></SelectTrigger>
+  1498→                  <SelectContent className="max-h-72">
+  1499→                    {NEWS_EVENTS.map((n) => (
+  1500→                      <SelectItem key={n.value} value={n.value}>{n.label}</SelectItem>
+  1501→                    ))}
+  1502→                  </SelectContent>
+  1503→                </Select>
+  1504→              </div>
+  1505→
+  1506→              <div className="space-y-2">
+  1507→                <FieldLabel required>Date</FieldLabel>
+  1508→                <Input
+  1509→                  type="date"
+  1510→                  value={form.tradeDate}
+  1511→                  onChange={(e) => setField("tradeDate", e.target.value)}
+  1512→                />
+  1513→              </div>
+  1514→
+  1515→              <div className="space-y-2">
+  1516→                <FieldLabel required>Time</FieldLabel>
+  1517→                <Input
+  1518→                  type="time"
+  1519→                  value={form.tradeTime}
+  1520→                  onChange={(e) => setField("tradeTime", e.target.value)}
+  1521→                />
+  1522→              </div>
+  1523→            </div>
+  1524→
+  1525→            <div className="space-y-2">
+  1526→              <FieldLabel hint="Why are you taking this trade? What's the core thesis?">Trade Thesis</FieldLabel>
+  1527→              <Textarea
+  1528→                value={form.thesisWhy}
+  1529→                onChange={(e) => setField("thesisWhy", e.target.value)}
+  1530→                rows={4}
+  1531→                placeholder="Bias, structure, liquidity target, entry trigger…"
+  1532→              />
+  1533→            </div>
+  1534→          </Card>
+  1535→
+  1536→          {/* Trade Evidence */}
+  1537→          <Card className="p-4 md:p-6 space-y-4 bg-background">
+  1538→            <div className="flex items-start justify-between gap-3 flex-wrap">
+  1539→              <div>
+  1540→                <h2 className="text-lg font-medium">Trade Evidence</h2>
+  1541→                <p className="text-sm text-muted-foreground">
+  1542→                  Upload screenshots, annotated charts, or video clips.
+  1543→                </p>
+  1544→              </div>
+  1545→              <div>
+  1546→                <input
+  1547→                  ref={fileInputRef}
+  1548→                  type="file"
+  1549→                  accept={ACCEPTED_MEDIA}
+  1550→                  multiple
+  1551→                  className="hidden"
+  1552→                  onChange={(e) => {
+  1553→                    if (e.target.files) handleFileUpload(e.target.files);
+  1554→                    e.target.value = "";
+  1555→                  }}
+  1556→                />
+  1557→                <Button variant="outline" onClick={() => fileInputRef.current?.click()}>
+  1558→                  <Upload className="h-4 w-4" /> Upload
+  1559→                </Button>
+  1560→              </div>
+  1561→            </div>
+  1562→
+  1563→            {form.uploadedMedia.length === 0 && (
+  1564→              <div className="rounded-md border border-dashed border-border p-8 text-center">
+  1565→                <ImageIcon className="h-8 w-8 mx-auto text-muted-foreground mb-2" />
+  1566→                <p className="text-sm text-muted-foreground">No evidence uploaded yet.</p>
+  1567→                <p className="text-xs text-muted-foreground mt-1">
+  1568→                  Click Upload to add screenshots or video clips.
+  1569→                </p>
+  1570→              </div>
+  1571→            )}
+  1572→
+  1573→            {form.uploadedMedia.length > 0 && (
+  1574→              <div className="space-y-4 max-h-[28rem] overflow-y-auto pr-1">
+  1575→                <p className="text-xs text-muted-foreground">
+  1576→                  Group each screenshot by the chart timeframe it captures. A
+  1577→                  complete trade record usually has at least one Higher
+  1578→                  Timeframe chart, one Execution Timeframe chart, and the Entry
+  1579→                  / Trigger chart.
+  1580→                </p>
+  1581→                {groupedMedia.map(({ group, items }) => (
+  1582→                  <div key={group} className="space-y-2">
+  1583→                    <div className="flex items-center justify-between gap-2 sticky top-0 z-10 bg-background/95 backdrop-blur px-1 py-1 border-b border-border">
+  1584→                      <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+  1585→                        {group}
+  1586→                      </h3>
+  1587→                      <span className="text-[10px] text-muted-foreground tnum">
+  1588→                        {items.length} {items.length === 1 ? "item" : "items"}
+  1589→                      </span>
+  1590→                    </div>
+  1591→                    {items.map(({ m, i }) => {
+  1592→                      const status: "uploading" | "uploaded" | "failed" =
+  1593→                        m.status ?? "uploaded";
+  1594→
+  1595→                      // ── Uploading: spinner + per-file progress bar + Cancel ──
+  1596→                      if (status === "uploading") {
+  1597→                        const pct = typeof m.progress === "number" ? m.progress : 0;
+  1598→                        return (
+  1599→                          <div
+  1600→                            key={m.tempId ?? m.id ?? i}
+  1601→                            className="rounded-lg border border-border overflow-hidden bg-background"
+  1602→                          >
+  1603→                            <div className="flex items-center justify-between gap-2 px-3 py-2 border-b border-border bg-muted/30">
+  1604→                              <div className="min-w-0 flex items-center gap-2">
+  1605→                                <Loader2 className="h-4 w-4 animate-spin text-muted-foreground flex-shrink-0" />
+  1606→                                <div className="min-w-0">
+  1607→                                  <div className="text-xs font-medium truncate">
+  1608→                                    {m.originalName ?? m.filename ?? `Media ${i + 1}`}
+  1609→                                  </div>
+  1610→                                  <div className="text-[10px] text-muted-foreground tnum">
+  1611→                                    Uploading {pct}%
+  1612→                                    {m.fileSize ? ` · ${(m.fileSize / 1024).toFixed(0)} KB` : ""}
+  1613→                                  </div>
+  1614→                                </div>
+  1615→                              </div>
+  1616→                              <Button
+  1617→                                variant="ghost"
+  1618→                                size="icon"
+  1619→                                className="text-muted-foreground hover:text-loss flex-shrink-0"
+  1620→                                onClick={() => cancelUpload(m.tempId)}
+  1621→                                aria-label="Cancel upload"
+  1622→                              >
+  1623→                                <X className="h-4 w-4" />
+  1624→                              </Button>
+  1625→                            </div>
+  1626→                            <div className="p-3">
+  1627→                              <div
+  1628→                                className="h-1.5 bg-muted rounded-full overflow-hidden w-full"
+  1629→                                role="progressbar"
+  1630→                                aria-valuenow={pct}
+  1631→                                aria-valuemin={0}
+  1632→                                aria-valuemax={100}
+  1633→                                aria-label={`Uploading ${m.originalName ?? m.filename ?? `Media ${i + 1}`}`}
+  1634→                              >
+  1635→                                <div
+  1636→                                  style={{ width: `${pct}%` }}
+  1637→                                  className="h-full bg-primary transition-all duration-150"
+  1638→                                />
+  1639→                              </div>
+  1640→                            </div>
+  1641→                          </div>
+  1642→                        );
+  1643→                      }
+  1644→
+  1645→                      // ── Failed: alert icon + Retry + Remove ──
+  1646→                      if (status === "failed") {
+  1647→                        return (
+  1648→                          <div
+  1649→                            key={m.tempId ?? m.id ?? i}
+  1650→                            className="rounded-lg border border-loss/40 overflow-hidden bg-background"
+  1651→                          >
+  1652→                            <div className="flex items-center justify-between gap-2 px-3 py-2 border-b border-loss/30 bg-loss/5">
+  1653→                              <div className="min-w-0 flex items-center gap-2">
+  1654→                                <AlertTriangle className="h-4 w-4 text-loss flex-shrink-0" />
+  1655→                                <div className="min-w-0">
+  1656→                                  <div className="text-xs font-medium truncate">
+  1657→                                    {m.originalName ?? m.filename ?? `Media ${i + 1}`}
+  1658→                                  </div>
+  1659→                                  <div className="text-[10px] text-muted-foreground">
+  1660→                                    Upload failed
+  1661→                                    {m.fileSize ? ` · ${(m.fileSize / 1024).toFixed(0)} KB` : ""}
+  1662→                                  </div>
+  1663→                                </div>
+  1664→                              </div>
+  1665→                              <div className="flex items-center gap-1 flex-shrink-0">
+  1666→                                <Button
+  1667→                                  variant="ghost"
+  1668→                                  size="sm"
+  1669→                                  className="h-8 text-xs"
+  1670→                                  onClick={() => retryUpload(m.tempId)}
+  1671→                                >
+  1672→                                  <RotateCcw className="h-3.5 w-3.5" /> Retry
+  1673→                                </Button>
+  1674→                                <Button
+  1675→                                  variant="ghost"
+  1676→                                  size="icon"
+  1677→                                  className="text-muted-foreground hover:text-loss"
+  1678→                                  onClick={() => cancelUpload(m.tempId)}
+  1679→                                  aria-label="Remove failed upload"
+  1680→                                >
+  1681→                                  <X className="h-4 w-4" />
+  1682→                                </Button>
+  1683→                              </div>
+  1684→                            </div>
+  1685→                          </div>
+  1686→                        );
+  1687→                      }
+  1688→
+  1689→                      // ── Uploaded: full preview + timeframe + caption + delete ──
+  1690→                      return (
+  1691→                        <div key={m.tempId ?? m.id ?? i} className="rounded-lg border border-border overflow-hidden bg-background">
+  1692→                          <div className="flex items-center justify-between gap-2 px-3 py-2 border-b border-border bg-muted/30">
+  1693→                            <div className="min-w-0">
+  1694→                              <div className="text-xs font-medium truncate">{m.originalName ?? m.filename ?? `Media ${i + 1}`}</div>
+  1695→                              <div className="text-[10px] text-muted-foreground">
+  1696→                                {(m.kind ?? "image").toUpperCase()}
+  1697→                                {m.sizeBytes ? ` · ${(m.sizeBytes / 1024).toFixed(0)} KB` : ""}
+  1698→                              </div>
+  1699→                            </div>
+  1700→                            <Button
+  1701→                              variant="ghost"
+  1702→                              size="icon"
+  1703→                              className="text-muted-foreground hover:text-loss"
+  1704→                              onClick={() => removeMedia(i)}
+  1705→                              aria-label="Delete evidence"
+  1706→                            >
+  1707→                              <Trash2 className="h-4 w-4" />
+  1708→                            </Button>
+  1709→                          </div>
+  1710→
+  1711→                          {m.kind === "video" ? (
+  1712→                            <video
+  1713→                              src={m.url}
+  1714→                              controls
+  1715→                              className="w-full max-h-80 bg-black"
+  1716→                            />
+  1717→                          ) : (
+  1718→                            <ImageAnnotator
+  1719→                              src={m.url}
+  1720→                              alt={m.originalName ?? `Evidence ${i + 1}`}
+  1721→                              annotations={m.annotations ?? []}
+  1722→                              onChange={(next) => setMediaAnnotations(i, next)}
+  1723→                            />
+  1724→                          )}
+  1725→
+  1726→                          <div className="p-3 space-y-2">
+  1727→                            <div className="grid sm:grid-cols-2 gap-2">
+  1728→                              <div className="space-y-1">
+  1729→                                <Label className="text-xs text-muted-foreground">
+  1730→                                  Timeframe {group === "Unassigned" && <span className="text-warning">*</span>}
+  1731→                                </Label>
+  1732→                                <Select
+  1733→                                  value={m.timeframe ?? "__none"}
+  1734→                                  onValueChange={(v) => setMediaTimeframe(i, v === "__none" ? "" : v)}
+  1735→                                >
+  1736→                                  <SelectTrigger className="h-8 text-xs">
+  1737→                                    <SelectValue placeholder="Select timeframe" />
+  1738→                                  </SelectTrigger>
+  1739→                                  <SelectContent className="max-h-72">
+  1740→                                    <SelectItem value="__none">— None —</SelectItem>
+  1741→                                    {TIMEFRAME_GROUPS.map((g) => {
+  1742→                                      const groupOptions = MEDIA_TIMEFRAMES.filter((t) => t.group === g);
+  1743→                                      if (groupOptions.length === 0) return null;
+  1744→                                      return (
+  1745→                                        <SelectGroup key={g}>
+  1746→                                          <SelectLabel className="text-[10px] uppercase tracking-wide text-muted-foreground">
+  1747→                                            {g}
+  1748→                                          </SelectLabel>
+  1749→                                          {groupOptions.map((t) => (
+  1750→                                            <SelectItem key={t.value} value={t.value}>
+  1751→                                              {t.label}
+  1752→                                            </SelectItem>
+  1753→                                          ))}
+  1754→                                        </SelectGroup>
+  1755→                                      );
+  1756→                                    })}
+  1757→                                  </SelectContent>
+  1758→                                </Select>
+  1759→                              </div>
+  1760→                              <div className="space-y-1">
+  1761→                                <Label className="text-xs text-muted-foreground">
+  1762→                                  Caption (optional)
+  1763→                                </Label>
+  1764→                                <Input
+  1765→                                  value={m.caption ?? ""}
+  1766→                                  onChange={(e) => setMediaCaption(i, e.target.value)}
+  1767→                                  placeholder="What does this evidence show?"
+  1768→                                  className="h-8 text-xs"
+  1769→                                />
+  1770→                              </div>
+  1771→                            </div>
+  1772→                            {m.timeframe && (
+  1773→                              <p className="text-[10px] text-muted-foreground">
+  1774→                                {getTimeframeLabel(m.timeframe)} · {getTimeframeGroup(m.timeframe)}
+  1775→                              </p>
+  1776→                            )}
+  1777→                          </div>
+  1778→                        </div>
+  1779→                      );
+  1780→                    })}
+  1781→                  </div>
+  1782→                ))}
+  1783→              </div>
+  1784→            )}
+  1785→          </Card>
+  1786→
+  1787→          {/* Advanced — collapsible */}
+  1788→          <Collapsible open={advancedOpen} onOpenChange={setAdvancedOpen}>
+  1789→            <Card className="p-4 md:p-6 space-y-4 bg-background">
+  1790→              <CollapsibleTrigger asChild>
+  1791→                <button
+  1792→                  type="button"
+  1793→                  className="flex items-center justify-between w-full text-left"
+  1794→                >
+  1795→                  <div>
+  1796→                    <h2 className="text-lg font-medium">Advanced</h2>
+  1797→                    <p className="text-sm text-muted-foreground">
+  1798→                      ICT setup, psychology, behavior flags, tags.
+  1799→                    </p>
+  1800→                  </div>
+  1801→                  <ChevronDown
+  1802→                    className={cn(
+  1803→                      "h-5 w-5 text-muted-foreground transition-transform",
+  1804→                      advancedOpen && "rotate-180",
+  1805→                    )}
+  1806→                  />
+  1807→                </button>
+  1808→              </CollapsibleTrigger>
+  1809→
+  1810→              <CollapsibleContent className="space-y-4">
+  1811→                {/* ICT Setup */}
+  1812→                <div className="rounded-md border border-border p-3 space-y-3">
+  1813→                  <h3 className="text-sm font-medium">ICT Setup</h3>
+  1814→                  <div className="grid sm:grid-cols-2 gap-3">
+  1815→                    <div className="space-y-2">
+  1816→                      <Label>Weekly Bias</Label>
+  1817→                      <Select
+  1818→                        value={form.setup.htfContext.weeklyBias}
+  1819→                        onValueChange={(v) => setField("setup.htfContext.weeklyBias", v)}
+  1820→                      >
+  1821→                        <SelectTrigger><SelectValue /></SelectTrigger>
+  1822→                        <SelectContent>
+  1823→                          <SelectItem value="bullish">Bullish</SelectItem>
+  1824→                          <SelectItem value="bearish">Bearish</SelectItem>
+  1825→                          <SelectItem value="neutral">Neutral</SelectItem>
+  1826→                        </SelectContent>
+  1827→                      </Select>
+  1828→                    </div>
+  1829→                    <div className="space-y-2">
+  1830→                      <Label>Daily Bias</Label>
+  1831→                      <Select
+  1832→                        value={form.setup.htfContext.dailyBias}
+  1833→                        onValueChange={(v) => setField("setup.htfContext.dailyBias", v)}
+  1834→                      >
+  1835→                        <SelectTrigger><SelectValue /></SelectTrigger>
+  1836→                        <SelectContent>
+  1837→                          <SelectItem value="bullish">Bullish</SelectItem>
+  1838→                          <SelectItem value="bearish">Bearish</SelectItem>
+  1839→                          <SelectItem value="neutral">Neutral</SelectItem>
+  1840→                        </SelectContent>
+  1841→                      </Select>
+  1842→                    </div>
+  1843→                  </div>
+  1844→                  <div className="space-y-2">
+  1845→                    <Label>Liquidity Targets</Label>
+  1846→                    <div className="flex flex-wrap gap-2">
+  1847→                      {["PDH", "PDL", "PWH", "PWL", "equal highs", "equal lows", "buy-side", "sell-side", "session liquidity"].map((opt) => {
+  1848→                        const active = (form.setup.liquidity ?? []).includes(opt);
+  1849→                        return (
+  1850→                          <button
+  1851→                            key={opt}
+  1852→                            type="button"
+  1853→                            onClick={() => toggleArrayField("setup.liquidity", opt)}
+  1854→                            className={cn(
+  1855→                              "px-2 py-1 rounded-md text-xs border transition-colors",
+  1856→                              active
+  1857→                                ? "bg-primary text-primary-foreground border-primary"
+  1858→                                : "border-border hover:bg-muted",
+  1859→                            )}
+  1860→                          >
+  1861→                            {opt}
+  1862→                          </button>
+  1863→                        );
+  1864→                      })}
+  1865→                    </div>
+  1866→                  </div>
+  1867→                  <div className="space-y-2">
+  1868→                    <Label>Market Structure</Label>
+  1869→                    <div className="flex flex-wrap gap-2">
+  1870→                      {["BOS", "MSS", "displacement", "protected high", "protected low", "structure shift"].map((opt) => {
+  1871→                        const active = (form.setup.structure ?? []).includes(opt);
+  1872→                        return (
+  1873→                          <button
+  1874→                            key={opt}
+  1875→                            type="button"
+  1876→                            onClick={() => toggleArrayField("setup.structure", opt)}
+  1877→                            className={cn(
+  1878→                              "px-2 py-1 rounded-md text-xs border transition-colors",
+  1879→                              active
+  1880→                                ? "bg-primary text-primary-foreground border-primary"
+  1881→                                : "border-border hover:bg-muted",
+  1882→                            )}
+  1883→                          >
+  1884→                            {opt}
+  1885→                          </button>
+  1886→                        );
+  1887→                      })}
+  1888→                    </div>
+  1889→                  </div>
+  1890→                  <div className="space-y-2">
+  1891→                    <Label>Entry Model</Label>
+  1892→                    <Select
+  1893→                      value={form.setup.entryModel}
+  1894→                      onValueChange={(v) => setField("setup.entryModel", v)}
+  1895→                    >
+  1896→                      <SelectTrigger><SelectValue /></SelectTrigger>
+  1897→                      <SelectContent>
+  1898→                        {["liquidity sweep", "displacement", "FVG", "Order Block", "Breaker", "Mitigation", "SMT", "retracement"].map((o) => (
+  1899→                          <SelectItem key={o} value={o}>{o}</SelectItem>
+  1900→                        ))}
+  1901→                      </SelectContent>
+  1902→                    </Select>
+  1903→                  </div>
+  1904→                </div>
+  1905→
+  1906→                {/* Psychology — before */}
+  1907→                <div className="rounded-md border border-border p-3 space-y-3">
+  1908→                  <h3 className="text-sm font-medium">Psychology — Before</h3>
+  1909→                  <div className="space-y-2">
+  1910→                    <Label>Mood Before</Label>
+  1911→                    <div className="flex flex-wrap gap-2">
+  1912→                      {PSYCH_BEFORE.map((opt) => {
+  1913→                        const active = (form.psychBefore.moodTags ?? []).includes(opt);
+  1914→                        return (
+  1915→                          <button
+  1916→                            key={opt}
+  1917→                            type="button"
+  1918→                            onClick={() => toggleArrayField("psychBefore.moodTags", opt)}
+  1919→                            className={cn(
+  1920→                              "px-2 py-1 rounded-md text-xs border transition-colors",
+  1921→                              active
+  1922→                                ? "bg-primary text-primary-foreground border-primary"
+  1923→                                : "border-border hover:bg-muted",
+  1924→                            )}
+  1925→                          >
+  1926→                            {opt}
+  1927→                          </button>
+  1928→                        );
+  1929→                      })}
+  1930→                    </div>
+  1931→                  </div>
+  1932→                  <div className="grid sm:grid-cols-2 gap-3">
+  1933→                    <div className="space-y-2">
+  1934→                      <Label>Confidence (1-5)</Label>
+  1935→                      <Input
+  1936→                        type="number"
+  1937→                        min={1}
+  1938→                        max={5}
+  1939→                        value={form.psychBefore.confidence}
+  1940→                        onChange={(e) => setField("psychBefore.confidence", Number(e.target.value))}
+  1941→                      />
+  1942→                    </div>
+  1943→                    <div className="space-y-2">
+  1944→                      <Label>Energy (1-5)</Label>
+  1945→                      <Input
+  1946→                        type="number"
+  1947→                        min={1}
+  1948→                        max={5}
+  1949→                        value={form.psychBefore.energy}
+  1950→                        onChange={(e) => setField("psychBefore.energy", Number(e.target.value))}
+  1951→                      />
+  1952→                    </div>
+  1953→                  </div>
+  1954→                </div>
+  1955→
+  1956→                {/* Psychology — after */}
+  1957→                <div className="rounded-md border border-border p-3 space-y-3">
+  1958→                  <h3 className="text-sm font-medium">Psychology — After</h3>
+  1959→                  <div className="space-y-2">
+  1960→                    <Label>Mood After</Label>
+  1961→                    <div className="flex flex-wrap gap-2">
+  1962→                      {PSYCH_AFTER.map((opt) => {
+  1963→                        const active = (form.psychAfter.moodTags ?? []).includes(opt);
+  1964→                        return (
+  1965→                          <button
+  1966→                            key={opt}
+  1967→                            type="button"
+  1968→                            onClick={() => toggleArrayField("psychAfter.moodTags", opt)}
+  1969→                            className={cn(
+  1970→                              "px-2 py-1 rounded-md text-xs border transition-colors",
+  1971→                              active
+  1972→                                ? "bg-primary text-primary-foreground border-primary"
+  1973→                                : "border-border hover:bg-muted",
+  1974→                            )}
+  1975→                          >
+  1976→                            {opt}
+  1977→                          </button>
+  1978→                        );
+  1979→                      })}
+  1980→                    </div>
+  1981→                  </div>
+  1982→                </div>
+  1983→
+  1984→                {/* Behavior flags */}
+  1985→                <div className="rounded-md border border-border p-3 space-y-3">
+  1986→                  <h3 className="text-sm font-medium">Behavior Flags</h3>
+  1987→                  <div className="flex flex-wrap gap-2">
+  1988→                    {BEHAVIOR_FLAGS.map((opt) => {
+  1989→                      const active = (form.behaviorFlags ?? []).includes(opt);
+  1990→                      return (
+  1991→                        <button
+  1992→                          key={opt}
+  1993→                          type="button"
+  1994→                          onClick={() => toggleArrayField("behaviorFlags", opt)}
+  1995→                          className={cn(
+  1996→                            "px-2 py-1 rounded-md text-xs border transition-colors",
+  1997→                            active
+  1998→                              ? "bg-loss text-white border-loss"
+  1999→                              : "border-border hover:bg-muted",
+  2000→                          )}
+
+[showing lines 1-2000 of 2721; use offset=2001 with limit to continue reading]

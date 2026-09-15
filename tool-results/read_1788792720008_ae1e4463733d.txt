@@ -1,0 +1,728 @@
+     1→"use client";
+     2→
+     3→import { useQuery, useQueryClient } from "@tanstack/react-query";
+     4→import { useState } from "react";
+     5→import { Card } from "@/components/ui/card";
+     6→import { Button } from "@/components/ui/button";
+     7→import { Input } from "@/components/ui/input";
+     8→import { Label } from "@/components/ui/label";
+     9→import { Textarea } from "@/components/ui/textarea";
+    10→import { Badge } from "@/components/ui/badge";
+    11→import { Skeleton } from "@/components/ui/skeleton";
+    12→import {
+    13→  Dialog,
+    14→  DialogContent,
+    15→  DialogHeader,
+    16→  DialogTitle,
+    17→  DialogTrigger,
+    18→} from "@/components/ui/dialog";
+    19→import {
+    20→  Select,
+    21→  SelectContent,
+    22→  SelectItem,
+    23→  SelectTrigger,
+    24→  SelectValue,
+    25→} from "@/components/ui/select";
+    26→import { Plus, BookMarked, GitBranch, FlaskConical, ChevronRight, Loader2, Trash2 } from "lucide-react";
+    27→import { toast } from "sonner";
+    28→import { FieldLabel } from "@/components/common/field-label";
+    29→import { dToNumber } from "@/lib/decimal";
+    30→import { formatSignedCents } from "@/lib/money";
+    31→import { cn } from "@/lib/utils";
+    32→
+    33→async function fetchStrategies() {
+    34→  const res = await fetch("/api/strategies", { cache: "no-store" });
+    35→  return res.json();
+    36→}
+    37→
+    38→export function PlaybooksView() {
+    39→  const qc = useQueryClient();
+    40→  const { data, isLoading } = useQuery({ queryKey: ["strategies"], queryFn: fetchStrategies });
+    41→  const [selectedId, setSelectedId] = useState<string | null>(null);
+    42→  const [newVersionOpen, setNewVersionOpen] = useState(false);
+    43→  const [newStrategyOpen, setNewStrategyOpen] = useState(false);
+    44→
+    45→  const strategies = data?.items ?? [];
+    46→  const selected = selectedId ? strategies.find((s: any) => s.id === selectedId) : null;
+    47→
+    48→  if (isLoading) return <div className="p-4 md:p-6"><Skeleton className="h-96" /></div>;
+    49→
+    50→  return (
+    51→    <div className="p-4 md:p-6 grid lg:grid-cols-3 gap-4">
+    52→      {/* List */}
+    53→      <Card className="p-3 lg:col-span-1">
+    54→        <div className="flex items-center justify-between mb-3">
+    55→          <h1 className="font-semibold">Strategies</h1>
+    56→          <Dialog open={newStrategyOpen} onOpenChange={setNewStrategyOpen}>
+    57→            <DialogTrigger asChild>
+    58→              <Button size="sm" variant="ghost"><Plus className="h-4 w-4" /></Button>
+    59→            </DialogTrigger>
+    60→            <NewStrategyDialog onClose={() => setNewStrategyOpen(false)} onCreated={() => qc.invalidateQueries({ queryKey: ["strategies"] })} />
+    61→          </Dialog>
+    62→        </div>
+    63→        {strategies.length === 0 ? (
+    64→          <p className="text-sm text-muted-foreground p-4">No strategies yet. Create your first playbook.</p>
+    65→        ) : (
+    66→          <div className="space-y-1">
+    67→            {strategies.map((s: any) => (
+    68→              <button
+    69→                key={s.id}
+    70→                onClick={() => setSelectedId(s.id)}
+    71→                className={cn(
+    72→                  "w-full text-left p-2 rounded-md list-item-hover",
+    73→                  selectedId === s.id && "active",
+    74→                )}
+    75→              >
+    76→                <div className="font-medium text-sm">{s.name}</div>
+    77→                <div className="text-xs text-muted-foreground">
+    78→                  {s.versions?.length ?? 0} version{s.versions?.length === 1 ? "" : "s"} · {s.status}
+    79→                </div>
+    80→              </button>
+    81→            ))}
+    82→          </div>
+    83→        )}
+    84→      </Card>
+    85→
+    86→      {/* Detail */}
+    87→      <div className="lg:col-span-2 space-y-4">
+    88→        {!selected ? (
+    89→          <Card className="p-8 text-center">
+    90→            <BookMarked className="h-8 w-8 mx-auto text-muted-foreground mb-3" />
+    91→            <h3 className="font-medium">Select a strategy</h3>
+    92→            <p className="text-sm text-muted-foreground mt-1">
+    93→              Strategies are version-controlled engineering artifacts. Pick one to view its rules, versions and performance.
+    94→            </p>
+    95→          </Card>
+    96→        ) : (
+    97→          <StrategyDetail
+    98→            strategy={selected}
+    99→            onNewVersion={() => setNewVersionOpen(true)}
+   100→            newVersionOpen={newVersionOpen}
+   101→            onCloseVersion={() => setNewVersionOpen(false)}
+   102→            onInvalidated={() => qc.invalidateQueries({ queryKey: ["strategies"] })}
+   103→            onDeleted={() => {
+   104→              qc.invalidateQueries({ queryKey: ["strategies"] });
+   105→              setSelectedId(null);
+   106→            }}
+   107→          />
+   108→        )}
+   109→      </div>
+   110→    </div>
+   111→  );
+   112→}
+   113→
+   114→function StrategyDetail({ strategy, onNewVersion, newVersionOpen, onCloseVersion, onInvalidated, onDeleted }: any) {
+   115→  const qc = useQueryClient();
+   116→  const { data: fullStrategy } = useQuery({
+   117→    queryKey: ["strategy", strategy.id],
+   118→    queryFn: async () => {
+   119→      const res = await fetch(`/api/strategies/${strategy.id}`, { cache: "no-store" });
+   120→      return res.json();
+   121→    },
+   122→  });
+   123→
+   124→  // Default to latest version
+   125→  const versions = fullStrategy?.versions ?? [];
+   126→  const [selectedVersionId, setSelectedVersionId] = useState<string | null>(null);
+   127→  const selectedVersion = versions.find((v: any) => v.id === selectedVersionId) ?? versions[0];
+   128→
+   129→  return (
+   130→    <>
+   131→      <Card className="p-4">
+   132→        <div className="flex items-start justify-between gap-3">
+   133→          <div>
+   134→            <h1 className="text-xl font-semibold tracking-tight">{strategy.name}</h1>
+   135→            <p className="text-sm text-muted-foreground mt-1">{strategy.description}</p>
+   136→          </div>
+   137→          <div className="flex gap-2">
+   138→            <Button size="sm" variant="outline" onClick={onNewVersion}>
+   139→              <GitBranch className="h-4 w-4" /> New Version
+   140→            </Button>
+   141→            <Button
+   142→              size="sm"
+   143→              variant="outline"
+   144→              className="text-loss hover:text-loss"
+   145→              onClick={async () => {
+   146→                if (!confirm("Delete this strategy and all its versions? This cannot be undone.")) return;
+   147→                const res = await fetch(`/api/strategies/${strategy.id}`, { method: "DELETE" });
+   148→                if (res.ok) {
+   149→                  toast.success("Strategy deleted.");
+   150→                  onDeleted();
+   151→                } else {
+   152→                  toast.error("Failed to delete strategy.");
+   153→                }
+   154→              }}
+   155→            >
+   156→              <Trash2 className="h-4 w-4" /> Delete
+   157→            </Button>
+   158→          </div>
+   159→        </div>
+   160→        <div className="mt-3 grid grid-cols-2 sm:grid-cols-4 gap-3 text-sm">
+   161→          <div><span className="text-muted-foreground">Market:</span> {strategy.market ?? "-"}</div>
+   162→          <div><span className="text-muted-foreground">Timeframe:</span> {strategy.timeframe ?? "-"}</div>
+   163→          <div><span className="text-muted-foreground">Session:</span> {strategy.session ?? "-"}</div>
+   164→          <div><span className="text-muted-foreground">Status:</span> {strategy.status}</div>
+   165→        </div>
+   166→        {strategy.checklistConfig && (
+   167→          <div className="mt-3 flex items-center gap-2 text-sm">
+   168→            <Badge variant="outline">Checklist: {strategy.checklistConfig.name}</Badge>
+   169→          </div>
+   170→        )}
+   171→        {!strategy.checklistConfig && (
+   172→          <div className="mt-3 text-xs text-muted-foreground">
+   173→            No setup checklist associated. Trades using this strategy will not have A+ setup scoring.
+   174→          </div>
+   175→        )}
+   176→      </Card>
+   177→
+   178→      {/* Versions & performance */}
+   179→      <Card className="p-4">
+   180→        <h2 className="font-medium mb-3">Versions</h2>
+   181→        <div className="overflow-x-auto rounded-md border border-border">
+   182→          <table className="w-full text-sm">
+   183→            <thead className="bg-muted/50 text-xs uppercase text-muted-foreground">
+   184→              <tr>
+   185→                <th className="px-3 py-2 text-left">Version</th>
+   186→                <th className="px-3 py-2 text-right">Trades</th>
+   187→                <th className="px-3 py-2 text-right">Win Rate</th>
+   188→                <th className="px-3 py-2 text-right">Avg R</th>
+   189→                <th className="px-3 py-2 text-right">P&L</th>
+   190→                <th className="px-3 py-2 text-left hidden md:table-cell">Reason</th>
+   191→              </tr>
+   192→            </thead>
+   193→            <tbody>
+   194→              {(fullStrategy?.versionPerformance ?? []).map((v: any) => (
+   195→                <tr
+   196→                  key={v.versionId}
+   197→                  className={cn(
+   198→                    "border-t border-border cursor-pointer transition-colors hover:bg-muted/40",
+   199→                    selectedVersion?.id === v.versionId && "bg-muted/50",
+   200→                  )}
+   201→                  onClick={() => setSelectedVersionId(v.versionId)}
+   202→                >
+   203→                  <td className="px-3 py-2 font-medium">v{v.versionLabel}</td>
+   204→                  <td className="px-3 py-2 text-right tnum">{v.trades}</td>
+   205→                  <td className="px-3 py-2 text-right tnum">{v.winRate ? (dToNumber(v.winRate) * 100).toFixed(0) + "%" : "N/A"}</td>
+   206→                  <td className={cn("px-3 py-2 text-right tnum", v.avgR && dToNumber(v.avgR) > 0 ? "text-profit" : v.avgR && dToNumber(v.avgR) < 0 ? "text-loss" : "")}>
+   207→                    {v.avgR ? dToNumber(v.avgR).toFixed(2) : "N/A"}
+   208→                  </td>
+   209→                  <td className={cn("px-3 py-2 text-right tnum", v.pnlCents > 0 ? "text-profit" : v.pnlCents < 0 ? "text-loss" : "")}>
+   210→                    {formatSignedCents(v.pnlCents).text}
+   211→                  </td>
+   212→                  <td className="px-3 py-2 text-xs text-muted-foreground hidden md:table-cell">
+   213→                    {versions.find((vv: any) => vv.id === v.versionId)?.changeReason ?? "-"}
+   214→                  </td>
+   215→                </tr>
+   216→              ))}
+   217→              {(fullStrategy?.versionPerformance ?? []).length === 0 && (
+   218→                <tr><td colSpan={6} className="px-3 py-4 text-center text-muted-foreground">No versions yet.</td></tr>
+   219→              )}
+   220→            </tbody>
+   221→          </table>
+   222→        </div>
+   223→      </Card>
+   224→
+   225→      {/* Rules of selected version */}
+   226→      {selectedVersion && (
+   227→        <Card className="p-4">
+   228→          <div className="flex items-center justify-between mb-3">
+   229→            <h2 className="font-medium">Rules (v{selectedVersion.versionLabel})</h2>
+   230→            <Badge variant="outline">v{selectedVersion.versionLabel}</Badge>
+   231→          </div>
+   232→          {selectedVersion.changeReason && (
+   233→            <div className="mb-3 text-sm">
+   234→              <span className="text-muted-foreground">Change reason:</span> {selectedVersion.changeReason}
+   235→            </div>
+   236→          )}
+   237→          {selectedVersion.changeSummary && (
+   238→            <div className="mb-3 text-sm">
+   239→              <span className="text-muted-foreground">Summary:</span> {selectedVersion.changeSummary}
+   240→            </div>
+   241→          )}
+   242→          <RulesView rulesJson={selectedVersion.rulesJson} />
+   243→        </Card>
+   244→      )}
+   245→
+   246→      <Dialog open={newVersionOpen} onOpenChange={onCloseVersion}>
+   247→        <NewVersionDialog
+   248→          strategyId={strategy.id}
+   249→          latestLabel={versions[0]?.versionLabel}
+   250→          latestRulesJson={versions[0]?.rulesJson}
+   251→          onClose={onCloseVersion}
+   252→          onCreated={() => {
+   253→            onInvalidated();
+   254→            onCloseVersion();
+   255→          }}
+   256→        />
+   257→      </Dialog>
+   258→    </>
+   259→  );
+   260→}
+   261→
+   262→function RulesView({ rulesJson }: { rulesJson: string }) {
+   263→  let rules: any = {};
+   264→  try { rules = JSON.parse(rulesJson ?? "{}"); } catch {}
+   265→  const sections = ["entry", "stop", "target", "management", "invalidation"];
+   266→  const thresholds = rules.gradingThresholds;
+   267→  return (
+   268→    <div className="space-y-4">
+   269→      {thresholds && (
+   270→        <div className="flex flex-wrap gap-2">
+   271→          {["A+", "A", "B", "C"].map((g) => (
+   272→            <Badge key={g} variant="outline" className="text-xs">
+   273→              {g} ≥ {Math.round((thresholds[g] ?? 0) * 100)}%
+   274→            </Badge>
+   275→          ))}
+   276→        </div>
+   277→      )}
+   278→      <div className="grid sm:grid-cols-2 gap-3 text-sm">
+   279→        {sections.map((sec) => {
+   280→          const sectionRules = Array.isArray(rules[sec]) ? rules[sec] : [];
+   281→          if (sectionRules.length === 0) return null;
+   282→          return (
+   283→            <div key={sec} className="rounded-md border border-border p-3">
+   284→              <div className="text-xs uppercase tracking-wide text-muted-foreground mb-1">{sec}</div>
+   285→              <ul className="space-y-1">
+   286→                {sectionRules.map((r: any, i: number) => {
+   287→                  const text = typeof r === "string" ? r : r.text;
+   288→                  const weight = typeof r === "object" ? r.weight : 1;
+   289→                  const required = typeof r === "object" ? r.required : true;
+   290→                  return (
+   291→                    <li key={i} className="text-sm flex items-center gap-2">
+   292→                      <span>{text}</span>
+   293→                      {required && <Badge variant="outline" className="text-[10px] text-loss">Required</Badge>}
+   294→                      <span className="text-[10px] text-muted-foreground ml-auto">×{weight}</span>
+   295→                    </li>
+   296→                  );
+   297→                })}
+   298→              </ul>
+   299→            </div>
+   300→          );
+   301→        })}
+   302→      </div>
+   303→    </div>
+   304→  );
+   305→}
+   306→
+   307→function NewStrategyDialog({ onClose, onCreated }: { onClose: () => void; onCreated: () => void }) {
+   308→  const [name, setName] = useState("");
+   309→  const [description, setDescription] = useState("");
+   310→  const [purpose, setPurpose] = useState("");
+   311→  const [instruments, setInstruments] = useState("");
+   312→  const [market, setMarket] = useState("forex");
+   313→  const [timeframe, setTimeframe] = useState("5m-1h");
+   314→  const [session, setSession] = useState("london");
+   315→  const [checklistConfigId, setChecklistConfigId] = useState("");
+   316→  // Rules: each section is a newline-separated list
+   317→  const [entryRules, setEntryRules] = useState("");
+   318→  const [stopRules, setStopRules] = useState("");
+   319→  const [targetRules, setTargetRules] = useState("");
+   320→  const [managementRules, setManagementRules] = useState("");
+   321→  const [invalidationRules, setInvalidationRules] = useState("");
+   322→  // Weight + required configuration
+   323→  const [ruleConfig, setRuleConfig] = useState("");
+   324→  // Grading thresholds
+   325→  const [aplusThreshold, setAplusThreshold] = useState("0.9");
+   326→  const [aThreshold, setAThreshold] = useState("0.75");
+   327→  const [bThreshold, setBThreshold] = useState("0.6");
+   328→  const [cThreshold, setCThreshold] = useState("0.4");
+   329→  const [loading, setLoading] = useState(false);
+   330→
+   331→  // Fetch checklists for the association selector
+   332→  const { data: checklistsData } = useQuery({
+   333→    queryKey: ["checklists"],
+   334→    queryFn: async () => {
+   335→      const res = await fetch("/api/checklists", { cache: "no-store" });
+   336→      if (!res.ok) return null;
+   337→      return res.json();
+   338→    },
+   339→  });
+   340→  const checklists: any[] = checklistsData?.items ?? [];
+   341→
+   342→  function parseRules(text: string): string[] {
+   343→    return text
+   344→      .split("\n")
+   345→      .map((l) => l.trim())
+   346→      .filter((l) => l.length > 0);
+   347→  }
+   348→
+   349→  // Parse the weight/required config text into a map
+   350→  function parseRuleConfig(text: string): Map<string, { weight: number; required: boolean }> {
+   351→    const map = new Map<string, { weight: number; required: boolean }>();
+   352→    for (const line of text.split("\n")) {
+   353→      const parts = line.split("|").map((p) => p.trim());
+   354→      if (parts.length >= 1 && parts[0]) {
+   355→        const ruleText = parts[0];
+   356→        const weight = parts[1] ? parseFloat(parts[1]) || 1 : 1;
+   357→        const required = parts[2] ? parts[2].toLowerCase() === "required" : true;
+   358→        map.set(ruleText, { weight, required });
+   359→      }
+   360→    }
+   361→    return map;
+   362→  }
+   363→
+   364→  // Build rulesJson with weight/required metadata per rule, plus grading thresholds
+   365→  function buildRulesJson() {
+   366→    const config = parseRuleConfig(ruleConfig);
+   367→    const buildSection = (rules: string) => parseRules(rules).map((rule) => {
+   368→      const cfg = config.get(rule) ?? { weight: 1, required: true };
+   369→      return { text: rule, weight: cfg.weight, required: cfg.required };
+   370→    });
+   371→    return {
+   372→      entry: buildSection(entryRules),
+   373→      stop: buildSection(stopRules),
+   374→      target: buildSection(targetRules),
+   375→      management: buildSection(managementRules),
+   376→      invalidation: buildSection(invalidationRules),
+   377→      gradingThresholds: {
+   378→        "A+": parseFloat(aplusThreshold) || 0.9,
+   379→        A: parseFloat(aThreshold) || 0.75,
+   380→        B: parseFloat(bThreshold) || 0.6,
+   381→        C: parseFloat(cThreshold) || 0.4,
+   382→      },
+   383→    };
+   384→  }
+   385→
+   386→  async function submit() {
+   387→    if (!name) { toast.error("Name is required"); setTimeout(() => document.getElementById("field-strategy-name")?.scrollIntoView({ behavior: "smooth", block: "center" }), 100); return; }
+   388→    setLoading(true);
+   389→    const rules = buildRulesJson();
+   390→    const res = await fetch("/api/strategies", {
+   391→      method: "POST",
+   392→      headers: { "Content-Type": "application/json" },
+   393→      body: JSON.stringify({
+   394→        name,
+   395→        description,
+   396→        purpose,
+   397→        instruments,
+   398→        market,
+   399→        timeframe,
+   400→        session,
+   401→        checklistConfigId: checklistConfigId || null,
+   402→        rules,
+   403→      }),
+   404→    });
+   405→    if (res.ok) {
+   406→      toast.success("Strategy created.");
+   407→      onCreated();
+   408→      onClose();
+   409→    } else {
+   410→      toast.error("Failed to create strategy.");
+   411→    }
+   412→    setLoading(false);
+   413→  }
+   414→
+   415→  return (
+   416→    <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
+   417→      <DialogHeader>
+   418→        <DialogTitle>New Strategy</DialogTitle>
+   419→      </DialogHeader>
+   420→      <div className="space-y-4">
+   421→        {/* Basics */}
+   422→        <div className="space-y-2" id="field-strategy-name">
+   423→          <FieldLabel required>Name</FieldLabel>
+   424→          <Input value={name} onChange={(e) => setName(e.target.value)} />
+   425→        </div>
+   426→        <div className="space-y-2">
+   427→          <FieldLabel hint="Brief description of the strategy">Description</FieldLabel>
+   428→          <Textarea value={description} onChange={(e) => setDescription(e.target.value)} rows={2} />
+   429→        </div>
+   430→        <div className="space-y-2">
+   431→          <FieldLabel hint="Why this strategy exists">Purpose</FieldLabel>
+   432→          <Textarea value={purpose} onChange={(e) => setPurpose(e.target.value)} rows={2} />
+   433→        </div>
+   434→
+   435→        {/* Configuration */}
+   436→        <div className="grid grid-cols-2 gap-3">
+   437→          <div className="space-y-2">
+   438→            <FieldLabel hint="Which market this strategy targets">Market</FieldLabel>
+   439→            <Select value={market} onValueChange={setMarket}>
+   440→              <SelectTrigger><SelectValue /></SelectTrigger>
+   441→              <SelectContent>
+   442→                <SelectItem value="forex">Forex</SelectItem>
+   443→                <SelectItem value="gold">Gold</SelectItem>
+   444→                <SelectItem value="indices">Indices</SelectItem>
+   445→                <SelectItem value="futures">Futures</SelectItem>
+   446→                <SelectItem value="crypto">Crypto</SelectItem>
+   447→                <SelectItem value="stocks">Stocks</SelectItem>
+   448→                <SelectItem value="mixed">Mixed</SelectItem>
+   449→                <SelectItem value="custom">Custom</SelectItem>
+   450→              </SelectContent>
+   451→            </Select>
+   452→          </div>
+   453→          <div className="space-y-2">
+   454→            <FieldLabel hint="Trading timeframe (e.g. 5m-1h)">Timeframe</FieldLabel>
+   455→            <Input value={timeframe} onChange={(e) => setTimeframe(e.target.value)} />
+   456→          </div>
+   457→          <div className="space-y-2">
+   458→            <FieldLabel hint="Primary trading session">Session</FieldLabel>
+   459→            <Select value={session} onValueChange={setSession}>
+   460→              <SelectTrigger><SelectValue /></SelectTrigger>
+   461→              <SelectContent>
+   462→                <SelectItem value="asia">Asia</SelectItem>
+   463→                <SelectItem value="london">London</SelectItem>
+   464→                <SelectItem value="ny_am">New York AM</SelectItem>
+   465→                <SelectItem value="ny_pm">New York PM</SelectItem>
+   466→                <SelectItem value="mixed">Mixed</SelectItem>
+   467→              </SelectContent>
+   468→            </Select>
+   469→          </div>
+   470→          <div className="space-y-2">
+   471→            <FieldLabel hint="Comma-separated instrument symbols">Instruments</FieldLabel>
+   472→            <Input value={instruments} onChange={(e) => setInstruments(e.target.value)} />
+   473→          </div>
+   474→        </div>
+   475→
+   476→        {/* Rules with weights and required status */}
+   477→        <div className="rounded-md border border-border p-3 space-y-3">
+   478→          <div className="text-sm font-medium">Strategy Rules</div>
+   479→          <p className="text-xs text-muted-foreground">These rules serve as the strategy's setup checklist for A+ scoring. Each rule needs a weight (importance) and whether it's required for a valid setup.</p>
+   480→
+   481→          {/* Grading thresholds */}
+   482→          <div className="grid grid-cols-4 gap-2">
+   483→            <div className="space-y-1">
+   484→              <Label className="text-xs">A+ threshold</Label>
+   485→              <Input type="number" step="0.05" min="0" max="1" value={aplusThreshold} onChange={(e) => setAplusThreshold(e.target.value)} className="h-8 text-sm" />
+   486→            </div>
+   487→            <div className="space-y-1">
+   488→              <Label className="text-xs">A threshold</Label>
+   489→              <Input type="number" step="0.05" min="0" max="1" value={aThreshold} onChange={(e) => setAThreshold(e.target.value)} className="h-8 text-sm" />
+   490→            </div>
+   491→            <div className="space-y-1">
+   492→              <Label className="text-xs">B threshold</Label>
+   493→              <Input type="number" step="0.05" min="0" max="1" value={bThreshold} onChange={(e) => setBThreshold(e.target.value)} className="h-8 text-sm" />
+   494→            </div>
+   495→            <div className="space-y-1">
+   496→              <Label className="text-xs">C threshold</Label>
+   497→              <Input type="number" step="0.05" min="0" max="1" value={cThreshold} onChange={(e) => setCThreshold(e.target.value)} className="h-8 text-sm" />
+   498→            </div>
+   499→          </div>
+   500→          <p className="text-[11px] text-muted-foreground">Score ≥ threshold → grade. Required rules must all be checked to keep A+/A/B; otherwise capped at C.</p>
+   501→
+   502→          {/* Rule sections */}
+   503→          <div className="grid sm:grid-cols-2 gap-3">
+   504→            <div className="space-y-2">
+   505→              <FieldLabel hint="One rule per line">Entry Rules</FieldLabel>
+   506→              <Textarea value={entryRules} onChange={(e) => setEntryRules(e.target.value)} rows={3} />
+   507→            </div>
+   508→            <div className="space-y-2">
+   509→              <FieldLabel hint="One rule per line">Stop Loss Rules</FieldLabel>
+   510→              <Textarea value={stopRules} onChange={(e) => setStopRules(e.target.value)} rows={3} />
+   511→            </div>
+   512→            <div className="space-y-2">
+   513→              <FieldLabel hint="One rule per line">Target Rules</FieldLabel>
+   514→              <Textarea value={targetRules} onChange={(e) => setTargetRules(e.target.value)} rows={3} />
+   515→            </div>
+   516→            <div className="space-y-2">
+   517→              <FieldLabel hint="One rule per line">Management Rules</FieldLabel>
+   518→              <Textarea value={managementRules} onChange={(e) => setManagementRules(e.target.value)} rows={3} />
+   519→            </div>
+   520→            <div className="space-y-2 sm:col-span-2">
+   521→              <FieldLabel hint="One rule per line">Invalidation Rules</FieldLabel>
+   522→              <Textarea value={invalidationRules} onChange={(e) => setInvalidationRules(e.target.value)} rows={2} />
+   523→            </div>
+   524→          </div>
+   525→          {/* Weight + Required configuration */}
+   526→          <div className="space-y-2">
+   527→            <Label className="text-xs font-medium">Rule Weights & Required Status</Label>
+   528→            <p className="text-[11px] text-muted-foreground">Format: one rule per line as "rule text | weight | required/optional". Example: "Wait for liquidity sweep | 2 | required"</p>
+   529→            <Textarea value={ruleConfig} onChange={(e) => setRuleConfig(e.target.value)} rows={4} className="font-mono text-xs" />
+   530→          </div>
+   531→        </div>
+   532→
+   533→        <Button onClick={submit} disabled={loading} className="w-full">
+   534→          {loading ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
+   535→          Create Strategy
+   536→        </Button>
+   537→      </div>
+   538→    </DialogContent>
+   539→  );
+   540→}
+   541→
+   542→function NewVersionDialog({ strategyId, latestLabel, latestRulesJson, onClose, onCreated }: { strategyId: string; latestLabel?: string; latestRulesJson?: string; onClose: () => void; onCreated: () => void }) {
+   543→  // Pre-fill rules from the latest version
+   544→  const initialRules = (() => {
+   545→    try {
+   546→      const parsed = JSON.parse(latestRulesJson ?? "{}");
+   547→      // Handle both old format (string[]) and new format ({text, weight, required}[])
+   548→      const extractText = (arr: any[]) => arr.map((r: any) => typeof r === "string" ? r : r.text);
+   549→      const extractConfig = (arr: any[]) => arr.map((r: any) => {
+   550→        if (typeof r === "string") return `${r} | 1 | required`;
+   551→        return `${r.text} | ${r.weight ?? 1} | ${r.required ? "required" : "optional"}`;
+   552→      });
+   553→      return {
+   554→        entry: Array.isArray(parsed.entry) ? extractText(parsed.entry).join("\n") : "",
+   555→        stop: Array.isArray(parsed.stop) ? extractText(parsed.stop).join("\n") : "",
+   556→        target: Array.isArray(parsed.target) ? extractText(parsed.target).join("\n") : "",
+   557→        management: Array.isArray(parsed.management) ? extractText(parsed.management).join("\n") : "",
+   558→        invalidation: Array.isArray(parsed.invalidation) ? extractText(parsed.invalidation).join("\n") : "",
+   559→        ruleConfig: Array.isArray(parsed.entry) ? extractConfig([...(parsed.entry||[]), ...(parsed.stop||[]), ...(parsed.target||[]), ...(parsed.management||[]), ...(parsed.invalidation||[])]).join("\n") : "",
+   560→        thresholds: parsed.gradingThresholds ?? { "A+": 0.9, A: 0.75, B: 0.6, C: 0.4 },
+   561→      };
+   562→    } catch {
+   563→      return { entry: "", stop: "", target: "", management: "", invalidation: "", ruleConfig: "", thresholds: { "A+": 0.9, A: 0.75, B: 0.6, C: 0.4 } };
+   564→    }
+   565→  })();
+   566→
+   567→  const [versionLabel, setVersionLabel] = useState(incrementVersion(latestLabel));
+   568→  const [changeReason, setChangeReason] = useState("");
+   569→  const [changeSummary, setChangeSummary] = useState("");
+   570→  const [entryRules, setEntryRules] = useState(initialRules.entry);
+   571→  const [stopRules, setStopRules] = useState(initialRules.stop);
+   572→  const [targetRules, setTargetRules] = useState(initialRules.target);
+   573→  const [managementRules, setManagementRules] = useState(initialRules.management);
+   574→  const [invalidationRules, setInvalidationRules] = useState(initialRules.invalidation);
+   575→  const [ruleConfig, setRuleConfig] = useState(initialRules.ruleConfig);
+   576→  const [aplusThreshold, setAplusThreshold] = useState(String(initialRules.thresholds["A+"] ?? 0.9));
+   577→  const [aThreshold, setAThreshold] = useState(String(initialRules.thresholds.A ?? 0.75));
+   578→  const [bThreshold, setBThreshold] = useState(String(initialRules.thresholds.B ?? 0.6));
+   579→  const [cThreshold, setCThreshold] = useState(String(initialRules.thresholds.C ?? 0.4));
+   580→  const [loading, setLoading] = useState(false);
+   581→
+   582→  function incrementVersion(v?: string): string {
+   583→    if (!v) return "1.0";
+   584→    const [maj, min] = v.split(".");
+   585→    return `${maj}.${Number(min) + 1}`;
+   586→  }
+   587→
+   588→  function parseRules(text: string): string[] {
+   589→    return text.split("\n").map((l) => l.trim()).filter((l) => l.length > 0);
+   590→  }
+   591→
+   592→  function parseRuleConfig(text: string): Map<string, { weight: number; required: boolean }> {
+   593→    const map = new Map<string, { weight: number; required: boolean }>();
+   594→    for (const line of text.split("\n")) {
+   595→      const parts = line.split("|").map((p) => p.trim());
+   596→      if (parts.length >= 1 && parts[0]) {
+   597→        const ruleText = parts[0];
+   598→        const weight = parts[1] ? parseFloat(parts[1]) || 1 : 1;
+   599→        const required = parts[2] ? parts[2].toLowerCase() === "required" : true;
+   600→        map.set(ruleText, { weight, required });
+   601→      }
+   602→    }
+   603→    return map;
+   604→  }
+   605→
+   606→  function buildRulesJson() {
+   607→    const config = parseRuleConfig(ruleConfig);
+   608→    const buildSection = (rules: string) => parseRules(rules).map((rule) => {
+   609→      const cfg = config.get(rule) ?? { weight: 1, required: true };
+   610→      return { text: rule, weight: cfg.weight, required: cfg.required };
+   611→    });
+   612→    return {
+   613→      entry: buildSection(entryRules),
+   614→      stop: buildSection(stopRules),
+   615→      target: buildSection(targetRules),
+   616→      management: buildSection(managementRules),
+   617→      invalidation: buildSection(invalidationRules),
+   618→      gradingThresholds: {
+   619→        "A+": parseFloat(aplusThreshold) || 0.9,
+   620→        A: parseFloat(aThreshold) || 0.75,
+   621→        B: parseFloat(bThreshold) || 0.6,
+   622→        C: parseFloat(cThreshold) || 0.4,
+   623→      },
+   624→    };
+   625→  }
+   626→
+   627→  async function submit() {
+   628→    if (!versionLabel) { toast.error("Version label required"); return; }
+   629→    setLoading(true);
+   630→    const rules = buildRulesJson();
+   631→    const res = await fetch(`/api/strategies/${strategyId}`, {
+   632→      method: "PUT",
+   633→      headers: { "Content-Type": "application/json" },
+   634→      body: JSON.stringify({ versionLabel, changeReason, changeSummary, rules }),
+   635→    });
+   636→    if (res.ok) {
+   637→      toast.success(`Version ${versionLabel} created.`);
+   638→      onCreated();
+   639→    } else {
+   640→      toast.error("Failed to create version.");
+   641→    }
+   642→    setLoading(false);
+   643→  }
+   644→
+   645→  return (
+   646→    <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
+   647→      <DialogHeader>
+   648→        <DialogTitle>New Strategy Version</DialogTitle>
+   649→      </DialogHeader>
+   650→      <div className="space-y-4">
+   651→        <div className="grid grid-cols-2 gap-3">
+   652→          <div className="space-y-2">
+   653→            <FieldLabel required>Version Label</FieldLabel>
+   654→            <Input value={versionLabel} onChange={(e) => setVersionLabel(e.target.value)} />
+   655→          </div>
+   656→          <div className="space-y-2">
+   657→            <FieldLabel hint="Why this version was created">Change Reason</FieldLabel>
+   658→            <Input value={changeReason} onChange={(e) => setChangeReason(e.target.value)} />
+   659→          </div>
+   660→        </div>
+   661→        <div className="space-y-2">
+   662→          <FieldLabel hint="What changed in this version">Change Summary</FieldLabel>
+   663→          <Textarea value={changeSummary} onChange={(e) => setChangeSummary(e.target.value)} rows={2} />
+   664→        </div>
+   665→
+   666→        <div className="rounded-md border border-border p-3 space-y-3">
+   667→          <div className="text-sm font-medium">Strategy Rules</div>
+   668→          <p className="text-xs text-muted-foreground">Pre-filled with the latest version's rules. Edit as needed. One rule per line.</p>
+   669→
+   670→          {/* Grading thresholds */}
+   671→          <div className="grid grid-cols-4 gap-2">
+   672→            <div className="space-y-1">
+   673→              <Label className="text-xs">A+ threshold</Label>
+   674→              <Input type="number" step="0.05" min="0" max="1" value={aplusThreshold} onChange={(e) => setAplusThreshold(e.target.value)} className="h-8 text-sm" />
+   675→            </div>
+   676→            <div className="space-y-1">
+   677→              <Label className="text-xs">A threshold</Label>
+   678→              <Input type="number" step="0.05" min="0" max="1" value={aThreshold} onChange={(e) => setAThreshold(e.target.value)} className="h-8 text-sm" />
+   679→            </div>
+   680→            <div className="space-y-1">
+   681→              <Label className="text-xs">B threshold</Label>
+   682→              <Input type="number" step="0.05" min="0" max="1" value={bThreshold} onChange={(e) => setBThreshold(e.target.value)} className="h-8 text-sm" />
+   683→            </div>
+   684→            <div className="space-y-1">
+   685→              <Label className="text-xs">C threshold</Label>
+   686→              <Input type="number" step="0.05" min="0" max="1" value={cThreshold} onChange={(e) => setCThreshold(e.target.value)} className="h-8 text-sm" />
+   687→            </div>
+   688→          </div>
+   689→
+   690→          <div className="grid sm:grid-cols-2 gap-3">
+   691→            <div className="space-y-2">
+   692→              <FieldLabel hint="One rule per line">Entry Rules</FieldLabel>
+   693→              <Textarea value={entryRules} onChange={(e) => setEntryRules(e.target.value)} rows={3} />
+   694→            </div>
+   695→            <div className="space-y-2">
+   696→              <FieldLabel hint="One rule per line">Stop Loss Rules</FieldLabel>
+   697→              <Textarea value={stopRules} onChange={(e) => setStopRules(e.target.value)} rows={3} />
+   698→            </div>
+   699→            <div className="space-y-2">
+   700→              <FieldLabel hint="One rule per line">Target Rules</FieldLabel>
+   701→              <Textarea value={targetRules} onChange={(e) => setTargetRules(e.target.value)} rows={3} />
+   702→            </div>
+   703→            <div className="space-y-2">
+   704→              <FieldLabel hint="One rule per line">Management Rules</FieldLabel>
+   705→              <Textarea value={managementRules} onChange={(e) => setManagementRules(e.target.value)} rows={3} />
+   706→            </div>
+   707→            <div className="space-y-2 sm:col-span-2">
+   708→              <FieldLabel hint="One rule per line">Invalidation Rules</FieldLabel>
+   709→              <Textarea value={invalidationRules} onChange={(e) => setInvalidationRules(e.target.value)} rows={2} />
+   710→            </div>
+   711→          </div>
+   712→          {/* Weight + Required configuration */}
+   713→          <div className="space-y-2">
+   714→            <Label className="text-xs font-medium">Rule Weights & Required Status</Label>
+   715→            <p className="text-[11px] text-muted-foreground">Format: "rule text | weight | required/optional". Example: "Wait for liquidity sweep | 2 | required"</p>
+   716→            <Textarea value={ruleConfig} onChange={(e) => setRuleConfig(e.target.value)} rows={4} className="font-mono text-xs" />
+   717→          </div>
+   718→        </div>
+   719→
+   720→        <Button onClick={submit} disabled={loading} className="w-full">
+   721→          {loading ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
+   722→          Create Version
+   723→        </Button>
+   724→      </div>
+   725→    </DialogContent>
+   726→  );
+   727→}
+   728→

@@ -1,0 +1,702 @@
+  2100→                  <div className="flex items-center justify-between text-sm">
+  2101→                    <span className="text-muted-foreground">
+  2102→                      {checkedCount}/{checklistItems.length} Checked
+  2103→                    </span>
+  2104→                    <span className="font-medium tnum">{adherencePct}% Adherence</span>
+  2105→                  </div>
+  2106→                  <div className="h-2 rounded-full bg-muted overflow-hidden">
+  2107→                    <div
+  2108→                      className={cn(
+  2109→                        "h-full rounded-full transition-all",
+  2110→                        adherencePct >= 90
+  2111→                          ? "bg-profit"
+  2112→                          : adherencePct >= 75
+  2113→                            ? "bg-profit"
+  2114→                            : adherencePct >= 60
+  2115→                              ? "bg-warning"
+  2116→                              : adherencePct >= 40
+  2117→                                ? "bg-muted-foreground"
+  2118→                                : "bg-loss",
+  2119→                      )}
+  2120→                      style={{ width: `${adherencePct}%` }}
+  2121→                    />
+  2122→                  </div>
+  2123→                  <div className="flex items-center justify-between text-xs text-muted-foreground">
+  2124→                    <span>
+  2125→                      Required: {evaluation.requiredCheckedCount}/{evaluation.requiredTotalCount} met
+  2126→                    </span>
+  2127→                    <span>× weight applies to score</span>
+  2128→                  </div>
+  2129→                </div>
+  2130→
+  2131→                {/* Items */}
+  2132→                <div className="space-y-2 max-h-[28rem] overflow-y-auto pr-1">
+  2133→                  {checklistItems.map((item) => {
+  2134→                    const ans = form.checklistAnswers?.[item.id] ?? { checked: false };
+  2135→                    return (
+  2136→                      <label
+  2137→                        key={item.id}
+  2138→                        className={cn(
+  2139→                          "flex items-center gap-3 p-3 rounded-md border cursor-pointer transition-colors",
+  2140→                          ans.checked
+  2141→                            ? "bg-profit/10 border-profit/30"
+  2142→                            : "border-border hover:bg-muted/40",
+  2143→                        )}
+  2144→                      >
+  2145→                        <Checkbox
+  2146→                          checked={ans.checked}
+  2147→                          onCheckedChange={(v) => updateChecklistAnswer(item.id, !!v)}
+  2148→                        />
+  2149→                        <span className={cn(
+  2150→                          "text-sm flex-1",
+  2151→                          ans.checked && "text-profit font-medium",
+  2152→                        )}>
+  2153→                          {item.text}
+  2154→                        </span>
+  2155→                        {item.required && (
+  2156→                          <Badge variant="destructive" className="text-[10px] uppercase">
+  2157→                            Required
+  2158→                          </Badge>
+  2159→                        )}
+  2160→                        <span className="text-[10px] text-muted-foreground tnum">
+  2161→                          ×{item.weight}
+  2162→                        </span>
+  2163→                      </label>
+  2164→                    );
+  2165→                  })}
+  2166→                </div>
+  2167→
+  2168→                <p className="text-xs text-muted-foreground">
+  2169→                  Score = sum(weights of checked items) / sum(weights of all
+  2170→                  items). If any required item is unchecked, the grade is
+  2171→                  capped at C.
+  2172→                </p>
+  2173→              </>
+  2174→            ) : (
+  2175→              <div className="rounded-md border border-dashed border-border p-8 text-center">
+  2176→                {form.strategyId ? (
+  2177→                  <>
+  2178→                    <AlertTriangle className="h-8 w-8 mx-auto text-muted-foreground mb-2" />
+  2179→                    <p className="text-sm text-muted-foreground">
+  2180→                      No setup checklist configured for this strategy version.
+  2181→                    </p>
+  2182→                    <p className="text-xs text-muted-foreground mt-1">
+  2183→                      Add rules with weights when creating or versioning the
+  2184→                      strategy to enable setup-grade scoring.
+  2185→                    </p>
+  2186→                  </>
+  2187→                ) : (
+  2188→                  <>
+  2189→                    <Sparkles className="h-8 w-8 mx-auto text-muted-foreground mb-2" />
+  2190→                    <p className="text-sm text-muted-foreground">
+  2191→                      Select a strategy in Step 1 to load its setup checklist.
+  2192→                    </p>
+  2193→                    <p className="text-xs text-muted-foreground mt-1">
+  2194→                      The checklist is derived from the strategy's versioned
+  2195→                      rules and stored as an immutable snapshot when the trade
+  2196→                      is saved.
+  2197→                    </p>
+  2198→                  </>
+  2199→                )}
+  2200→              </div>
+  2201→            )}
+  2202→          </Card>
+  2203→        </TabsContent>
+  2204→
+  2205→        {/* ─────────────────────────────────────────────────────────── */}
+  2206→        {/* STEP 3 — Risk & Sizing                                       */}
+  2207→        {/* ─────────────────────────────────────────────────────────── */}
+  2208→        <TabsContent value="risk" className="space-y-4 mt-3">
+  2209→          <Card className="p-4 md:p-6 space-y-4 bg-background">
+  2210→            <div>
+  2211→              <h2 className="text-lg font-medium">Risk &amp; Sizing</h2>
+  2212→              <p className="text-sm text-muted-foreground">
+  2213→                Planned entry, stop, and target are required. The rest is
+  2214→                auto-derived from your account balance and risk %.
+  2215→              </p>
+  2216→            </div>
+  2217→
+  2218→            <div className="grid sm:grid-cols-3 gap-4">
+  2219→              <div className="space-y-2" id="field-entry">
+  2220→                <FieldLabel required hint="The price you planned to enter at.">Planned Entry</FieldLabel>
+  2221→                <Input
+  2222→                  type="number"
+  2223→                  step="any"
+  2224→                  inputMode="decimal"
+  2225→                  value={form.plannedEntryPrice}
+  2226→                  onChange={(e) => setField("plannedEntryPrice", e.target.value)}
+  2227→                />
+  2228→              </div>
+  2229→              <div className="space-y-2" id="field-stop">
+  2230→                <FieldLabel required hint="The stop loss you planned.">Planned Stop</FieldLabel>
+  2231→                <Input
+  2232→                  type="number"
+  2233→                  step="any"
+  2234→                  inputMode="decimal"
+  2235→                  value={form.plannedStopPrice}
+  2236→                  onChange={(e) => setField("plannedStopPrice", e.target.value)}
+  2237→                />
+  2238→              </div>
+  2239→              <div className="space-y-2" id="field-target">
+  2240→                <FieldLabel required hint="The take profit you planned.">Planned Target</FieldLabel>
+  2241→                <Input
+  2242→                  type="number"
+  2243→                  step="any"
+  2244→                  inputMode="decimal"
+  2245→                  value={form.plannedTargetPrice}
+  2246→                  onChange={(e) => setField("plannedTargetPrice", e.target.value)}
+  2247→                />
+  2248→              </div>
+  2249→            </div>
+  2250→
+  2251→            <div className="grid sm:grid-cols-2 gap-4">
+  2252→              <div className="space-y-2">
+  2253→                <FieldLabel hint="Position size (e.g. 0.5 lots, 1 contract).">Lot Size</FieldLabel>
+  2254→                <Input
+  2255→                  type="number"
+  2256→                  step="any"
+  2257→                  inputMode="decimal"
+  2258→                  value={form.lotSize}
+  2259→                  onChange={(e) => setField("lotSize", e.target.value)}
+  2260→                />
+  2261→              </div>
+  2262→              <div className="space-y-2">
+  2263→                <FieldLabel hint="Risk as a decimal (0.005 = 0.5% of account balance).">Risk %</FieldLabel>
+  2264→                <Input
+  2265→                  type="number"
+  2266→                  step="any"
+  2267→                  inputMode="decimal"
+  2268→                  value={form.riskPct}
+  2269→                  onChange={(e) => setField("riskPct", e.target.value)}
+  2270→                />
+  2271→              </div>
+  2272→            </div>
+  2273→
+  2274→            {/* Auto-calculated panel */}
+  2275→            <div className="rounded-md border border-border bg-muted/30 p-4">
+  2276→              <h3 className="text-sm font-medium mb-3">Auto-calculated</h3>
+  2277→              <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
+  2278→                <div>
+  2279→                  <div className="text-xs text-muted-foreground">
+  2280→                    Stop Distance
+  2281→                    <span className="ml-1 text-muted-foreground/70">
+  2282→                      ({unitWord})
+  2283→                    </span>
+  2284→                  </div>
+  2285→                  <div className="text-base font-medium tnum">
+  2286→                    {stopDistance != null
+  2287→                      ? `${fmtPrice(stopDistance, pricePrecision)}`
+  2288→                      : "—"}
+  2289→                  </div>
+  2290→                  {stopDistance != null && stopDistanceUnits > 0 && (
+  2291→                    <div className="text-[10px] text-muted-foreground mt-0.5 tnum">
+  2292→                      {stopDistanceUnits} {unitWord}
+  2293→                    </div>
+  2294→                  )}
+  2295→                </div>
+  2296→                <div>
+  2297→                  <div className="text-xs text-muted-foreground">Planned R:R</div>
+  2298→                  <div className={cn(
+  2299→                    "text-base font-medium tnum",
+  2300→                    plannedRR != null && plannedRR >= 2
+  2301→                      ? "text-profit"
+  2302→                      : plannedRR != null && plannedRR >= 1
+  2303→                        ? "text-warning"
+  2304→                        : "",
+  2305→                  )}>
+  2306→                    {plannedRR != null ? `${plannedRR.toFixed(2)}R` : "—"}
+  2307→                  </div>
+  2308→                </div>
+  2309→                <div>
+  2310→                  <div className="text-xs text-muted-foreground">
+  2311→                    Risk Amount
+  2312→                    <span className="ml-1 text-muted-foreground/70">({form.lotSize || 1} {unitWord === "pips" ? "lot" : "ctr"})</span>
+  2313→                  </div>
+  2314→                  <div className="text-base font-medium tnum text-loss">
+  2315→                    {instrumentRiskDollars != null
+  2316→                      ? fmtMoney(instrumentRiskDollars, accountCurrency)
+  2317→                      : riskAmountDollars != null
+  2318→                        ? fmtMoney(riskAmountDollars, accountCurrency)
+  2319→                        : "—"}
+  2320→                  </div>
+  2321→                </div>
+  2322→                <div>
+  2323→                  <div className="text-xs text-muted-foreground">Planned Profit</div>
+  2324→                  <div className="text-base font-medium tnum text-profit">
+  2325→                    {instrumentRiskDollars != null && plannedRR != null
+  2326→                      ? fmtMoney(instrumentRiskDollars * plannedRR, accountCurrency)
+  2327→                      : plannedProfitDollars != null
+  2328→                        ? fmtMoney(plannedProfitDollars, accountCurrency)
+  2329→                        : "—"}
+  2330→                  </div>
+  2331→                </div>
+  2332→                <div>
+  2333→                  <div className="text-xs text-muted-foreground">
+  2334→                    Instrument Risk
+  2335→                    <span className="ml-1 text-muted-foreground/70">(preview)</span>
+  2336→                  </div>
+  2337→                  <div className="text-base font-medium tnum">
+  2338→                    {instrumentRiskDollars != null
+  2339→                      ? fmtMoney(instrumentRiskDollars, accountCurrency)
+  2340→                      : "—"}
+  2341→                  </div>
+  2342→                  <div className="text-[10px] text-muted-foreground mt-0.5 tnum">
+  2343→                    stop × {form.lotSize || 1} lot × {selectedInstrument.contractSize} units ×{" "}
+  2344→                    ${(pointValueCents / 100).toFixed(4)}/unit
+  2345→                  </div>
+  2346→                </div>
+  2347→                <div>
+  2348→                  <div className="text-xs text-muted-foreground">Account Balance</div>
+  2349→                  <div className="text-base font-medium tnum">
+  2350→                    {balanceCents > 0
+  2351→                      ? fmtMoney(balanceCents / 100, accountCurrency)
+  2352→                      : "—"}
+  2353→                  </div>
+  2354→                </div>
+  2355→                <div>
+  2356→                  <div className="text-xs text-muted-foreground">Lot × Risk</div>
+  2357→                  <div className="text-base font-medium tnum">
+  2358→                    {riskAmountDollars != null
+  2359→                      ? fmtMoney(riskAmountDollars * lotNum, accountCurrency)
+  2360→                      : "—"}
+  2361→                  </div>
+  2362→                </div>
+  2363→              </div>
+  2364→              <p className="text-xs text-muted-foreground mt-3">
+  2365→                Risk Amount = Account Balance × Risk %. Planned Profit = Risk
+  2366→                Amount × Planned R:R. Stop Distance is |entry − stop| in price
+  2367→                units; the sub-label shows it in the instrument's native unit
+  2368→                ({unitWord}). Instrument Risk is a per-symbol preview derived
+  2369→                from the catalog's pipSize / contractSize / pointValueCents.
+  2370→              </p>
+  2371→            </div>
+  2372→
+  2373→            {/* Plan Adherence — did the trader follow the plan? */}
+  2374→            <div className="rounded-md border border-border bg-muted/30 p-4 space-y-3">
+  2375→              <div className="flex items-center justify-between gap-2">
+  2376→                <div>
+  2377→                  <h3 className="text-sm font-medium">Plan Adherence</h3>
+  2378→                  <p className="text-xs text-muted-foreground mt-0.5">
+  2379→                    Did you follow the plan? If not, enter the actual values you used.
+  2380→                  </p>
+  2381→                </div>
+  2382→                <div className="flex items-center gap-2">
+  2383→                  <button
+  2384→                    type="button"
+  2385→                    onClick={() => setField("followedPlan", true)}
+  2386→                    className={cn(
+  2387→                      "px-3 py-1.5 rounded-md text-xs font-medium transition-colors",
+  2388→                      form.followedPlan
+  2389→                        ? "bg-profit text-white"
+  2390→                        : "bg-background border border-border text-muted-foreground hover:bg-muted",
+  2391→                    )}
+  2392→                  >
+  2393→                    Followed Plan
+  2394→                  </button>
+  2395→                  <button
+  2396→                    type="button"
+  2397→                    onClick={() => setField("followedPlan", false)}
+  2398→                    className={cn(
+  2399→                      "px-3 py-1.5 rounded-md text-xs font-medium transition-colors",
+  2400→                      !form.followedPlan
+  2401→                        ? "bg-loss text-white"
+  2402→                        : "bg-background border border-border text-muted-foreground hover:bg-muted",
+  2403→                    )}
+  2404→                  >
+  2405→                    Deviated
+  2406→                  </button>
+  2407→                </div>
+  2408→              </div>
+  2409→
+  2410→              {!form.followedPlan && (
+  2411→                <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-3 pt-1">
+  2412→                  <div className="space-y-1">
+  2413→                    <label className="text-xs text-muted-foreground">Actual Entry</label>
+  2414→                    <Input
+  2415→                      type="number"
+  2416→                      step="any"
+  2417→                      inputMode="decimal"
+  2418→                      value={form.actualEntryPrice}
+  2419→                      onChange={(e) => setField("actualEntryPrice", e.target.value)}
+  2420→                      placeholder={form.plannedEntryPrice || "—"}
+  2421→                      className="text-sm"
+  2422→                    />
+  2423→                  </div>
+  2424→                  <div className="space-y-1">
+  2425→                    <label className="text-xs text-muted-foreground">Actual Stop</label>
+  2426→                    <Input
+  2427→                      type="number"
+  2428→                      step="any"
+  2429→                      inputMode="decimal"
+  2430→                      value={form.actualStopPrice}
+  2431→                      onChange={(e) => setField("actualStopPrice", e.target.value)}
+  2432→                      placeholder={form.plannedStopPrice || "—"}
+  2433→                      className="text-sm"
+  2434→                    />
+  2435→                  </div>
+  2436→                  <div className="space-y-1">
+  2437→                    <label className="text-xs text-muted-foreground">Actual Target</label>
+  2438→                    <Input
+  2439→                      type="number"
+  2440→                      step="any"
+  2441→                      inputMode="decimal"
+  2442→                      value={form.actualTargetPrice}
+  2443→                      onChange={(e) => setField("actualTargetPrice", e.target.value)}
+  2444→                      placeholder={form.plannedTargetPrice || "—"}
+  2445→                      className="text-sm"
+  2446→                    />
+  2447→                  </div>
+  2448→                  <div className="space-y-1">
+  2449→                    <label className="text-xs text-muted-foreground">Actual Lot Size</label>
+  2450→                    <Input
+  2451→                      type="number"
+  2452→                      step="any"
+  2453→                      inputMode="decimal"
+  2454→                      value={form.actualLotSize}
+  2455→                      onChange={(e) => setField("actualLotSize", e.target.value)}
+  2456→                      placeholder={form.lotSize || "—"}
+  2457→                      className="text-sm"
+  2458→                    />
+  2459→                  </div>
+  2460→                </div>
+  2461→              )}
+  2462→            </div>
+  2463→          </Card>
+  2464→        </TabsContent>
+  2465→
+  2466→        {/* ─────────────────────────────────────────────────────────── */}
+  2467→        {/* STEP 4 — Partial Exits                                        */}
+  2468→        {/* ─────────────────────────────────────────────────────────── */}
+  2469→        <TabsContent value="exits" className="space-y-4 mt-3">
+  2470→          <Card className="p-4 md:p-6 space-y-4 bg-background">
+  2471→            <div className="flex items-start justify-between gap-3 flex-wrap">
+  2472→              <div>
+  2473→                <h2 className="text-lg font-medium">Partial Exits</h2>
+  2474→                <p className="text-sm text-muted-foreground">
+  2475→                  Plan multiple take-profit levels. The weighted average exit
+  2476→                  price and total R are derived below.
+  2477→                </p>
+  2478→              </div>
+  2479→              <Button variant="outline" onClick={addExit}>
+  2480→                <Plus className="h-4 w-4" /> Add Exit Level
+  2481→              </Button>
+  2482→            </div>
+  2483→
+  2484→            {form.partialExits.length === 0 && (
+  2485→              <div className="rounded-md border border-dashed border-border p-8 text-center">
+  2486→                <Plus className="h-8 w-8 mx-auto text-muted-foreground mb-2" />
+  2487→                <p className="text-sm text-muted-foreground">No exit levels planned.</p>
+  2488→                <p className="text-xs text-muted-foreground mt-1">
+  2489→                  Click "Add Exit Level" to define partial take-profit targets.
+  2490→                </p>
+  2491→              </div>
+  2492→            )}
+  2493→
+  2494→            {form.partialExits.length > 0 && (
+  2495→              <div className="space-y-3">
+  2496→                {form.partialExits.map((exit: any) => (
+  2497→                  <div
+  2498→                    key={exit.id}
+  2499→                    className="grid sm:grid-cols-[1fr_1fr_auto] gap-3 items-end p-3 rounded-md border border-border bg-muted/20"
+  2500→                  >
+  2501→                    <div className="space-y-2">
+  2502→                      <Label className="text-xs">Level Name</Label>
+  2503→                      <Input
+  2504→                        value={exit.name}
+  2505→                        onChange={(e) => updateExit(exit.id, "name", e.target.value)}
+  2506→                        placeholder="TP1, TP2, runner…"
+  2507→                      />
+  2508→                    </div>
+  2509→                    <div className="space-y-2">
+  2510→                      <Label className="text-xs">Exit Price</Label>
+  2511→                      <Input
+  2512→                        type="number"
+  2513→                        step="any"
+  2514→                        inputMode="decimal"
+  2515→                        value={exit.price}
+  2516→                        onChange={(e) => updateExit(exit.id, "price", e.target.value)}
+  2517→                        placeholder="0.00000"
+  2518→                      />
+  2519→                    </div>
+  2520→                    <Button
+  2521→                      variant="ghost"
+  2522→                      size="icon"
+  2523→                      className="text-muted-foreground hover:text-loss"
+  2524→                      onClick={() => removeExit(exit.id)}
+  2525→                      aria-label="Remove exit level"
+  2526→                    >
+  2527→                      <Trash2 className="h-4 w-4" />
+  2528→                    </Button>
+  2529→                  </div>
+  2530→                ))}
+  2531→              </div>
+  2532→            )}
+  2533→
+  2534→            {/* Calculated panel */}
+  2535→            <div className="rounded-md border border-border bg-muted/30 p-4">
+  2536→              <h3 className="text-sm font-medium mb-3">Calculated</h3>
+  2537→              <div className="grid sm:grid-cols-2 gap-4">
+  2538→                <div>
+  2539→                  <div className="text-xs text-muted-foreground">Weighted Exit Price</div>
+  2540→                  <div className="text-base font-medium tnum">
+  2541→                    {weightedExitPrice != null
+  2542→                      ? fmtPrice(weightedExitPrice, pricePrecision)
+  2543→                      : "—"}
+  2544→                  </div>
+  2545→                  <div className="text-[10px] text-muted-foreground mt-0.5">
+  2546→                    Equal-weighted average of all valid exit prices.
+  2547→                  </div>
+  2548→                </div>
+  2549→                <div>
+  2550→                  <div className="text-xs text-muted-foreground">Total R (planned)</div>
+  2551→                  <div className={cn(
+  2552→                    "text-base font-medium tnum",
+  2553→                    totalRExits != null && totalRExits >= 1
+  2554→                      ? "text-profit"
+  2555→                      : totalRExits != null && totalRExits > 0
+  2556→                        ? "text-warning"
+  2557→                        : totalRExits != null
+  2558→                          ? "text-loss"
+  2559→                          : "",
+  2560→                  )}>
+  2561→                    {totalRExits != null ? `${totalRExits.toFixed(2)}R` : "—"}
+  2562→                  </div>
+  2563→                  <div className="text-[10px] text-muted-foreground mt-0.5">
+  2564→                    Derived from entry, stop, and the weighted exit price.
+  2565→                  </div>
+  2566→                </div>
+  2567→              </div>
+  2568→              {!hasEntry || !hasStop ? (
+  2569→                <p className="text-xs text-warning mt-3 flex items-center gap-1">
+  2570→                  <AlertTriangle className="h-3 w-3" /> Enter a planned entry
+  2571→                  and stop in Step 3 to compute Total R.
+  2572→                </p>
+  2573→              ) : null}
+  2574→            </div>
+  2575→          </Card>
+  2576→        </TabsContent>
+  2577→
+  2578→        {/* ─────────────────────────────────────────────────────────── */}
+  2579→        {/* STEP 5 — Review & Save                                        */}
+  2580→        {/* ─────────────────────────────────────────────────────────── */}
+  2581→        <TabsContent value="review" className="space-y-4 mt-3">
+  2582→          <Card className="p-4 md:p-6 space-y-4 bg-background">
+  2583→            <div>
+  2584→              <h2 className="text-lg font-medium">Review &amp; Save</h2>
+  2585→              <p className="text-sm text-muted-foreground">
+  2586→                Confirm the trade details below, then save as a draft or as a
+  2587→                finalized trade record.
+  2588→              </p>
+  2589→            </div>
+  2590→
+  2591→            <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-3">
+  2592→              <div className="rounded-md border border-border p-4 bg-background">
+  2593→                <div className="text-xs text-muted-foreground mb-1">Symbol / Direction</div>
+  2594→                <div className="text-base font-medium truncate">
+  2595→                  {form.instrumentSymbol || "—"}
+  2596→                </div>
+  2597→                <Badge
+  2598→                  variant="outline"
+  2599→                  className={cn(
+  2600→                    "mt-1",
+  2601→                    form.direction === "long"
+  2602→                      ? "border-profit text-profit"
+  2603→                      : "border-loss text-loss",
+  2604→                  )}
+  2605→                >
+  2606→                  {form.direction === "long" ? "Long" : "Short"}
+  2607→                </Badge>
+  2608→              </div>
+  2609→
+  2610→              <div className="rounded-md border border-border p-4 bg-background">
+  2611→                <div className="text-xs text-muted-foreground mb-1">Adherence %</div>
+  2612→                <div className="text-base font-medium tnum">
+  2613→                  {checklistItems.length > 0 ? `${adherencePct}%` : "—"}
+  2614→                </div>
+  2615→                {checklistItems.length > 0 && (
+  2616→                  <div className="text-[10px] text-muted-foreground mt-1">
+  2617→                    {checkedCount}/{checklistItems.length} checked ·{" "}
+  2618→                    <span className="font-medium">{evaluation.grade}</span>
+  2619→                  </div>
+  2620→                )}
+  2621→              </div>
+  2622→
+  2623→              <div className="rounded-md border border-border p-4 bg-background">
+  2624→                <div className="text-xs text-muted-foreground mb-1">Planned R:R</div>
+  2625→                <div className={cn(
+  2626→                  "text-base font-medium tnum",
+  2627→                  plannedRR != null && plannedRR >= 2
+  2628→                    ? "text-profit"
+  2629→                    : plannedRR != null && plannedRR >= 1
+  2630→                      ? "text-warning"
+  2631→                      : "",
+  2632→                )}>
+  2633→                  {plannedRR != null ? `${plannedRR.toFixed(2)}R` : "—"}
+  2634→                </div>
+  2635→                <div className="text-[10px] text-muted-foreground mt-1">
+  2636→                  Entry {fmtPrice(form.plannedEntryPrice, pricePrecision)} · Stop {fmtPrice(form.plannedStopPrice, pricePrecision)}
+  2637→                </div>
+  2638→              </div>
+  2639→
+  2640→              <div className="rounded-md border border-border p-4 bg-background">
+  2641→                <div className="text-xs text-muted-foreground mb-1">Setup / Status</div>
+  2642→                <div className="text-base font-medium truncate">
+  2643→                  {form.strategyId
+  2644→                    ? (strategyDetail?.name ?? "Selected strategy")
+  2645→                    : "—"}
+  2646→                </div>
+  2647→                <Badge variant="outline" className="mt-1 capitalize">
+  2648→                  {form.status}
+  2649→                </Badge>
+  2650→              </div>
+  2651→            </div>
+  2652→
+  2653→            {/* Summary detail */}
+  2654→            <div className="rounded-md border border-border p-4 space-y-3">
+  2655→              <h3 className="text-sm font-medium">Summary</h3>
+  2656→              <dl className="grid sm:grid-cols-2 gap-x-6 gap-y-2 text-sm">
+  2657→                <div className="flex justify-between">
+  2658→                  <dt className="text-muted-foreground">Account</dt>
+  2659→                  <dd className="font-medium truncate">
+  2660→                    {account ? `${account.name} (${account.currency})` : "—"}
+  2661→                  </dd>
+  2662→                </div>
+  2663→                <div className="flex justify-between">
+  2664→                  <dt className="text-muted-foreground">Session</dt>
+  2665→                  <dd className="font-medium capitalize">{form.session.replace(/_/g, " ")}</dd>
+  2666→                </div>
+  2667→                <div className="flex justify-between">
+  2668→                  <dt className="text-muted-foreground">Timeframe</dt>
+  2669→                  <dd className="font-medium">{form.timeframe}</dd>
+  2670→                </div>
+  2671→                <div className="flex justify-between">
+  2672→                  <dt className="text-muted-foreground">News Event</dt>
+  2673→                  <dd className="font-medium">{getNewsEventLabel(form.newsEvent ?? "none")}</dd>
+  2674→                </div>
+  2675→                <div className="flex justify-between">
+  2676→                  <dt className="text-muted-foreground">Date / Time</dt>
+  2677→                  <dd className="font-medium">
+  2678→                    {form.tradeDate} {form.tradeTime}
+  2679→                  </dd>
+  2680→                </div>
+  2681→                <div className="flex justify-between">
+  2682→                  <dt className="text-muted-foreground">Lot Size</dt>
+  2683→                  <dd className="font-medium tnum">{form.lotSize}</dd>
+  2684→                </div>
+  2685→                <div className="flex justify-between">
+  2686→                  <dt className="text-muted-foreground">Risk %</dt>
+  2687→                  <dd className="font-medium tnum">
+  2688→                    {Number(form.riskPct).toFixed(3)}%
+  2689→                  </dd>
+  2690→                </div>
+  2691→                <div className="flex justify-between">
+  2692→                  <dt className="text-muted-foreground">Risk Amount</dt>
+  2693→                  <dd className="font-medium tnum text-loss">
+  2694→                    {riskAmountDollars != null
+  2695→                      ? fmtMoney(riskAmountDollars, accountCurrency)
+  2696→                      : "—"}
+  2697→                  </dd>
+  2698→                </div>
+  2699→                <div className="flex justify-between">
+  2700→                  <dt className="text-muted-foreground">Planned Profit</dt>
+  2701→                  <dd className="font-medium tnum text-profit">
+  2702→                    {plannedProfitDollars != null
+  2703→                      ? fmtMoney(plannedProfitDollars, accountCurrency)
+  2704→                      : "—"}
+  2705→                  </dd>
+  2706→                </div>
+  2707→                <div className="flex justify-between">
+  2708→                  <dt className="text-muted-foreground">Partial Exits</dt>
+  2709→                  <dd className="font-medium tnum">
+  2710→                    {form.partialExits.length}{" "}
+  2711→                    {weightedExitPrice != null
+  2712→                      ? `· avg ${fmtPrice(weightedExitPrice, pricePrecision)}`
+  2713→                      : ""}
+  2714→                  </dd>
+  2715→                </div>
+  2716→                <div className="flex justify-between">
+  2717→                  <dt className="text-muted-foreground">Evidence</dt>
+  2718→                  <dd className="font-medium tnum">{form.uploadedMedia.length} files</dd>
+  2719→                </div>
+  2720→                <div className="flex justify-between">
+  2721→                  <dt className="text-muted-foreground">Behavior Flags</dt>
+  2722→                  <dd className="font-medium">
+  2723→                    {form.behaviorFlags.length === 0
+  2724→                      ? "None"
+  2725→                      : form.behaviorFlags.join(", ")}
+  2726→                  </dd>
+  2727→                </div>
+  2728→              </dl>
+  2729→            </div>
+  2730→
+  2731→            {/* Thesis preview */}
+  2732→            {form.thesisWhy && (
+  2733→              <div className="rounded-md border border-border p-4 space-y-1">
+  2734→                <h3 className="text-sm font-medium">Thesis</h3>
+  2735→                <p className="text-sm text-muted-foreground whitespace-pre-wrap">
+  2736→                  {form.thesisWhy}
+  2737→                </p>
+  2738→              </div>
+  2739→            )}
+  2740→
+  2741→            {/* Save actions */}
+  2742→            <div className="flex flex-col sm:flex-row gap-2 justify-end pt-2 border-t border-border">
+  2743→              <Button
+  2744→                variant="outline"
+  2745→                onClick={() => submit(true)}
+  2746→                disabled={saving}
+  2747→                className="order-2 sm:order-1"
+  2748→              >
+  2749→                {saving ? (
+  2750→                  <Loader2 className="h-4 w-4 animate-spin" />
+  2751→                ) : (
+  2752→                  <Save className="h-4 w-4" />
+  2753→                )}
+  2754→                Save as Draft
+  2755→              </Button>
+  2756→              <Button
+  2757→                onClick={() => submit(false)}
+  2758→                disabled={saving}
+  2759→                className="order-1 sm:order-2"
+  2760→              >
+  2761→                {saving ? (
+  2762→                  <Loader2 className="h-4 w-4 animate-spin" />
+  2763→                ) : (
+  2764→                  <Sparkles className="h-4 w-4" />
+  2765→                )}
+  2766→                Save Trade
+  2767→              </Button>
+  2768→            </div>
+  2769→          </Card>
+  2770→        </TabsContent>
+  2771→      </Tabs>
+  2772→
+  2773→      {/* Navigation bar */}
+  2774→      <div className="sticky bottom-0 left-0 right-0 z-20 flex gap-2 justify-between bg-background/95 backdrop-blur p-3 border-t border-border md:rounded-md md:border">
+  2775→        <Button
+  2776→          variant="outline"
+  2777→          onClick={goPrev}
+  2778→          disabled={activeStep === STEP_ORDER[0]}
+  2779→        >
+  2780→          <ArrowLeft className="h-4 w-4" /> Previous Step
+  2781→        </Button>
+  2782→        {activeStep !== STEP_ORDER[STEP_ORDER.length - 1] ? (
+  2783→          <Button onClick={goNext}>
+  2784→            Next Step <ArrowRight className="h-4 w-4" />
+  2785→          </Button>
+  2786→        ) : (
+  2787→          <div className="flex gap-2">
+  2788→            <Button variant="outline" onClick={() => submit(true)} disabled={saving}>
+  2789→              {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+  2790→              Save as Draft
+  2791→            </Button>
+  2792→            <Button onClick={() => submit(false)} disabled={saving}>
+  2793→              {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
+  2794→              Save Trade
+  2795→            </Button>
+  2796→          </div>
+  2797→        )}
+  2798→      </div>
+  2799→    </div>
+
+[showing lines 2100-2799 of 2802; use offset=2800 with limit to continue reading]

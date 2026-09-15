@@ -1,0 +1,702 @@
+     1→   600→
+     2→   601→  // Autosave draft (new trades only).
+     3→   602→  useEffect(() => {
+     4→   603→    if (editingId) return;
+     5→   604→    const t = setTimeout(() => {
+     6→   605→      try {
+     7→   606→        localStorage.setItem(DRAFT_KEY, JSON.stringify(form));
+     8→   607→      } catch {
+     9→   608→        // ignore quota errors
+    10→   609→      }
+    11→   610→    }, 500);
+    12→   611→    return () => clearTimeout(t);
+    13→   612→  }, [form, editingId]);
+    14→   613→
+    15→   614→  // Restore draft on mount (new trades only).
+    16→   615→  useEffect(() => {
+    17→   616→    if (editingId) return;
+    18→   617→    const saved = localStorage.getItem(DRAFT_KEY);
+    19→   618→    if (!saved) return;
+    20→   619→    try {
+    21→   620→      const parsed = JSON.parse(saved);
+    22→   621→      // Any media that was mid-upload when the page closed can't be resumed
+    23→   622→      // (the XHR is gone and File objects aren't serializable) — mark them
+    24→   623→      // as failed so the user can retry or remove them, rather than leaving
+    25→   624→      // them stuck at 0% forever.
+    26→   625→      if (Array.isArray(parsed.uploadedMedia)) {
+    27→   626→        parsed.uploadedMedia = parsed.uploadedMedia.map((m: any) =>
+    28→   627→          m?.status === "uploading" ? { ...m, status: "failed" } : m,
+    29→   628→        );
+    30→   629→      }
+    31→   630→      setForm((f: any) => ({ ...f, ...parsed }));
+    32→   631→      toast.info("Restored autosaved draft.");
+    33→   632→    } catch {
+    34→   633→      // ignore
+    35→   634→    }
+    36→   635→  }, [editingId]);
+    37→   636→
+    38→   637→  // Warn before navigating away while media uploads are in-flight. The
+    39→   638→  // uploads use XHR (not service workers / background sync), so closing or
+    40→   639→  // refreshing the tab would abort them and the placeholder items would
+    41→   640→  // never complete.
+    42→   641→  useEffect(() => {
+    43→   642→    const hasUploading = form.uploadedMedia?.some(
+    44→   643→      (m: any) => m.status === "uploading",
+    45→   644→    );
+    46→   645→    if (!hasUploading) return;
+    47→   646→    const handler = (e: BeforeUnloadEvent) => {
+    48→   647→      e.preventDefault();
+    49→   648→      e.returnValue = "";
+    50→   649→    };
+    51→   650→    window.addEventListener("beforeunload", handler);
+    52→   651→    return () => window.removeEventListener("beforeunload", handler);
+    53→   652→  }, [form.uploadedMedia]);
+    54→   653→
+    55→   654→  /* ---------- Field helpers ---------- */
+    56→   655→
+    57→   656→  function setField(path: string, value: any) {
+    58→   657→    setForm((f: any) => {
+    59→   658→      const next = { ...f };
+    60→   659→      const parts = path.split(".");
+    61→   660→      let cur: any = next;
+    62→   661→      for (let i = 0; i < parts.length - 1; i++) {
+    63→   662→        cur[parts[i]] = { ...cur[parts[i]] };
+    64→   663→        cur = cur[parts[i]];
+    65→   664→      }
+    66→   665→      cur[parts[parts.length - 1]] = value;
+    67→   666→      return next;
+    68→   667→    });
+    69→   668→  }
+    70→   669→
+    71→   670→  function toggleArrayField(path: string, value: string) {
+    72→   671→    setForm((f: any) => {
+    73→   672→      const next = { ...f };
+    74→   673→      const parts = path.split(".");
+    75→   674→      let cur: any = next;
+    76→   675→      for (let i = 0; i < parts.length - 1; i++) {
+    77→   676→        cur[parts[i]] = { ...cur[parts[i]] };
+    78→   677→        cur = cur[parts[i]];
+    79→   678→      }
+    80→   679→      const key = parts[parts.length - 1];
+    81→   680→      const arr = Array.isArray(cur[key]) ? [...cur[key]] : [];
+    82→   681→      const idx = arr.indexOf(value);
+    83→   682→      if (idx >= 0) arr.splice(idx, 1);
+    84→   683→      else arr.push(value);
+    85→   684→      cur[key] = arr;
+    86→   685→      return next;
+    87→   686→    });
+    88→   687→  }
+    89→   688→
+    90→   689→  function updateChecklistAnswer(itemId: string, checked: boolean) {
+    91→   690→    setForm((f: any) => {
+    92→   691→      const cur = f.checklistAnswers?.[itemId] ?? { checked: false };
+    93→   692→      const nextAnswers = {
+    94→   693→        ...f.checklistAnswers,
+    95→   694→        [itemId]: { ...cur, checked },
+    96→   695→      };
+    97→   696→      // Drop note when unchecked so storage stays clean.
+    98→   697→      if (!checked && nextAnswers[itemId].note) {
+    99→   698→        delete nextAnswers[itemId].note;
+   100→   699→      }
+   101→   700→      return { ...f, checklistAnswers: nextAnswers };
+   102→   701→    });
+   103→   702→  }
+   104→   703→
+   105→   704→  /* ---------- File upload (non-blocking, concurrent, with progress) ----------
+   106→   705→   *
+   107→   706→   * Each selected file is added to `form.uploadedMedia` immediately as a
+   108→   707→   * placeholder with `status: "uploading"` and a per-item `progress` (0-100).
+   109→   708→   * Uploads run concurrently via XMLHttpRequest so progress events fire per
+   110→   709→   * file without blocking the form (the old implementation awaited each
+   111→   710→   * upload in a sequential for-loop). The File + XHR for each tempId live in
+   112→   711→   * the `fileRefs` ref Map (not state), so Cancel can abort and Retry can
+   113→   712→   * re-send without storing heavy File objects in React state.
+   114→   713→   */
+   115→   714→
+   116→   715→  function handleFileUpload(files: FileList | File[]) {
+   117→   716→    const fileList = Array.from(files);
+   118→   717→    for (const file of fileList) {
+   119→   718→      const tempId = `temp-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+   120→   719→      // Detect kind from MIME type so the form immediately knows whether to
+   121→   720→      // render an <img> (annotation-able) or a <video controls> element.
+   122→   721→      const clientKind = file.type.startsWith("video/") ? "video" : "image";
+   123→   722→      const mediaItem: any = {
+   124→   723→        tempId,
+   125→   724→        filename: file.name,
+   126→   725→        originalName: file.name,
+   127→   726→        kind: clientKind,
+   128→   727→        status: "uploading",
+   129→   728→        progress: 0,
+   130→   729→        fileSize: file.size,
+   131→   730→        annotations: [],
+   132→   731→        caption: "",
+   133→   732→        timeframe: "",
+   134→   733→      };
+   135→   734→      // Add the placeholder immediately so the user sees progress right
+   136→   735→      // away, then kick off the upload in the background (non-blocking).
+   137→   736→      setForm((f: any) => ({
+   138→   737→        ...f,
+   139→   738→        uploadedMedia: [...(f.uploadedMedia ?? []), mediaItem],
+   140→   739→      }));
+   141→   740→      uploadFile(file, tempId);
+   142→   741→    }
+   143→   742→  }
+   144→   743→
+   145→   744→  function uploadFile(file: File, tempId: string) {
+   146→   745→    const formData = new FormData();
+   147→   746→    formData.append("file", file);
+   148→   747→    if (editingId) formData.append("tradeId", editingId);
+   149→   748→
+   150→   749→    const xhr = new XMLHttpRequest();
+   151→   750→    xhr.open("POST", "/api/media");
+   152→   751→    fileRefs.current.set(tempId, { file, xhr });
+   153→   752→
+   154→   753→    // Real upload progress — only XMLHttpRequest exposes this; fetch()
+   155→   754→    // ReadableStream request bodies don't have progress events yet.
+   156→   755→    xhr.upload.onprogress = (e) => {
+   157→   756→      if (e.lengthComputable) {
+   158→   757→        const progress = Math.round((e.loaded / e.total) * 100);
+   159→   758→        setForm((f: any) => ({
+   160→   759→          ...f,
+   161→   760→          uploadedMedia: f.uploadedMedia.map((m: any) =>
+   162→   761→            m.tempId === tempId ? { ...m, progress } : m,
+   163→   762→          ),
+   164→   763→        }));
+   165→   764→      }
+   166→   765→    };
+   167→   766→
+   168→   767→    xhr.onload = () => {
+   169→   768→      if (xhr.status >= 200 && xhr.status < 300) {
+   170→   769→        try {
+   171→   770→          const data = JSON.parse(xhr.responseText);
+   172→   771→          // Fetch the signed URL so the preview can render immediately.
+   173→   772→          fetch(`/api/media/${data.id}`)
+   174→   773→            .then((r) => r.json())
+   175→   774→            .then((detail) => {
+   176→   775→              setForm((f: any) => ({
+   177→   776→                ...f,
+   178→   777→                uploadedMedia: f.uploadedMedia.map((m: any) =>
+   179→   778→                  m.tempId === tempId
+   180→   779→                    ? {
+   181→   780→                        ...m,
+   182→   781→                        ...data,
+   183→   782→                        id: data.id,
+   184→   783→                        url: detail.url,
+   185→   784→                        status: "uploaded",
+   186→   785→                        progress: 100,
+   187→   786→                      }
+   188→   787→                    : m,
+   189→   788→                ),
+   190→   789→              }));
+   191→   790→            })
+   192→   791→            .catch(() => {
+   193→   792→              // Signed-URL fetch failed — still mark uploaded with raw data.
+   194→   793→              setForm((f: any) => ({
+   195→   794→                ...f,
+   196→   795→                uploadedMedia: f.uploadedMedia.map((m: any) =>
+   197→   796→                  m.tempId === tempId
+   198→   797→                    ? {
+   199→   798→                        ...m,
+   200→   799→                        ...data,
+   201→   800→                        id: data.id,
+   202→   801→                        status: "uploaded",
+   203→   802→                        progress: 100,
+   204→   803→                      }
+   205→   804→                    : m,
+   206→   805→                ),
+   207→   806→              }));
+   208→   807→            });
+   209→   808→          // Upload finished — drop the File/XHR ref (Retry not needed).
+   210→   809→          fileRefs.current.delete(tempId);
+   211→   810→          toast.success(`${file.name} uploaded.`);
+   212→   811→        } catch {
+   213→   812→          markUploadFailed(tempId, file.name);
+   214→   813→        }
+   215→   814→      } else {
+   216→   815→        // Surface the server's error message when present (e.g. "File too
+   217→   816→        // large. Max 20 MB.").
+   218→   817→        let msg = `Failed to upload ${file.name}`;
+   219→   818→        try {
+   220→   819→          const err = JSON.parse(xhr.responseText);
+   221→   820→          if (err?.error) msg = err.error;
+   222→   821→        } catch {}
+   223→   822→        markUploadFailed(tempId, file.name, msg);
+   224→   823→      }
+   225→   824→    };
+   226→   825→
+   227→   826→    xhr.onerror = () => markUploadFailed(tempId, file.name);
+   228→   827→    // onabort is fired when cancelUpload calls xhr.abort(); cancelUpload
+   229→   828→    // already removes the item from state and clears the ref, so this is
+   230→   829→    // a no-op kept for completeness.
+   231→   830→    xhr.onabort = () => {};
+   232→   831→
+   233→   832→    xhr.send(formData);
+   234→   833→  }
+   235→   834→
+   236→   835→  function markUploadFailed(tempId: string, filename: string, msg?: string) {
+   237→   836→    setForm((f: any) => ({
+   238→   837→      ...f,
+   239→   838→      uploadedMedia: f.uploadedMedia.map((m: any) =>
+   240→   839→        m.tempId === tempId ? { ...m, status: "failed" } : m,
+   241→   840→      ),
+   242→   841→    }));
+   243→   842→    // Keep the File in the ref (clear the xhr) so Retry can re-send it.
+   244→   843→    const entry = fileRefs.current.get(tempId);
+   245→   844→    if (entry) fileRefs.current.set(tempId, { file: entry.file, xhr: null });
+   246→   845→    toast.error(msg ?? `Failed to upload ${filename}`);
+   247→   846→  }
+   248→   847→
+   249→   848→  function cancelUpload(tempId: string) {
+   250→   849→    const entry = fileRefs.current.get(tempId);
+   251→   850→    if (entry?.xhr) {
+   252→   851→      try { entry.xhr.abort(); } catch {}
+   253→   852→    }
+   254→   853→    fileRefs.current.delete(tempId);
+   255→   854→    setForm((f: any) => ({
+   256→   855→      ...f,
+   257→   856→      uploadedMedia: f.uploadedMedia.filter((m: any) => m.tempId !== tempId),
+   258→   857→    }));
+   259→   858→  }
+   260→   859→
+   261→   860→  function retryUpload(tempId: string) {
+   262→   861→    const entry = fileRefs.current.get(tempId);
+   263→   862→    if (!entry?.file) {
+   264→   863→      toast.error("This file is no longer available to retry. Please re-select it.");
+   265→   864→      return;
+   266→   865→    }
+   267→   866→    setForm((f: any) => ({
+   268→   867→      ...f,
+   269→   868→      uploadedMedia: f.uploadedMedia.map((m: any) =>
+   270→   869→        m.tempId === tempId ? { ...m, status: "uploading", progress: 0 } : m,
+   271→   870→      ),
+   272→   871→    }));
+   273→   872→    uploadFile(entry.file, tempId);
+   274→   873→  }
+   275→   874→
+   276→   875→  function removeMedia(idx: number) {
+   277→   876→    setForm((f: any) => ({
+   278→   877→      ...f,
+   279→   878→      uploadedMedia: f.uploadedMedia.filter((_: any, i: number) => i !== idx),
+   280→   879→    }));
+   281→   880→  }
+   282→   881→
+   283→   882→  function setMediaCaption(idx: number, caption: string) {
+   284→   883→    setForm((f: any) => ({
+   285→   884→      ...f,
+   286→   885→      uploadedMedia: f.uploadedMedia.map((m: any, i: number) =>
+   287→   886→        i === idx ? { ...m, caption } : m,
+   288→   887→      ),
+   289→   888→    }));
+   290→   889→  }
+   291→   890→
+   292→   891→  function setMediaTimeframe(idx: number, timeframe: string) {
+   293→   892→    setForm((f: any) => ({
+   294→   893→      ...f,
+   295→   894→      uploadedMedia: f.uploadedMedia.map((m: any, i: number) =>
+   296→   895→        i === idx ? { ...m, timeframe } : m,
+   297→   896→      ),
+   298→   897→    }));
+   299→   898→  }
+   300→   899→
+   301→   900→  function setMediaAnnotations(idx: number, annotations: ImageAnnotation[]) {
+   302→   901→    setForm((f: any) => ({
+   303→   902→      ...f,
+   304→   903→      uploadedMedia: f.uploadedMedia.map((m: any, i: number) =>
+   305→   904→        i === idx ? { ...m, annotations } : m,
+   306→   905→      ),
+   307→   906→    }));
+   308→   907→  }
+   309→   908→
+   310→   909→  /* ---------- Partial exits ---------- */
+   311→   910→
+   312→   911→  function addExit() {
+   313→   912→    setForm((f: any) => ({
+   314→   913→      ...f,
+   315→   914→      partialExits: [
+   316→   915→        ...f.partialExits,
+   317→   916→        { id: uid(), name: `TP${f.partialExits.length + 1}`, price: "" },
+   318→   917→      ],
+   319→   918→    }));
+   320→   919→  }
+   321→   920→
+   322→   921→  function updateExit(id: string, field: "name" | "price", value: string) {
+   323→   922→    setForm((f: any) => ({
+   324→   923→      ...f,
+   325→   924→      partialExits: f.partialExits.map((e: any) =>
+   326→   925→        e.id === id ? { ...e, [field]: value } : e,
+   327→   926→      ),
+   328→   927→    }));
+   329→   928→  }
+   330→   929→
+   331→   930→  function removeExit(id: string) {
+   332→   931→    setForm((f: any) => ({
+   333→   932→      ...f,
+   334→   933→      partialExits: f.partialExits.filter((e: any) => e.id !== id),
+   335→   934→    }));
+   336→   935→  }
+   337→   936→
+   338→   937→  /* ---------- Risk & sizing calculations ---------- */
+   339→   938→
+   340→   939→  const account = accounts.find((a: any) => a.id === form.accountId);
+   341→   940→  const accountCurrency = account?.currency ?? "USD";
+   342→   941→  const balanceCents = account?.currentBalanceCents ?? account?.startingBalanceCents ?? 0;
+   343→   942→
+   344→   943→  const entryNum = Number(form.plannedEntryPrice);
+   345→   944→  const stopNum = Number(form.plannedStopPrice);
+   346→   945→  const targetNum = Number(form.plannedTargetPrice);
+   347→   946→  const lotNum = Number(form.lotSize) || 1;
+   348→   947→  const riskPctNum = Number(form.riskPct);
+   349→   948→
+   350→   949→  const hasEntry = Number.isFinite(entryNum) && form.plannedEntryPrice !== "";
+   351→   950→  const hasStop = Number.isFinite(stopNum) && form.plannedStopPrice !== "";
+   352→   951→  const hasTarget = Number.isFinite(targetNum) && form.plannedTargetPrice !== "";
+   353→   952→
+   354→   953→  // Stop distance (always positive).
+   355→   954→  const stopDistance = hasEntry && hasStop ? Math.abs(entryNum - stopNum) : null;
+   356→   955→
+   357→   956→  // Risk per unit / reward per unit (per 1 lot).
+   358→   957→  const riskPerUnit = hasEntry && hasStop ? Math.abs(entryNum - stopNum) : null;
+   359→   958→  const rewardPerUnit =
+   360→   959→    hasEntry && hasTarget ? Math.abs(targetNum - entryNum) : null;
+   361→   960→
+   362→   961→  // Planned R:R = reward / risk (1.0 = breakeven, 2.0 = 2R for 1R).
+   363→   962→  const plannedRR =
+   364→   963→    riskPerUnit && rewardPerUnit && riskPerUnit > 0
+   365→   964→      ? rewardPerUnit / riskPerUnit
+   366→   965→      : null;
+   367→   966→
+   368→   967→  // Risk amount ($) = balance * riskPct.
+   369→   968→  const riskAmountDollars =
+   370→   969→    Number.isFinite(riskPctNum) && balanceCents > 0
+   371→   970→      ? (balanceCents / 100) * riskPctNum
+   372→   971→      : null;
+   373→   972→
+   374→   973→  // Planned profit ($) = riskAmount * RR (if RR is known).
+   375→   974→  const plannedProfitDollars =
+   376→   975→    riskAmountDollars != null && plannedRR != null
+   377→   976→      ? riskAmountDollars * plannedRR
+   378→   977→      : null;
+   379→   978→
+   380→   979→  /* ---------- Instrument-aware risk preview ---------- */
+   381→   980→  // Uses pipSize, contractSize, and pointValueCents from the catalog to
+   382→   981→  // express the stop distance in the instrument's native unit (pips /
+   383→   982→  // ticks / points) and to derive a per-instrument dollar risk that is
+   384→   983→  // consistent with the server-side calculateTradePnl formula:
+   385→   984→  //   risk$ = stopDistance × qty × contractSize × (pointValueCents/100)
+   386→   985→  // (See computePointValueCents in src/lib/calculations.ts for the
+   387→   986→  // convention used to derive pointValueCents from cs × tickSize.)
+   388→   987→  const stopDistanceUnits = stopDistance != null
+   389→   988→    ? distanceInUnits(stopDistance, selectedInstrument.pipSize)
+   390→   989→    : 0;
+   391→   990→  const contractSizeNum = Number(selectedInstrument.contractSize) || 1;
+   392→   991→  const pointValueCents = selectedInstrument.pointValueCents;
+   393→   992→  const instrumentRiskDollars =
+   394→   993→    stopDistance != null
+   395→   994→      ? stopDistance * lotNum * contractSizeNum * (pointValueCents / 100)
+   396→   995→      : null;
+   397→   996→
+   398→   997→  /* ---------- Partial exits calculations ---------- */
+   399→   998→
+   400→   999→  const validExits = form.partialExits.filter(
+   401→  1000→    (e: any) => e.price !== "" && Number.isFinite(Number(e.price)),
+   402→  1001→  );
+   403→  1002→  const weightedExitPrice =
+   404→  1003→    validExits.length > 0
+   405→  1004→      ? validExits.reduce((sum: number, e: any) => sum + Number(e.price), 0) /
+   406→  1005→        validExits.length
+   407→  1006→      : null;
+   408→  1007→  const totalRExits =
+   409→  1008→    weightedExitPrice != null && riskPerUnit != null && riskPerUnit > 0
+   410→  1009→      ? form.direction === "long"
+   411→  1010→        ? (weightedExitPrice - entryNum) / riskPerUnit
+   412→  1011→        : (entryNum - weightedExitPrice) / riskPerUnit
+   413→  1012→      : null;
+   414→  1013→
+   415→  1014→  /* ---------- Evidence grouping (by chart timeframe) ---------- */
+   416→  1015→
+   417→  1016→  // Bucket each uploaded media item into a timeframe group so the user can
+   418→  1017→  // see at a glance whether their HTF context, execution chart, and entry
+   419→  1018→  // trigger are all captured. Items with no timeframe selected land in an
+   420→  1019→  // "Unassigned" bucket first to nudge the user toward picking one.
+   421→  1020→  const groupedMedia = useMemo(() => {
+   422→  1021→    const items: Array<{ m: any; i: number }> = (form.uploadedMedia ?? []).map(
+   423→  1022→      (m: any, i: number) => ({ m, i }),
+   424→  1023→    );
+   425→  1024→    const buckets: Record<string, Array<{ m: any; i: number }>> = {};
+   426→  1025→    for (const entry of items) {
+   427→  1026→      const g = entry.m.timeframe ? getTimeframeGroup(entry.m.timeframe) : null;
+   428→  1027→      const key = g ?? "__unassigned";
+   429→  1028→      if (!buckets[key]) buckets[key] = [];
+   430→  1029→      buckets[key].push(entry);
+   431→  1030→    }
+   432→  1031→    const ordered: Array<{ group: string; items: Array<{ m: any; i: number }> }> = [];
+   433→  1032→    if (buckets["__unassigned"]) {
+   434→  1033→      ordered.push({ group: "Unassigned", items: buckets["__unassigned"] });
+   435→  1034→    }
+   436→  1035→    for (const g of TIMEFRAME_GROUPS) {
+   437→  1036→      if (buckets[g]) ordered.push({ group: g, items: buckets[g] });
+   438→  1037→    }
+   439→  1038→    // Any leftover custom groups (shouldn't normally happen, but defensive).
+   440→  1039→    for (const key of Object.keys(buckets)) {
+   441→  1040→      if (key === "__unassigned") continue;
+   442→  1041→      if (TIMEFRAME_GROUPS.includes(key)) continue;
+   443→  1042→      ordered.push({ group: key, items: buckets[key] });
+   444→  1043→    }
+   445→  1044→    return ordered;
+   446→  1045→  }, [form.uploadedMedia]);
+   447→  1046→
+   448→  1047→  /* ---------- Submit ---------- */
+   449→  1048→
+   450→  1049→  async function submit(asDraft: boolean = false) {
+   451→  1050→    if (!form.accountId) {
+   452→  1051→      toast.error("Please select an account.");
+   453→  1052→      setActiveStep("trade-info");
+   454→  1053→      setTimeout(
+   455→  1054→        () => document.getElementById("field-account")?.scrollIntoView({ behavior: "smooth", block: "center" }),
+   456→  1055→        80,
+   457→  1056→      );
+   458→  1057→      return;
+   459→  1058→    }
+   460→  1059→    if (!form.instrumentSymbol) {
+   461→  1060→      toast.error("Please enter a symbol / pair.");
+   462→  1061→      setActiveStep("trade-info");
+   463→  1062→      setTimeout(
+   464→  1063→        () => document.getElementById("field-symbol")?.scrollIntoView({ behavior: "smooth", block: "center" }),
+   465→  1064→        80,
+   466→  1065→      );
+   467→  1066→      return;
+   468→  1067→    }
+   469→  1068→    if (!hasEntry || !hasStop || !hasTarget) {
+   470→  1069→      // For planned trades, entry/stop/target are still required (they ARE the plan)
+   471→  1070→      // but executions should not be sent — the trade is not executed yet.
+   472→  1071→      toast.error("Planned entry, stop, and target are required.");
+   473→  1072→      setActiveStep("risk");
+   474→  1073→      setTimeout(
+   475→  1074→        () => document.getElementById("field-entry")?.scrollIntoView({ behavior: "smooth", block: "center" }),
+   476→  1075→        80,
+   477→  1076→      );
+   478→  1077→      return;
+   479→  1078→    }
+   480→  1079→
+   481→  1080→    const isPlanned = form.status === "planned" && !asDraft;
+   482→  1081→
+   483→  1082→    setSaving(true);
+   484→  1083→    try {
+   485→  1084→      const entryDateTime = new Date(`${form.tradeDate}T${form.tradeTime || "09:00"}`);
+   486→  1085→      const executions: any[] = [
+   487→  1086→        {
+   488→  1087→          kind: "entry",
+   489→  1088→          price: String(form.plannedEntryPrice),
+   490→  1089→          quantity: String(form.lotSize || "1"),
+   491→  1090→          timestamp: entryDateTime.toISOString(),
+   492→  1091→        },
+   493→  1092→      ];
+   494→  1093→
+   495→  1094→      const payload: any = {
+   496→  1095→        accountId: form.accountId,
+   497→  1096→        instrumentSymbol: normalizeSymbol(form.instrumentSymbol),
+   498→  1097→        // Derive market from the static catalog when possible (covers
+   499→  1098→        // forex / gold / indices / futures / crypto). Falls back to
+   500→  1099→        // "custom" so unknown symbols still get persisted with a sane
+   501→  1100→        // market tag rather than a null.
+   502→  1101→        market: selectedInstrument.market ?? "custom",
+   503→  1102→        direction: form.direction,
+   504→  1103→        status: asDraft ? "open" : form.status,
+   505→  1104→        session: form.session,
+   506→  1105→        newsEvent: form.newsEvent ?? "none",
+   507→  1106→        strategyId: form.strategyId || null,
+   508→  1107→        strategyVersionId: form.strategyId ? (form.strategyVersionId || null) : null,
+   509→  1108→        // checklistVersionId must reference a ChecklistVersion (from
+   510→  1109→        // ChecklistConfig), NOT a StrategyVersion. The strategy's rules
+   511→  1110→        // live in StrategyVersion.rulesJson and are evaluated inline —
+   512→  1111→        // there is no separate ChecklistVersion for strategy-based rules.
+   513→  1112→        // Send null so the server doesn't try to validate a wrong FK.
+   514→  1113→        checklistVersionId: null,
+   515→  1114→        checklistAnswers:
+   516→  1115→          form.strategyId && form.strategyVersionId ? form.checklistAnswers : null,
+   517→  1116→        setupGrade:
+   518→  1117→          form.strategyId && checklistItems.length > 0 ? evaluation.grade : null,
+   519→  1118→        setupScore:
+   520→  1119→          form.strategyId && checklistItems.length > 0 ? String(evaluation.score) : null,
+   521→  1120→        tags: form.tags,
+   522→  1121→        plannedEntryPrice: form.plannedEntryPrice || null,
+   523→  1122→        plannedStopPrice: form.plannedStopPrice || null,
+   524→  1123→        plannedTargetPrice: form.plannedTargetPrice || null,
+   525→  1124→        plannedRiskPct: form.riskPct || null,
+   526→  1125→        // For planned trades, don't send executions — the trade is not executed yet.
+   527→  1126→        // The server will keep P&L as 0 and status as "planned".
+   528→  1127→        executions: isPlanned ? [] : executions,
+   529→  1128→        feesCents: 0,
+   530→  1129→        commissionCents: 0,
+   531→  1130→        swapCents: 0,
+   532→  1131→        slippageCents: 0,
+   533→  1132→        entryTime: isPlanned ? null : entryDateTime.toISOString(),
+   534→  1133→        exitTime: null,
+   535→  1134→        tradingTimezone: "UTC",
+   536→  1135→        setup: {
+   537→  1136→          ...form.setup,
+   538→  1137→          session: form.session,
+   539→  1138→          timeframe: form.timeframe,
+   540→  1139→        },
+   541→  1140→        thesis: {
+   542→  1141→          ...form.thesis,
+   543→  1142→          why: form.thesisWhy,
+   544→  1143→        },
+   545→  1144→        notes: form.notes || null,
+   546→  1145→        lessons: form.lessons || null,
+   547→  1146→        psychBefore: form.psychBefore,
+   548→  1147→        psychAfter: form.psychAfter,
+   549→  1148→        behaviorFlags: form.behaviorFlags,
+   550→  1149→        partialExits: form.partialExits,
+   551→  1150→        planAdherence: {
+   552→  1151→          followedPlan: form.followedPlan,
+   553→  1152→          ...(form.followedPlan ? {} : {
+   554→  1153→            actualEntryPrice: form.actualEntryPrice || null,
+   555→  1154→            actualStopPrice: form.actualStopPrice || null,
+   556→  1155→            actualTargetPrice: form.actualTargetPrice || null,
+   557→  1156→            actualLotSize: form.actualLotSize || null,
+   558→  1157→          }),
+   559→  1158→        },
+   560→  1159→        isDraft: asDraft,
+   561→  1160→      };
+   562→  1161→
+   563→  1162→      const url = editingId ? `/api/trades/${editingId}` : "/api/trades";
+   564→  1163→      const method = editingId ? "PATCH" : "POST";
+   565→  1164→      const res = await fetch(url, {
+   566→  1165→        method,
+   567→  1166→        headers: { "Content-Type": "application/json" },
+   568→  1167→        body: JSON.stringify(payload),
+   569→  1168→      });
+   570→  1169→      const data = await res.json();
+   571→  1170→      if (!res.ok) {
+   572→  1171→        toast.error(data?.error ?? "Failed to save trade.");
+   573→  1172→        setSaving(false);
+   574→  1173→        return;
+   575→  1174→      }
+   576→  1175→
+   577→  1176→      // Attach orphaned uploaded media to the newly created trade + save captions.
+   578→  1177→      // Items still uploading (no id yet) or failed are skipped; uploads that
+   579→  1178→      // finish later will attach themselves when editing an existing trade
+   580→  1179→      // (their formData already carries tradeId).
+   581→  1180→      if (form.uploadedMedia?.length > 0) {
+   582→  1181→        for (const m of form.uploadedMedia) {
+   583→  1182→          if (m.id && m.status !== "uploading" && m.status !== "failed") {
+   584→  1183→            const patchBody: any = {};
+   585→  1184→            if (!editingId) patchBody.tradeId = data.id;
+   586→  1185→            // Caption is the form's "Description" textarea value (see Evidence section).
+   587→  1186→            if (m.caption !== undefined && m.caption !== null) patchBody.caption = m.caption;
+   588→  1187→            // Per-screenshot timeframe (5m / 1H / 1D / ...) for chart screenshots.
+   589→  1188→            if (m.timeframe) patchBody.timeframe = m.timeframe;
+   590→  1189→            if (Object.keys(patchBody).length > 0) {
+   591→  1190→              await fetch(`/api/media/${m.id}`, {
+   592→  1191→                method: "PATCH",
+   593→  1192→                headers: { "Content-Type": "application/json" },
+   594→  1193→                body: JSON.stringify(patchBody),
+   595→  1194→              }).catch(() => {});
+   596→  1195→            }
+   597→  1196→
+   598→  1197→            // Persist non-destructive SVG annotations (lines, arrows, rects,
+   599→  1198→            // circles, text) to the MediaAnnotation table via the PUT
+   600→  1199→            // "setAnnotations" action. Without this, drawings made in the
+   601→  1200→            // ImageAnnotator were lost on save because they only lived in
+   602→  1201→            // client state (`m.annotations`). The API stores each annotation
+   603→  1202→            // as `{ kind, payloadJson }`; we follow the same payload shape
+   604→  1203→            // used by the ImageViewer (x1/y1/x2/y2/text/color) so the two
+   605→  1204→            // viewers can read each other's drawings.
+   606→  1205→            if (Array.isArray(m.annotations) && m.annotations.length > 0) {
+   607→  1206→              await fetch(`/api/media/${m.id}`, {
+   608→  1207→                method: "PUT",
+   609→  1208→                headers: { "Content-Type": "application/json" },
+   610→  1209→                body: JSON.stringify({
+   611→  1210→                  action: "setAnnotations",
+   612→  1211→                  annotations: m.annotations.map((a: ImageAnnotation) => ({
+   613→  1212→                    kind: a.kind,
+   614→  1213→                    payload: {
+   615→  1214→                      x1: a.x1,
+   616→  1215→                      y1: a.y1,
+   617→  1216→                      x2: a.x2,
+   618→  1217→                      y2: a.y2,
+   619→  1218→                      text: a.text,
+   620→  1219→                      color: a.color,
+   621→  1220→                    },
+   622→  1221→                  })),
+   623→  1222→                }),
+   624→  1223→              }).catch(() => {});
+   625→  1224→            }
+   626→  1225→          }
+   627→  1226→        }
+   628→  1227→      }
+   629→  1228→
+   630→  1229→      // If some uploads are still in-flight, let the user know. For edits
+   631→  1230→      // (editingId set) the upload's formData already carries tradeId, so the
+   632→  1231→      // media will attach itself when the XHR completes. For new trades the
+   633→  1232→      // trade didn't exist at upload time, so the media is orphaned and would
+   634→  1233→      // need a manual attach later — the toast flags this honestly.
+   635→  1234→      const stillUploading = form.uploadedMedia?.some(
+   636→  1235→        (m: any) => m.status === "uploading",
+   637→  1236→      );
+   638→  1237→      if (stillUploading) {
+   639→  1238→        toast.info("Some media is still uploading and will be attached when complete.");
+   640→  1239→      }
+   641→  1240→
+   642→  1241→      toast.success(asDraft ? "Draft saved." : "Trade saved.");
+   643→  1242→      try { localStorage.removeItem(DRAFT_KEY); } catch {}
+   644→  1243→      qc.invalidateQueries({ queryKey: ["trades"] });
+   645→  1244→      qc.invalidateQueries({ queryKey: ["dashboard"] });
+   646→  1245→      navigate("tradesLog");
+   647→  1246→    } catch (err: any) {
+   648→  1247→      toast.error(err?.message ?? "Network error — please check your connection and try again.");
+   649→  1248→      setSaving(false);
+   650→  1249→    }
+   651→  1250→  }
+   652→  1251→
+   653→  1252→  /* ---------- Step navigation ---------- */
+   654→  1253→
+   655→  1254→  function goPrev() {
+   656→  1255→    const idx = STEP_ORDER.indexOf(activeStep);
+   657→  1256→    if (idx > 0) setActiveStep(STEP_ORDER[idx - 1]);
+   658→  1257→  }
+   659→  1258→  function goNext() {
+   660→  1259→    const idx = STEP_ORDER.indexOf(activeStep);
+   661→  1260→    if (idx < STEP_ORDER.length - 1) setActiveStep(STEP_ORDER[idx + 1]);
+   662→  1261→  }
+   663→  1262→
+   664→  1263→  const checkedCount = checklistItems.filter(
+   665→  1264→    (it) => form.checklistAnswers?.[it.id]?.checked === true,
+   666→  1265→  ).length;
+   667→  1266→  const adherencePct =
+   668→  1267→    checklistItems.length > 0
+   669→  1268→      ? Math.round((checkedCount / checklistItems.length) * 100)
+   670→  1269→      : 0;
+   671→  1270→
+   672→  1271→  /* ------------------------------------------------------------------ */
+   673→  1272→  /* Render                                                              */
+   674→  1273→  /* ------------------------------------------------------------------ */
+   675→  1274→
+   676→  1275→  return (
+   677→  1276→    <div className="p-4 md:p-6 max-w-4xl mx-auto space-y-4">
+   678→  1277→      {/* Header */}
+   679→  1278→      <div className="flex items-center gap-3">
+   680→  1279→        <Button variant="ghost" size="icon" onClick={() => navigate("tradesLog")}>
+   681→  1280→          <ArrowLeft className="h-4 w-4" />
+   682→  1281→        </Button>
+   683→  1282→        <div>
+   684→  1283→          <h1 className="text-2xl font-semibold tracking-tight">
+   685→  1284→            {editingId ? "Edit Trade" : "New Trade"}
+   686→  1285→          </h1>
+   687→  1286→          <p className="text-sm text-muted-foreground">
+   688→  1287→            Walk through the 5 steps to log a structured trade with checklist
+   689→  1288→            scoring, risk sizing, and partial exits.
+   690→  1289→          </p>
+   691→  1290→        </div>
+   692→  1291→      </div>
+   693→  1292→
+   694→  1293→      <Tabs value={activeStep} onValueChange={(v) => setActiveStep(v as StepKey)} className="w-full">
+   695→  1294→        <TabsList className="w-full justify-start overflow-x-auto no-scrollbar h-auto">
+   696→  1295→          <TabsTrigger value="trade-info">1. Trade Info</TabsTrigger>
+   697→  1296→          <TabsTrigger value="checklist">2. Setup Checklist</TabsTrigger>
+   698→  1297→          <TabsTrigger value="risk">3. Risk &amp; Sizing</TabsTrigger>
+   699→  1298→          <TabsTrigger value="exits">4. Partial Exits</TabsTrigger>
+   700→  1299→          <TabsTrigger value="review">5. Review &amp; Save</TabsTrigger>
+   701→
+   702→[showing lines 600-1299 of 2802; use offset=1300 with limit to continue reading]

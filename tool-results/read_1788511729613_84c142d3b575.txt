@@ -1,0 +1,2002 @@
+     1→# DnD
+     2→## Ultimate Production Build Specification
+     3→### Trading Performance OS, Journal, Strategy Laboratory, Evidence System, Analytics Engine and Private Trading Workspace
+     4→
+     5→---
+     6→
+     7→# 0. ROLE AND MISSION
+     8→
+     9→You are a senior:
+    10→
+    11→- Product architect
+    12→- Full-stack engineer
+    13→- TypeScript/React engineer
+    14→- Next.js engineer
+    15→- PostgreSQL/Supabase engineer
+    16→- UX/UI designer
+    17→- Security engineer
+    18→- Data/analytics engineer
+    19→- QA engineer
+    20→- Performance engineer
+    21→
+    22→Your task is to design and build **DnD**, a serious production-grade trading performance platform.
+    23→
+    24→Do not build a generic trading journal.
+    25→
+    26→Do not build a static dashboard.
+    27→
+    28→Do not build a visual prototype where buttons only appear to work.
+    29→
+    30→Build a real application with:
+    31→
+    32→- real persistence
+    33→- real authentication
+    34→- real authorization
+    35→- real calculations
+    36→- real media storage
+    37→- real strategy versioning
+    38→- real analytics
+    39→- real imports and exports
+    40→- real offline behavior
+    41→- real error handling
+    42→- real validation
+    43→- real security
+    44→- real tests
+    45→- responsive UX
+    46→- accessible UX
+    47→- maintainable architecture
+    48→
+    49→The finished product should be capable of supporting a real trader who records hundreds or thousands of trades over time.
+    50→
+    51→---
+    52→
+    53→# 1. PRODUCT IDENTITY
+    54→
+    55→## Product
+    56→
+    57→**DnD**
+    58→
+    59→## Category
+    60→
+    61→Private trading performance system.
+    62→
+    63→## Core positioning
+    64→
+    65→DnD connects:
+    66→
+    67→**Strategy → Trading Plan → Setup → Execution → Evidence → Result → Psychology → Review → Analytics → Improvement → Strategy**
+    68→
+    69→DnD exists to help a trader understand not only:
+    70→
+    71→**"Did I win?"**
+    72→
+    73→but:
+    74→
+    75→**"Why did I win or lose, did I follow my process, what evidence supports the decision, what behaviors are repeatedly hurting me, which strategy versions actually perform, and what should I change next?"**
+    76→
+    77→---
+    78→
+    79→# 2. PRODUCT NORTH STAR
+    80→
+    81→The product must make it possible for a trader to answer:
+    82→
+    83→> **How did I trade this week, why did I win or lose, and what should I change?**
+    84→
+    85→in approximately two minutes.
+    86→
+    87→The central learning loop is:
+    88→
+    89→```text
+    90→STRATEGY
+    91→   ↓
+    92→PLAN
+    93→   ↓
+    94→SETUP
+    95→   ↓
+    96→TRADE
+    97→   ↓
+    98→EVIDENCE
+    99→   ↓
+   100→RESULT
+   101→   ↓
+   102→PSYCHOLOGY
+   103→   ↓
+   104→REVIEW
+   105→   ↓
+   106→ANALYTICS
+   107→   ↓
+   108→IMPROVE
+   109→   ↓
+   110→STRATEGY VERSION
+   111→   ↺
+   112→```
+   113→
+   114→Every major feature must support this loop.
+   115→
+   116→Do not add features just because they are impressive.
+   117→
+   118→If a feature does not materially improve recording, understanding, reviewing, protecting, or improving trading performance, it should not be prioritized for the core product.
+   119→
+   120→---
+   121→
+   122→# 3. GOVERNING PRINCIPLES
+   123→
+   124→DnD must follow these principles:
+   125→
+   126→## 3.1 Record quickly
+   127→
+   128→Logging a trade should be fast.
+   129→
+   130→The trader should be able to create a basic trade in seconds and finish the deeper documentation later.
+   131→
+   132→## 3.2 Review deeply
+   133→
+   134→Every trade should have a place for:
+   135→
+   136→- reasoning
+   137→- setup conditions
+   138→- evidence
+   139→- psychology
+   140→- execution quality
+   141→- rules
+   142→- outcome
+   143→- lessons
+   144→
+   145→## 3.3 Understand performance
+   146→
+   147→The system should turn raw trade history into useful, evidence-based patterns.
+   148→
+   149→## 3.4 Protect sensitive data
+   150→
+   151→Trading data, financial data, psychological data, notes and recordings are sensitive.
+   152→
+   153→Security and privacy are product features, not afterthoughts.
+   154→
+   155→## 3.5 Never overwhelm
+   156→
+   157→The application should feel like a polished professional product, not a spreadsheet.
+   158→
+   159→## 3.6 Never fabricate
+   160→
+   161→Never fabricate:
+   162→
+   163→- trades
+   164→- metrics
+   165→- analytics
+   166→- AI insights
+   167→- performance
+   168→- statistics
+   169→- upload state
+   170→- successful operations
+   171→
+   172→---
+   173→
+   174→# 4. IMPORTANT BUILDING AGENT RULES
+   175→
+   176→These rules are mandatory.
+   177→
+   178→1. Build in the defined phase order.
+   179→2. Do not silently expand scope.
+   180→3. Do not silently remove requirements.
+   181→4. If implementation requires a meaningful architectural deviation, explain it in the phase completion report.
+   182→5. Security requirements apply during every phase.
+   183→6. Financial calculations must be unit-tested before the related phase is considered complete.
+   184→7. Do not use frontend filtering as an authorization mechanism.
+   185→8. Do not trust client-calculated financial values.
+   186→9. Do not expose secrets to the client.
+   187→10. Do not mutate historical strategy versions.
+   188→11. Do not mutate original uploaded evidence when annotations are applied.
+   189→12. Do not silently overwrite conflicting offline/server changes.
+   190→13. Do not show NaN, Infinity, undefined or misleading zero values to users.
+   191→14. Do not create non-functional buttons.
+   192→15. Do not create fake loading states.
+   193→16. Do not create fake analytics.
+   194→17. Do not create fake AI functionality.
+   195→18. Do not block the main UI with heavy calculations.
+   196→19. Prefer maintainability over cleverness.
+   197→20. Prefer secure defaults.
+   198→21. Prefer explicitness over magic behavior.
+   199→
+   200→---
+   201→
+   202→# 5. IMPLEMENTATION STRATEGY
+   203→
+   204→Build the application incrementally.
+   205→
+   206→Each phase must result in a working application.
+   207→
+   208→At the end of each phase:
+   209→
+   210→- run type checking
+   211→- run linting
+   212→- run tests
+   213→- verify the relevant user flows
+   214→- verify security controls introduced in that phase
+   215→- verify responsive behavior
+   216→- summarize the implementation
+   217→- list anything intentionally deferred
+   218→- do not continue to the next phase until the phase is demonstrably stable
+   219→
+   220→The coding agent must not repeatedly rebuild the architecture from scratch.
+   221→
+   222→Establish strong foundations first.
+   223→
+   224→---
+   225→
+   226→# 6. TECHNOLOGY STACK
+   227→
+   228→Use a modern production-oriented stack.
+   229→
+   230→Use the latest stable versions available at implementation time unless there is a documented reason not to.
+   231→
+   232→## Frontend
+   233→
+   234→- Next.js
+   235→- App Router
+   236→- TypeScript with strict mode
+   237→- React
+   238→- Tailwind CSS
+   239→- shadcn/ui
+   240→- Radix primitives where appropriate
+   241→- Lucide icons
+   242→- Recharts for normal analytics
+   243→- D3 only for visualizations that genuinely need custom rendering
+   244→- Framer Motion only where subtle transitions improve UX
+   245→
+   246→## State
+   247→
+   248→Use:
+   249→
+   250→- TanStack Query for server state, fetching, caching and synchronization
+   251→- Zustand for appropriate local UI state
+   252→
+   253→Do not duplicate server state unnecessarily between multiple state systems.
+   254→
+   255→## Backend
+   256→
+   257→Use Next.js server-side capabilities, route handlers and server actions where appropriate.
+   258→
+   259→Keep business logic in dedicated service/domain layers rather than embedding it directly in presentation components.
+   260→
+   261→## Database
+   262→
+   263→- PostgreSQL
+   264→- Supabase
+   265→
+   266→Use:
+   267→
+   268→- foreign keys
+   269→- indexes
+   270→- transactions
+   271→- RLS
+   272→- typed database access
+   273→
+   274→## Authentication
+   275→
+   276→Prefer Supabase Auth or another mature authentication provider.
+   277→
+   278→Do not implement custom authentication unnecessarily.
+   279→
+   280→## Storage
+   281→
+   282→Use private object storage, preferably:
+   283→
+   284→- Supabase Storage
+   285→- or another S3-compatible private storage provider
+   286→
+   287→## Offline
+   288→
+   289→Use:
+   290→
+   291→- IndexedDB
+   292→- Dexie
+   293→- Service Worker/PWA capability where appropriate
+   294→
+   295→## Validation
+   296→
+   297→Use:
+   298→
+   299→- Zod
+   300→
+   301→for API and form schemas.
+   302→
+   303→## Testing
+   304→
+   305→Use:
+   306→
+   307→- Vitest for unit/integration logic
+   308→- Playwright for end-to-end testing
+   309→
+   310→## Error monitoring
+   311→
+   312→Use a production monitoring system such as Sentry.
+   313→
+   314→Do not expose monitoring credentials to the client unless explicitly designed as public client configuration.
+   315→
+   316→---
+   317→
+   318→# 7. FINANCIAL DATA MODELING
+   319→
+   320→This is critical.
+   321→
+   322→Do not store all financial values as integer cents.
+   323→
+   324→Different types of financial values require different representations.
+   325→
+   326→## Currency amounts
+   327→
+   328→For fixed currency amounts, use integer minor units where appropriate.
+   329→
+   330→Example:
+   331→
+   332→USD 125.34
+   333→
+   334→stored as:
+   335→
+   336→12334 cents
+   337→
+   338→## Prices
+   339→
+   340→Use PostgreSQL `numeric` with an appropriate precision and scale.
+   341→
+   342→Examples:
+   343→
+   344→- entry price
+   345→- stop price
+   346→- target price
+   347→- exit price
+   348→
+   349→## Quantities
+   350→
+   351→Use exact decimal numeric representation.
+   352→
+   353→Examples:
+   354→
+   355→- lot size
+   356→- contracts
+   357→- shares
+   358→- position size
+   359→
+   360→## Ratios
+   361→
+   362→Use exact numeric representation.
+   363→
+   364→Examples:
+   365→
+   366→- risk percentage
+   367→- R multiple
+   368→- reward/risk
+   369→- win rate
+   370→
+   371→Do not perform money-critical arithmetic using unsafe JavaScript floating-point operations.
+   372→
+   373→Use deterministic decimal arithmetic.
+   374→
+   375→All server-side financial calculations must be validated.
+   376→
+   377→---
+   378→
+   379→# 8. HIGH-LEVEL ARCHITECTURE
+   380→
+   381→```text
+   382→                    PUBLIC WEBSITE
+   383→                          │
+   384→                          ▼
+   385→                 Next.js Application
+   386→                          │
+   387→          ┌───────────────┴────────────────┐
+   388→          │                                │
+   389→          ▼                                ▼
+   390→   Authenticated App                 Server Services
+   391→          │                                │
+   392→          │                       ┌────────┴────────┐
+   393→          │                       │                 │
+   394→          ▼                       ▼                 ▼
+   395→      Supabase                 Analytics        Media Jobs
+   396→   Postgres + RLS               Engine          / Processing
+   397→          │
+   398→          │
+   399→          ▼
+   400→     Private Storage
+   401→          │
+   402→          │
+   403→          ▼
+   404→      Signed URLs
+   405→
+   406→Offline:
+   407→Next.js Client
+   408→      │
+   409→      ▼
+   410→IndexedDB / Dexie
+   411→      │
+   412→      ▼
+   413→Sync Engine
+   414→      │
+   415→      ▼
+   416→Conflict Resolution
+   417→```
+   418→
+   419→---
+   420→
+   421→# 9. INFORMATION ARCHITECTURE
+   422→
+   423→## Public Website
+   424→
+   425→- Landing
+   426→- Features
+   427→- Privacy
+   428→- Terms
+   429→- Cookies
+   430→- Sign In
+   431→- Sign Up
+   432→- Forgot Password
+   433→- Reset Password
+   434→
+   435→## Application
+   436→
+   437→### Dashboard
+   438→
+   439→### Journal
+   440→
+   441→- All Trades
+   442→- Add Trade
+   443→- Trade Detail
+   444→
+   445→### Calendar
+   446→
+   447→### Analytics
+   448→
+   449→- Overview
+   450→- Performance
+   451→- Instruments
+   452→- Sessions
+   453→- Strategies
+   454→- Setups
+   455→- Behavior
+   456→- Risk
+   457→- Time
+   458→
+   459→### Playbooks
+   460→
+   461→- Strategies
+   462→- Strategy Detail
+   463→- Versions
+   464→- Rules
+   465→- Experiments
+   466→
+   467→### Reviews
+   468→
+   469→- Daily
+   470→- Weekly
+   471→- Monthly
+   472→- Action Items
+   473→
+   474→### Media
+   475→
+   476→- Images
+   477→- Videos
+   478→
+   479→### Settings
+   480→
+   481→- Profile
+   482→- Accounts
+   483→- Trading
+   484→- Timezone
+   485→- Tags
+   486→- Checklists
+   487→- Notifications
+   488→- Appearance
+   489→- Accessibility
+   490→- Privacy
+   491→- Security
+   492→- Data
+   493→
+   494→---
+   495→
+   496→# 10. DESIGN PHILOSOPHY
+   497→
+   498→DnD must feel like:
+   499→
+   500→**Professional trading software + modern SaaS + research notebook**
+   501→
+   502→It must not feel like:
+   503→
+   504→- a crypto casino
+   505→- a neon trading simulator
+   506→- a generic admin dashboard
+   507→- a spreadsheet clone
+   508→- an AI gimmick
+   509→
+   510→Avoid:
+   511→
+   512→- excessive gradients
+   513→- neon overload
+   514→- excessive glassmorphism
+   515→- excessive shadows
+   516→- giant decorative illustrations
+   517→- excessive rounded cards
+   518→- aggressive animations
+   519→- flashing profit/loss
+   520→- cluttered layouts
+   521→
+   522→Professionalism should come from:
+   523→
+   524→- spacing
+   525→- typography
+   526→- hierarchy
+   527→- precision
+   528→- consistency
+   529→- responsiveness
+   530→- information architecture
+   531→- interaction quality
+   532→
+   533→---
+   534→
+   535→# 11. DESIGN SYSTEM
+   536→
+   537→Create three appearance presets.
+   538→
+   539→These are themes of the same application, not separate designs.
+   540→
+   541→---
+   542→
+   543→## THEME A: NORDIC CLEAN
+   544→
+   545→Default theme.
+   546→
+   547→Background:
+   548→
+   549→`#F8FAFC`
+   550→
+   551→Surface:
+   552→
+   553→`#FFFFFF`
+   554→
+   555→Primary text:
+   556→
+   557→`#1E293B`
+   558→
+   559→Secondary text:
+   560→
+   561→`#64748B`
+   562→
+   563→Borders:
+   564→
+   565→`#E2E8F0`
+   566→
+   567→Profit:
+   568→
+   569→`#34D399`
+   570→
+   571→Loss:
+   572→
+   573→`#FB7185`
+   574→
+   575→Feel:
+   576→
+   577→- clean
+   578→- quiet
+   579→- precise
+   580→- readable
+   581→
+   582→---
+   583→
+   584→## THEME B: SLEEK TERMINAL
+   585→
+   586→Background:
+   587→
+   588→`#0E1114`
+   589→
+   590→Surface:
+   591→
+   592→`#1A2026`
+   593→
+   594→Secondary text:
+   595→
+   596→`#A0AEC0`
+   597→
+   598→Profit:
+   599→
+   600→`#10B981`
+   601→
+   602→Loss:
+   603→
+   604→`#F43F5E`
+   605→
+   606→Feel:
+   607→
+   608→- dark
+   609→- technical
+   610→- focused
+   611→- data-oriented
+   612→
+   613→Do not use pure black as the primary surface.
+   614→
+   615→---
+   616→
+   617→## THEME C: INSTITUTIONAL BLUE
+   618→
+   619→Background:
+   620→
+   621→`#0F172A`
+   622→
+   623→Surface:
+   624→
+   625→`#1E293B`
+   626→
+   627→Secondary text:
+   628→
+   629→`#94A3B8`
+   630→
+   631→Profit:
+   632→
+   633→`#06B6D4`
+   634→
+   635→Loss:
+   636→
+   637→`#EF4444`
+   638→
+   639→Feel:
+   640→
+   641→- institutional
+   642→- premium
+   643→- analytical
+   644→
+   645→---
+   646→
+   647→# 12. DESIGN RULES
+   648→
+   649→Use:
+   650→
+   651→- consistent spacing scale
+   652→- consistent typography scale
+   653→- consistent control heights
+   654→- consistent radius system
+   655→- semantic colors
+   656→- restrained borders
+   657→- restrained shadows
+   658→
+   659→Do not let individual pages invent their own visual language.
+   660→
+   661→Profit/loss must never rely only on color.
+   662→
+   663→Pair color with:
+   664→
+   665→- sign
+   666→- label
+   667→- icon
+   668→- text
+   669→
+   670→No emoji anywhere in the UI.
+   671→
+   672→Use Lucide or another professional icon set.
+   673→
+   674→Do not use em dash characters anywhere in UI copy.
+   675→
+   676→---
+   677→
+   678→# 13. RESPONSIVE UX
+   679→
+   680→Desktop:
+   681→
+   682→Persistent sidebar.
+   683→
+   684→Tablet:
+   685→
+   686→Compact sidebar/drawer.
+   687→
+   688→Mobile:
+   689→
+   690→The application should feel designed for mobile, not merely compressed.
+   691→
+   692→Use:
+   693→
+   694→- bottom navigation
+   695→- mobile drawers
+   696→- touch-friendly targets
+   697→- compact headers
+   698→- responsive forms
+   699→- horizontally manageable data
+   700→- mobile-friendly media viewers
+   701→- mobile-friendly charts
+   702→
+   703→Mobile primary navigation:
+   704→
+   705→```text
+   706→Dashboard
+   707→Journal
+   708→Add
+   709→Calendar
+   710→More
+   711→```
+   712→
+   713→Add Trade must be one tap away on mobile.
+   714→
+   715→---
+   716→
+   717→# 14. ACCESSIBILITY
+   718→
+   719→Build accessibility from the start.
+   720→
+   721→Requirements:
+   722→
+   723→- semantic HTML
+   724→- keyboard navigation
+   725→- visible focus states
+   726→- proper labels
+   727→- accessible dialogs
+   728→- appropriate ARIA
+   729→- proper form descriptions
+   730→- sufficient contrast
+   731→- screen-reader-friendly status messages
+   732→- accessible tables
+   733→- keyboard-accessible menus
+   734→- reduced-motion support
+   735→
+   736→Never use color alone to communicate critical information.
+   737→
+   738→Respect:
+   739→
+   740→`prefers-reduced-motion`
+   741→
+   742→---
+   743→
+   744→# 15. PUBLIC LANDING PAGE
+   745→
+   746→The landing page must provide useful information before signup.
+   747→
+   748→Do not immediately force registration.
+   749→
+   750→---
+   751→
+   752→## Hero
+   753→
+   754→Primary message:
+   755→
+   756→**Turn every trade into measurable progress.**
+   757→
+   758→Supporting copy should communicate that DnD combines:
+   759→
+   760→- trading journal
+   761→- strategy playbooks
+   762→- evidence
+   763→- psychology
+   764→- reviews
+   765→- analytics
+   766→- risk management
+   767→
+   768→Primary CTA:
+   769→
+   770→**Start journaling**
+   771→
+   772→Secondary CTA:
+   773→
+   774→**Explore DnD**
+   775→
+   776→Use actual application screenshots/mock interface views.
+   777→
+   778→Do not use generic finance stock photography as the primary visual identity.
+   779→
+   780→---
+   781→
+   782→# 16. LANDING PAGE SECTIONS
+   783→
+   784→Include:
+   785→
+   786→### Hero
+   787→
+   788→### Problem
+   789→
+   790→Explain why ordinary trading journals are insufficient.
+   791→
+   792→### How DnD Works
+   793→
+   794→```text
+   795→Plan
+   796→↓
+   797→Trade
+   798→↓
+   799→Document
+   800→↓
+   801→Review
+   802→↓
+   803→Improve
+   804→```
+   805→
+   806→### Features
+   807→
+   808→### Evidence-first journaling
+   809→
+   810→### Strategy Playbooks
+   811→
+   812→### Psychology and behavior
+   813→
+   814→### Analytics
+   815→
+   816→### Daily plan vs execution
+   817→
+   818→### Privacy
+   819→
+   820→### Offline capability
+   821→
+   822→### Product screenshots
+   823→
+   824→### FAQ
+   825→
+   826→### Final CTA
+   827→
+   828→---
+   829→
+   830→# 17. LEGAL DOCUMENTS
+   831→
+   832→Create:
+   833→
+   834→- Terms of Service
+   835→- Privacy Policy
+   836→- Cookie Policy
+   837→
+   838→The exact legal content must remain editable and should be written for later legal review.
+   839→
+   840→The application should record:
+   841→
+   842→- document type
+   843→- version
+   844→- acceptance timestamp
+   845→- user ID
+   846→
+   847→Distinguish appropriately between:
+   848→
+   849→- legally required terms acceptance
+   850→- privacy acknowledgement/notice
+   851→- optional analytics or marketing consent
+   852→- technically necessary cookies
+   853→
+   854→Do not implement a misleading single "accept everything" mechanism.
+   855→
+   856→---
+   857→
+   858→# 18. AUTHENTICATION
+   859→
+   860→Support:
+   861→
+   862→- sign up
+   863→- sign in
+   864→- sign out
+   865→- password recovery
+   866→- session management
+   867→- protected routes
+   868→- session revocation where supported
+   869→- optional MFA where supported
+   870→
+   871→Do not hand-roll password storage.
+   872→
+   873→Use mature authentication infrastructure.
+   874→
+   875→---
+   876→
+   877→# 19. APPLICATION SHELL
+   878→
+   879→Desktop navigation:
+   880→
+   881→- Dashboard
+   882→- Journal
+   883→- Calendar
+   884→- Analytics
+   885→- Playbooks
+   886→- Reviews
+   887→- Media
+   888→- Settings
+   889→
+   890→Include:
+   891→
+   892→- active route state
+   893→- tooltips
+   894→- collapsible sidebar
+   895→- mobile navigation
+   896→- account menu
+   897→- theme control
+   898→- global search
+   899→- command palette
+   900→
+   901→---
+   902→
+   903→# 20. COMMAND PALETTE
+   904→
+   905→Implement:
+   906→
+   907→`Ctrl/Cmd + K`
+   908→
+   909→Possible actions:
+   910→
+   911→- Add Trade
+   912→- Search Trades
+   913→- Open Dashboard
+   914→- Open Calendar
+   915→- New Strategy
+   916→- Start Daily Review
+   917→- Start Weekly Review
+   918→- Export Data
+   919→- Open Settings
+   920→
+   921→Do not intercept browser/system shortcuts unnecessarily.
+   922→
+   923→---
+   924→
+   925→# 21. DASHBOARD
+   926→
+   927→The dashboard must answer:
+   928→
+   929→**How am I performing?**
+   930→
+   931→Provide date filters:
+   932→
+   933→- Today
+   934→- This Week
+   935→- This Month
+   936→- This Quarter
+   937→- This Year
+   938→- Custom
+   939→
+   940→Primary metrics:
+   941→
+   942→- Net P&L
+   943→- Win Rate
+   944→- Average R
+   945→- Profit Factor
+   946→- Expectancy
+   947→- Trade Count
+   948→- Average Win
+   949→- Average Loss
+   950→- Max Drawdown
+   951→- Current Drawdown
+   952→
+   953→Allow metric customization.
+   954→
+   955→---
+   956→
+   957→# 22. DASHBOARD VISUALS
+   958→
+   959→Include:
+   960→
+   961→### Equity Curve
+   962→
+   963→Cumulative account performance.
+   964→
+   965→### Daily P&L
+   966→
+   967→Daily result overview.
+   968→
+   969→### R Distribution
+   970→
+   971→Distribution of trade outcomes.
+   972→
+   973→### Instrument Performance
+   974→
+   975→### Strategy Performance
+   976→
+   977→### Session Performance
+   978→
+   979→### A+ vs Non-A+
+   980→
+   981→### Rule Compliance
+   982→
+   983→### Psychology Effects
+   984→
+   985→Charts must use actual data.
+   986→
+   987→---
+   988→
+   989→# 23. DASHBOARD INSIGHT ENGINE
+   990→
+   991→Create:
+   992→
+   993→**What is affecting your performance?**
+   994→
+   995→Insights must be generated from actual user data.
+   996→
+   997→Example:
+   998→
+   999→> Your trades tagged "Entered Early" have historically produced lower average R than trades without that tag.
+  1000→
+  1001→The system should allow the user to inspect the underlying trades.
+  1002→
+  1003→Do not use causal language unless causal inference is actually justified.
+  1004→
+  1005→Prefer:
+  1006→
+  1007→- "associated with"
+  1008→- "historically correlated with"
+  1009→- "has produced"
+  1010→
+  1011→instead of:
+  1012→
+  1013→- "causes"
+  1014→- "guarantees"
+  1015→
+  1016→---
+  1017→
+  1018→# 24. SAMPLE SIZE RULE
+  1019→
+  1020→Do not create strong-looking insights from tiny datasets.
+  1021→
+  1022→Default minimum bucket sample:
+  1023→
+  1024→`N >= 10`
+  1025→
+  1026→Make this configurable.
+  1027→
+  1028→Show the sample size with relevant insights.
+  1029→
+  1030→Example:
+  1031→
+  1032→`Entered Early | 18 trades | Avg R: -0.41`
+  1033→
+  1034→Do not tell users that an insight is statistically significant unless an actual appropriate statistical test has been performed.
+  1035→
+  1036→---
+  1037→
+  1038→# 25. JOURNAL
+  1039→
+  1040→The Journal is the core workflow.
+  1041→
+  1042→Support:
+  1043→
+  1044→- create
+  1045→- edit
+  1046→- view
+  1047→- duplicate
+  1048→- archive
+  1049→- delete
+  1050→- restore where appropriate
+  1051→- search
+  1052→- filter
+  1053→- sort
+  1054→- bulk actions where safe
+  1055→
+  1056→---
+  1057→
+  1058→# 26. JOURNAL TABLE
+  1059→
+  1060→Possible columns:
+  1061→
+  1062→- Date
+  1063→- Instrument
+  1064→- Direction
+  1065→- Strategy
+  1066→- Setup Grade
+  1067→- Session
+  1068→- Entry
+  1069→- Exit
+  1070→- P&L
+  1071→- R
+  1072→- Rule Compliance
+  1073→- Psychology
+  1074→- Status
+  1075→
+  1076→Allow column visibility customization.
+  1077→
+  1078→---
+  1079→
+  1080→# 27. QUICK ADD TRADE
+  1081→
+  1082→The trader must be able to rapidly record:
+  1083→
+  1084→- instrument
+  1085→- direction
+  1086→- entry
+  1087→- stop
+  1088→- target
+  1089→- account
+  1090→
+  1091→Then choose:
+  1092→
+  1093→**Save and finish later**
+  1094→
+  1095→Create autosaved drafts.
+  1096→
+  1097→Never lose entered information because the user accidentally navigates away.
+  1098→
+  1099→---
+  1100→
+  1101→# 28. FULL TRADE ENTRY
+  1102→
+  1103→Break the full form into logical stages.
+  1104→
+  1105→Suggested:
+  1106→
+  1107→```text
+  1108→1. Basics
+  1109→2. Execution
+  1110→3. Trading Plan
+  1111→4. ICT Setup
+  1112→5. Risk
+  1113→6. Psychology
+  1114→7. Evidence
+  1115→8. Review
+  1116→```
+  1117→
+  1118→Do not show dozens of fields simultaneously.
+  1119→
+  1120→Use progressive disclosure.
+  1121→
+  1122→Allow advanced sections to remain collapsed until needed.
+  1123→
+  1124→---
+  1125→
+  1126→# 29. TRADE BASICS
+  1127→
+  1128→Fields:
+  1129→
+  1130→- date
+  1131→- entry time
+  1132→- exit time
+  1133→- timezone
+  1134→- instrument
+  1135→- market
+  1136→- direction
+  1137→- account
+  1138→- session
+  1139→- strategy
+  1140→- strategy version
+  1141→- setup
+  1142→- tags
+  1143→- status
+  1144→
+  1145→Markets:
+  1146→
+  1147→- Forex
+  1148→- Gold
+  1149→- Indices
+  1150→- Futures
+  1151→- Crypto
+  1152→- Stocks
+  1153→- Custom
+  1154→
+  1155→---
+  1156→
+  1157→# 30. EXECUTION DATA
+  1158→
+  1159→Fields:
+  1160→
+  1161→- entry price
+  1162→- stop loss
+  1163→- target
+  1164→- exit price
+  1165→- position size
+  1166→- risk amount
+  1167→- risk percentage
+  1168→- fees
+  1169→- commission
+  1170→- swap
+  1171→- slippage
+  1172→- currency
+  1173→
+  1174→---
+  1175→
+  1176→# 31. SERVER-COMPUTED VALUES
+  1177→
+  1178→Never trust client-provided calculated financial values.
+  1179→
+  1180→Server-side calculations should validate and derive:
+  1181→
+  1182→- risk amount
+  1183→- stop distance
+  1184→- target distance
+  1185→- planned R:R
+  1186→- gross P&L
+  1187→- total costs
+  1188→- net P&L
+  1189→- actual R
+  1190→- return percentage where meaningful
+  1191→
+  1192→The client may display calculations optimistically, but the authoritative value comes from validated server-side logic.
+  1193→
+  1194→---
+  1195→
+  1196→# 32. POSITION AND P&L ENGINE
+  1197→
+  1198→Support:
+  1199→
+  1200→- long
+  1201→- short
+  1202→- Forex
+  1203→- Gold
+  1204→- indices
+  1205→- futures
+  1206→- stocks
+  1207→- crypto
+  1208→- custom instrument definitions
+  1209→
+  1210→Support:
+  1211→
+  1212→- fractional quantities
+  1213→- multiple fills
+  1214→- multiple exits
+  1215→- commissions
+  1216→- fees
+  1217→- swap
+  1218→- slippage
+  1219→- currency conversion
+  1220→
+  1221→Do not hardcode assumptions about pip/tick/contract specifications.
+  1222→
+  1223→Use configurable instrument specifications.
+  1224→
+  1225→---
+  1226→
+  1227→# 33. EXECUTION LEDGER
+  1228→
+  1229→A trade may contain:
+  1230→
+  1231→- multiple entries
+  1232→- multiple exits
+  1233→- partial fills
+  1234→- partial exits
+  1235→
+  1236→Represent execution events separately.
+  1237→
+  1238→Example:
+  1239→
+  1240→```text
+  1241→Entry 1
+  1242→Entry 2
+  1243→Exit 1
+  1244→Exit 2
+  1245→Exit 3
+  1246→```
+  1247→
+  1248→Trade-level performance should derive from underlying execution records.
+  1249→
+  1250→Do not overwrite the execution history.
+  1251→
+  1252→---
+  1253→
+  1254→# 34. BREAK-EVEN AND RESULT STATES
+  1255→
+  1256→Support:
+  1257→
+  1258→- Win
+  1259→- Loss
+  1260→- Break-even
+  1261→- Partial Win
+  1262→- Partial Loss
+  1263→- Open
+  1264→- Cancelled
+  1265→
+  1266→Do not force every outcome into a simplistic win/loss model.
+  1267→
+  1268→---
+  1269→
+  1270→# 35. R MULTIPLE
+  1271→
+  1272→R represents performance relative to valid initial risk.
+  1273→
+  1274→Examples:
+  1275→
+  1276→`+2.4R`
+  1277→
+  1278→`-1.0R`
+  1279→
+  1280→`+0.5R`
+  1281→
+  1282→`BE`
+  1283→
+  1284→If valid initial risk cannot be established:
+  1285→
+  1286→`R: N/A`
+  1287→
+  1288→Never divide by zero.
+  1289→
+  1290→Never show Infinity.
+  1291→
+  1292→---
+  1293→
+  1294→# 36. DAILY TRADING PLAN
+  1295→
+  1296→Create a dedicated:
+  1297→
+  1298→# Daily Plan
+  1299→
+  1300→Fields:
+  1301→
+  1302→- date
+  1303→- overall bias
+  1304→- weekly bias
+  1305→- daily bias
+  1306→- instruments
+  1307→- PWH
+  1308→- PWL
+  1309→- PDH
+  1310→- PDL
+  1311→- HTF levels
+  1312→- liquidity targets
+  1313→- session
+  1314→- setup conditions
+  1315→- invalidation
+  1316→- maximum trades
+  1317→- maximum daily risk
+  1318→- notes
+  1319→
+  1320→The user can create a plan before trading.
+  1321→
+  1322→---
+  1323→
+  1324→# 37. PLAN VS EXECUTION
+  1325→
+  1326→This is a signature DnD feature.
+  1327→
+  1328→Compare what the trader planned against what happened.
+  1329→
+  1330→Example:
+  1331→
+  1332→### Planned
+  1333→
+  1334→NY AM only  
+  1335→Maximum 2 trades  
+  1336→Wait for MSS  
+  1337→Risk 0.5%
+  1338→
+  1339→### Executed
+  1340→
+  1341→London trade  
+  1342→4 trades  
+  1343→Entered before MSS  
+  1344→Risked 1.1%
+  1345→
+  1346→Generate a factual adherence summary.
+  1347→
+  1348→Track:
+  1349→
+  1350→- planned session vs actual
+  1351→- planned risk vs actual
+  1352→- planned number of trades vs actual
+  1353→- required setup conditions vs actual
+  1354→- planned instruments vs actual
+  1355→- planned target vs actual
+  1356→
+  1357→This becomes part of behavior analytics.
+  1358→
+  1359→---
+  1360→
+  1361→# 38. ICT SETUP DOCUMENTATION
+  1362→
+  1363→DnD should strongly support ICT-style journaling while remaining methodology-flexible.
+  1364→
+  1365→Do not make ICT hardcoded into the entire application.
+  1366→
+  1367→Create configurable setup frameworks.
+  1368→
+  1369→Potential categories:
+  1370→
+  1371→## Higher Timeframe Context
+  1372→
+  1373→- Weekly bias
+  1374→- Daily bias
+  1375→- 4H bias
+  1376→- 1H context
+  1377→- premium/discount
+  1378→- dealing range
+  1379→- HTF liquidity
+  1380→
+  1381→## Liquidity
+  1382→
+  1383→- PDH
+  1384→- PDL
+  1385→- PWH
+  1386→- PWL
+  1387→- equal highs
+  1388→- equal lows
+  1389→- buy-side liquidity
+  1390→- sell-side liquidity
+  1391→- internal liquidity
+  1392→- external liquidity
+  1393→- session liquidity
+  1394→
+  1395→## Structure
+  1396→
+  1397→- BOS
+  1398→- MSS
+  1399→- displacement
+  1400→- protected high
+  1401→- protected low
+  1402→- structure shift
+  1403→
+  1404→## Entry Model
+  1405→
+  1406→- liquidity sweep
+  1407→- displacement
+  1408→- FVG
+  1409→- Order Block
+  1410→- Breaker
+  1411→- Mitigation
+  1412→- SMT
+  1413→- retracement
+  1414→- entry location
+  1415→
+  1416→## Session
+  1417→
+  1418→- Asia
+  1419→- London
+  1420→- New York AM
+  1421→- New York PM
+  1422→- Custom
+  1423→
+  1424→---
+  1425→
+  1426→# 39. CONFIGURABLE CHECKLIST SYSTEM
+  1427→
+  1428→Users can create reusable checklists.
+  1429→
+  1430→Each checklist supports:
+  1431→
+  1432→- name
+  1433→- description
+  1434→- sections
+  1435→- items
+  1436→- required status
+  1437→- optional status
+  1438→- weights
+  1439→- scoring
+  1440→- grading thresholds
+  1441→- evidence requirement
+  1442→- version
+  1443→
+  1444→Example:
+  1445→
+  1446→```text
+  1447→A+ Setup
+  1448→
+  1449→HTF aligned
+  1450→Liquidity taken
+  1451→Displacement confirmed
+  1452→MSS confirmed
+  1453→FVG present
+  1454→Entry inside defined zone
+  1455→Risk compliant
+  1456→Valid session
+  1457→```
+  1458→
+  1459→---
+  1460→
+  1461→# 40. CHECKLIST VERSIONING
+  1462→
+  1463→Checklist definitions must be versioned.
+  1464→
+  1465→Historical trade evaluations must remain associated with the exact checklist version used.
+  1466→
+  1467→Do not silently change old trade grades when the checklist changes.
+  1468→
+  1469→Provide optional explicit action:
+  1470→
+  1471→**Re-evaluate using current checklist**
+  1472→
+  1473→If performed, save it as a new evaluation rather than overwriting the historical evaluation.
+  1474→
+  1475→---
+  1476→
+  1477→# 41. SETUP GRADE
+  1478→
+  1479→Allow grades such as:
+  1480→
+  1481→- A+
+  1482→- A
+  1483→- B
+  1484→- C
+  1485→- Invalid
+  1486→
+  1487→But allow users to customize grading systems.
+  1488→
+  1489→Store:
+  1490→
+  1491→- raw answers
+  1492→- checklist version
+  1493→- weighted score
+  1494→- final grade
+  1495→- evaluation timestamp
+  1496→
+  1497→---
+  1498→
+  1499→# 42. TRADE THESIS
+  1500→
+  1501→Every trade should allow structured reasoning.
+  1502→
+  1503→Fields:
+  1504→
+  1505→- Why am I taking this trade?
+  1506→- What is the market narrative?
+  1507→- What liquidity am I targeting?
+  1508→- What confirms the setup?
+  1509→- What invalidates it?
+  1510→- Where is the target?
+  1511→- What would make me exit early?
+  1512→
+  1513→Support free-form notes as well.
+  1514→
+  1515→---
+  1516→
+  1517→# 43. EVIDENCE SYSTEM
+  1518→
+  1519→Evidence is a first-class part of the trade.
+  1520→
+  1521→Each trade supports chronological stages:
+  1522→
+  1523→```text
+  1524→Before Entry
+  1525→↓
+  1526→Setup
+  1527→↓
+  1528→Entry
+  1529→↓
+  1530→During Trade
+  1531→↓
+  1532→Exit
+  1533→↓
+  1534→Post Trade / Review
+  1535→```
+  1536→
+  1537→---
+  1538→
+  1539→# 44. SCREENSHOT EVIDENCE
+  1540→
+  1541→Support:
+  1542→
+  1543→- drag and drop
+  1544→- file picker
+  1545→- multiple selection
+  1546→- Ctrl/Cmd + V clipboard paste
+  1547→- mobile gallery/camera
+  1548→- image preview
+  1549→- image reordering
+  1550→- stage assignment
+  1551→- captions
+  1552→- tags
+  1553→- timestamps
+  1554→- annotations
+  1555→- delete
+  1556→- download
+  1557→- export
+  1558→
+  1559→Uploads must provide clear status.
+  1560→
+  1561→---
+  1562→
+  1563→# 45. IMAGE VIEWER
+  1564→
+  1565→Support:
+  1566→
+  1567→- zoom
+  1568→- pan
+  1569→- fullscreen
+  1570→- fit-to-screen
+  1571→- next/previous
+  1572→- thumbnail strip
+  1573→- stage navigation
+  1574→- compare
+  1575→- annotation mode
+  1576→
+  1577→---
+  1578→
+  1579→# 46. NON-DESTRUCTIVE ANNOTATION
+  1580→
+  1581→Annotations must be stored separately from the original media.
+  1582→
+  1583→Support:
+  1584→
+  1585→- lines
+  1586→- arrows
+  1587→- rectangles
+  1588→- circles
+  1589→- text
+  1590→- labels
+  1591→- price levels
+  1592→- thickness
+  1593→- undo
+  1594→- redo
+  1595→- hide/show
+  1596→- delete
+  1597→
+  1598→The original image must never be modified simply because the user added an annotation.
+  1599→
+  1600→Allow optional flattened export.
+  1601→
+  1602→Use a canvas system such as Konva or another suitable layer-based implementation.
+  1603→
+  1604→---
+  1605→
+  1606→# 47. VIDEO EVIDENCE
+  1607→
+  1608→Support:
+  1609→
+  1610→- trade execution recordings
+  1611→- chart replay
+  1612→- screen recordings
+  1613→- journaling reviews
+  1614→- strategy demonstrations
+  1615→- research evidence
+  1616→
+  1617→Videos can be attached to:
+  1618→
+  1619→- trades
+  1620→- strategies
+  1621→- strategy versions
+  1622→- reviews
+  1623→
+  1624→---
+  1625→
+  1626→# 48. VIDEO UPLOAD STATES
+  1627→
+  1628→Display:
+  1629→
+  1630→```text
+  1631→Selecting
+  1632→↓
+  1633→Uploading
+  1634→↓
+  1635→Processing
+  1636→↓
+  1637→Ready
+  1638→```
+  1639→
+  1640→Failure:
+  1641→
+  1642→```text
+  1643→Upload failed
+  1644→[Retry]
+  1645→```
+  1646→
+  1647→Show accurate progress.
+  1648→
+  1649→Do not make the user wonder whether a 500 MB upload is frozen.
+  1650→
+  1651→Use resumable uploads where infrastructure supports them.
+  1652→
+  1653→---
+  1654→
+  1655→# 49. VIDEO STORAGE
+  1656→
+  1657→Use private object storage.
+  1658→
+  1659→Do not require:
+  1660→
+  1661→- YouTube
+  1662→- Vimeo
+  1663→- public cloud links
+  1664→
+  1665→Use controlled access such as short-lived signed URLs.
+  1666→
+  1667→Validate:
+  1668→
+  1669→- MIME type
+  1670→- extension
+  1671→- file signature when practical
+  1672→- file size
+  1673→- ownership
+  1674→- storage quota
+  1675→
+  1676→Generate thumbnails where practical.
+  1677→
+  1678→---
+  1679→
+  1680→# 50. MEDIA LIBRARY
+  1681→
+  1682→Dedicated Media section.
+  1683→
+  1684→Views:
+  1685→
+  1686→- Grid
+  1687→- List
+  1688→
+  1689→Filters:
+  1690→
+  1691→- image
+  1692→- video
+  1693→- trade
+  1694→- strategy
+  1695→- review
+  1696→- tag
+  1697→- date
+  1698→
+  1699→Support search.
+  1700→
+  1701→Do not design this as a generic file manager.
+  1702→
+  1703→It should feel contextual to trading.
+  1704→
+  1705→---
+  1706→
+  1707→# 51. PSYCHOLOGY SYSTEM
+  1708→
+  1709→Capture psychology before and after execution.
+  1710→
+  1711→## Before
+  1712→
+  1713→- calm
+  1714→- confident
+  1715→- hesitant
+  1716→- fearful
+  1717→- FOMO
+  1718→- impatient
+  1719→- distracted
+  1720→- excited
+  1721→- tired
+  1722→- focused
+  1723→
+  1724→## After
+  1725→
+  1726→- satisfied
+  1727→- frustrated
+  1728→- regret
+  1729→- relief
+  1730→- overconfident
+  1731→- disappointed
+  1732→- calm
+  1733→- confused
+  1734→- angry
+  1735→
+  1736→Also allow:
+  1737→
+  1738→- confidence 1 to 5
+  1739→- energy/focus
+  1740→- emotional impact on execution
+  1741→- custom tags
+  1742→
+  1743→---
+  1744→
+  1745→# 52. BEHAVIOR FLAGS
+  1746→
+  1747→Support explicit behavioral flags:
+  1748→
+  1749→- entered early
+  1750→- broke rules
+  1751→- moved stop
+  1752→- moved target
+  1753→- exited early
+  1754→- revenge trade
+  1755→- overtraded
+  1756→- increased size
+  1757→- chased price
+  1758→- ignored plan
+  1759→
+  1760→These should be analytics dimensions.
+  1761→
+  1762→---
+  1763→
+  1764→# 53. BEHAVIOR ANALYTICS
+  1765→
+  1766→Analyze actual historical outcomes.
+  1767→
+  1768→Examples:
+  1769→
+  1770→- Entered Early vs Avg R
+  1771→- Broke Rules vs Avg R
+  1772→- FOMO vs Avg R
+  1773→- Revenge Trade vs Avg R
+  1774→- Planned vs Actual trade count
+  1775→- Psychology state vs rule adherence
+  1776→
+  1777→Do not claim causation.
+  1778→
+  1779→Show sample size.
+  1780→
+  1781→Allow opening the underlying trades.
+  1782→
+  1783→---
+  1784→
+  1785→# 54. TRADE DETAIL PAGE
+  1786→
+  1787→This is the most important detailed page in the product.
+  1788→
+  1789→It should contain:
+  1790→
+  1791→## Header
+  1792→
+  1793→- instrument
+  1794→- direction
+  1795→- date
+  1796→- session
+  1797→- strategy
+  1798→- result
+  1799→- P&L
+  1800→- R
+  1801→
+  1802→## Plan
+  1803→
+  1804→- market bias
+  1805→- setup thesis
+  1806→- risk
+  1807→- target
+  1808→
+  1809→## Setup
+  1810→
+  1811→- HTF context
+  1812→- liquidity
+  1813→- structure
+  1814→- entry model
+  1815→- checklist
+  1816→- score
+  1817→- grade
+  1818→
+  1819→## Execution
+  1820→
+  1821→- fills
+  1822→- entry
+  1823→- exits
+  1824→- stop
+  1825→- targets
+  1826→- fees
+  1827→- slippage
+  1828→
+  1829→## Plan vs Actual
+  1830→
+  1831→## Psychology
+  1832→
+  1833→## Evidence Timeline
+  1834→
+  1835→## Review
+  1836→
+  1837→## Lessons
+  1838→
+  1839→## Audit History
+  1840→
+  1841→---
+  1842→
+  1843→# 55. EVIDENCE TIMELINE
+  1844→
+  1845→The Trade Detail page should present evidence in chronological context.
+  1846→
+  1847→Example:
+  1848→
+  1849→```text
+  1850→09:10
+  1851→Before Entry
+  1852→Chart screenshot
+  1853→
+  1854→09:18
+  1855→Setup
+  1856→Liquidity sweep screenshot
+  1857→
+  1858→09:24
+  1859→Entry
+  1860→Entry screenshot
+  1861→
+  1862→09:31
+  1863→During Trade
+  1864→Chart recording
+  1865→
+  1866→09:47
+  1867→Exit
+  1868→Exit screenshot
+  1869→
+  1870→10:15
+  1871→Review
+  1872→Post-trade notes
+  1873→```
+  1874→
+  1875→This should make the trade understandable as a story, not just a row in a table.
+  1876→
+  1877→---
+  1878→
+  1879→# 56. STRATEGY PLAYBOOKS
+  1880→
+  1881→DnD should treat strategies like version-controlled engineering artifacts.
+  1882→
+  1883→Think:
+  1884→
+  1885→**Git for trading strategies**
+  1886→
+  1887→A strategy contains:
+  1888→
+  1889→- name
+  1890→- description
+  1891→- purpose
+  1892→- instruments
+  1893→- market
+  1894→- timeframe
+  1895→- session
+  1896→- conditions
+  1897→- required conditions
+  1898→- optional conditions
+  1899→- risk rules
+  1900→- entry rules
+  1901→- stop rules
+  1902→- target rules
+  1903→- management rules
+  1904→- invalidation rules
+  1905→- examples
+  1906→- notes
+  1907→
+  1908→---
+  1909→
+  1910→# 57. STRATEGY VERSIONING
+  1911→
+  1912→Every meaningful change creates a new strategy version.
+  1913→
+  1914→Example:
+  1915→
+  1916→```text
+  1917→London Sweep
+  1918→V1.0
+  1919→V1.1
+  1920→V1.2
+  1921→V2.0
+  1922→```
+  1923→
+  1924→Each version preserves:
+  1925→
+  1926→- rules
+  1927→- checklist
+  1928→- notes
+  1929→- effective date
+  1930→- change reason
+  1931→- author
+  1932→- status
+  1933→
+  1934→A trade must preserve the exact strategy version used when the trade occurred.
+  1935→
+  1936→Historical strategy data must not silently mutate.
+  1937→
+  1938→---
+  1939→
+  1940→# 58. STRATEGY CHANGE LOG
+  1941→
+  1942→Each version may record:
+  1943→
+  1944→- what changed
+  1945→- why it changed
+  1946→- expected impact
+  1947→- evidence motivating the change
+  1948→- effective date
+  1949→- supporting review
+  1950→- associated media
+  1951→
+  1952→---
+  1953→
+  1954→# 59. STRATEGY PERFORMANCE
+  1955→
+  1956→For every strategy and strategy version calculate:
+  1957→
+  1958→- trades
+  1959→- P&L
+  1960→- win rate
+  1961→- average R
+  1962→- expectancy
+  1963→- profit factor
+  1964→- max drawdown
+  1965→- best trade
+  1966→- worst trade
+  1967→- average hold time
+  1968→- rule adherence
+  1969→- session performance
+  1970→- instrument performance
+  1971→- setup performance
+  1972→- psychology patterns
+  1973→
+  1974→---
+  1975→
+  1976→# 60. STRATEGY LAB
+  1977→
+  1978→Create a research-oriented area for comparing strategy versions.
+  1979→
+  1980→Example:
+  1981→
+  1982→| Metric | V1.0 | V1.1 |
+  1983→|---|---:|---:|
+  1984→| Trades | 84 | 73 |
+  1985→| Win Rate | 53% | 59% |
+  1986→| Avg R | 0.42 | 0.68 |
+  1987→| Profit Factor | 1.42 | 1.71 |
+  1988→| Max DD | 8.1R | 5.4R |
+  1989→
+  1990→Always show sample sizes.
+  1991→
+  1992→Warn when samples are too small to support strong conclusions.
+  1993→
+  1994→---
+  1995→
+  1996→# 61. STRATEGY EXPERIMENTS
+  1997→
+  1998→Allow users to record controlled strategy changes.
+  1999→
+  2000→Example:
+
+[showing lines 1-2000 of 4522; use offset=2001 with limit to continue reading]

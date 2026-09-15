@@ -1,0 +1,1420 @@
+DnD CURRENT-PROJECT ENHANCEMENT PASS
+
+IMPORTANT:
+This is an enhancement of the CURRENT DnD application.
+
+Do NOT rebuild DnD.
+Do NOT replace the current architecture.
+Do NOT redesign the entire authenticated application.
+Do NOT change unrelated functionality.
+Do NOT introduce a new architecture when the current architecture can support the requirement cleanly.
+
+The existing DnD codebase, UI, database, authentication, trade system, settings, onboarding, analytics, and design language are the source of truth.
+
+First inspect the current implementation and then make ONLY the changes requested below.
+
+The goal is:
+- better correctness
+- better usability
+- better consistency
+- less information overload
+- better trading workflow
+- better first-user experience
+
+Preserve the current visual identity and existing functionality that already works.
+
+--------------------------------------------------
+0. BACKUP FIRST
+--------------------------------------------------
+
+Before changing anything:
+
+Create a complete backup using the existing project backup process.
+
+Use a filename similar to:
+
+DnD_BEFORE_INSTRUMENT_ONBOARDING_UX_UPGRADE_YYYYMMDD_HHMMSS.zip
+
+Verify the backup before modifying the application.
+
+--------------------------------------------------
+1. CENTRALIZED INSTRUMENT / SYMBOL SYSTEM
+--------------------------------------------------
+
+This is one of the most important changes.
+
+Currently, several areas ask the user to enter an instrument, pair, or symbol.
+
+Create ONE consistent instrument-selection system that is reused everywhere.
+
+Do not create different symbol logic for:
+
+- Settings
+- Add Trade
+- Accounts
+- Analytics
+- Calendar
+- Journal
+- anywhere else
+
+There should be a single source of truth for instruments.
+
+Inspect the existing Instrument model/data and extend it rather than creating duplicate models unless absolutely necessary.
+
+--------------------------------------------------
+1A. SYMBOL INPUT
+--------------------------------------------------
+
+Wherever the user can manually enter a symbol/instrument:
+
+- automatically convert entered characters to UPPERCASE
+- prevent lowercase from being stored
+- normalize leading/trailing whitespace
+- validate against the known instrument catalog where appropriate
+- preserve the ability to handle a custom instrument if the current application supports custom instruments
+
+Examples:
+
+eurusd → EURUSD
+xauusd → XAUUSD
+nas100 → NAS100
+
+Do this both:
+- in the UI
+- on the server
+
+The server must remain authoritative.
+
+Do not rely on CSS/text-transform alone.
+
+--------------------------------------------------
+1B. INSTRUMENT DROPDOWN
+--------------------------------------------------
+
+Replace generic free-text-only instrument selection with a searchable categorized selector.
+
+The selector should support:
+
+- search
+- uppercase matching
+- categorized results
+- keyboard navigation
+- clear selected state
+- current selection display
+- empty state when no match exists
+
+Recommended market categories:
+
+FOREX
+- Major Pairs
+- Minor Pairs / Crosses
+- Exotic Pairs
+
+METALS
+- Gold
+- Silver
+- other supported metals
+
+INDICES
+- major equity indices
+- US indices
+- European indices
+- other supported indices
+
+FUTURES
+- equity index futures
+- commodity futures
+- other supported futures
+
+CRYPTO
+- supported crypto pairs if the application allows them
+
+STOCKS
+- if supported
+
+OTHER
+- custom or user-defined instruments
+
+IMPORTANT:
+Do not hardcode categories that the current business model cannot support.
+
+Inspect the current instrument schema and adapt the category structure accordingly.
+
+The UI should show something like:
+
+FOREX
+  Major Pairs
+    EURUSD
+    GBPUSD
+    USDJPY
+    USDCHF
+    AUDUSD
+    USDCAD
+    NZDUSD
+
+METALS
+    XAUUSD
+    XAGUSD
+
+INDICES
+    NAS100
+    US30
+    SPX500
+
+FUTURES
+    NQ
+    ES
+    YM
+    etc.
+
+The exact available instruments should come from the current application/configuration.
+
+--------------------------------------------------
+1C. INSTRUMENT METADATA
+--------------------------------------------------
+
+This is critical.
+
+Each supported instrument should have enough metadata for the application to understand how that instrument behaves financially.
+
+Inspect the existing model first.
+
+Where needed, support fields conceptually equivalent to:
+
+- symbol
+- display name
+- market type
+- category
+- base currency
+- quote currency
+- price precision
+- quantity precision
+- tick size
+- pip size
+- contract size
+- point value
+- tick value
+- standard lot size if relevant
+- enabled/disabled
+- ordering
+
+Do NOT blindly add all fields if the current schema already represents the same concept differently.
+
+The purpose is to make the financial engine instrument-aware.
+
+--------------------------------------------------
+1D. SMART FINANCIAL BEHAVIOR BY INSTRUMENT
+--------------------------------------------------
+
+When the user selects an instrument during trade logging, automatically use that instrument's metadata to determine:
+
+- price precision
+- decimal places
+- pips / points / ticks where applicable
+- quantity representation
+- position-size behavior
+- risk calculation
+- stop distance
+- target distance
+- P&L calculation
+- R multiple
+- display labels
+
+The system must understand that different markets do not use the same concept in the same way.
+
+For example:
+
+FOREX:
+- price
+- pips
+- lot size
+
+GOLD:
+- price movement
+- contract sizing appropriate to the configured instrument definition
+
+INDEX FUTURES:
+- ticks / points
+- contract multiplier
+
+Do NOT use a single universal "pip" calculation for every market.
+
+Do NOT use arbitrary hardcoded point values.
+
+Use the centralized instrument definition.
+
+--------------------------------------------------
+1E. USER EXPERIENCE DURING TRADE ENTRY
+--------------------------------------------------
+
+When the user chooses:
+
+EURUSD
+
+the UI should intelligently present the relevant financial terminology and formatting.
+
+When the user chooses:
+
+XAUUSD
+
+the UI should adapt appropriately.
+
+When the user chooses:
+
+NQ / ES
+
+the UI should adapt to the futures definition.
+
+Examples of dynamic fields may include:
+
+- Entry
+- Stop
+- Target
+- Stop distance
+- Target distance
+- Quantity
+- Lot size
+- Pips
+- Points
+- Ticks
+- Risk
+- Estimated P&L
+
+Do not display irrelevant fields.
+
+Do not make the UI confusing by showing every possible market concept.
+
+--------------------------------------------------
+1F. SETTINGS INSTRUMENT PREFERENCES
+--------------------------------------------------
+
+The settings system should use the same centralized instrument selector.
+
+Allow the user to configure useful defaults such as:
+
+- preferred/default instrument
+- favorite instruments
+- default market/category if useful
+
+These defaults should affect:
+- Add Trade
+- relevant filters
+- other places where a default instrument is logically useful
+
+Do not create independent instrument lists inside each page.
+
+--------------------------------------------------
+2. TRADE SCREENSHOT / TIMEFRAME SYSTEM
+--------------------------------------------------
+
+The current trade logging page allows screenshots, but does not clearly distinguish which timeframe each screenshot belongs to.
+
+Fix this properly.
+
+Do NOT simply rename uploaded files.
+
+The screenshot itself should have an explicit timeframe classification.
+
+--------------------------------------------------
+2A. SCREENSHOT TIMEFRAME SELECTION
+--------------------------------------------------
+
+When the user adds a screenshot to a trade, require or strongly encourage selecting its timeframe.
+
+Use a clean selector such as:
+
+Weekly
+Daily
+4H
+1H
+30m
+15m
+5m
+3m
+1m
+
+Also support:
+
+Custom timeframe
+
+if the current application needs it.
+
+Do not force users to create arbitrary duplicate fields.
+
+The exact supported timeframes should be centralized.
+
+--------------------------------------------------
+2B. ORGANIZE SCREENSHOTS BY TIMEFRAME
+--------------------------------------------------
+
+Inside Add Trade and Trade Detail, organize evidence approximately as:
+
+CHART EVIDENCE
+
+Higher Timeframe
+  Weekly
+  Daily
+  4H
+
+Execution Timeframe
+  1H
+  15m
+
+Entry / Trigger
+  5m
+  1m
+
+Do not blindly use those exact groupings if the application's trading workflow suggests something better.
+
+The important requirement is that the user can immediately understand:
+
+"Which timeframe is this screenshot from?"
+
+--------------------------------------------------
+2C. MULTIPLE SCREENSHOTS
+--------------------------------------------------
+
+Allow multiple screenshots per timeframe.
+
+Example:
+
+15m
+  Screenshot 1
+  Screenshot 2
+
+5m
+  Screenshot 1
+  Screenshot 2
+
+Each screenshot should preserve:
+- timeframe
+- upload timestamp
+- media metadata
+- annotations
+- description/caption where supported
+
+Do not overwrite one screenshot when another one is added.
+
+--------------------------------------------------
+2D. TIMEFRAME FILTERING
+--------------------------------------------------
+
+On Trade Detail, allow the user to quickly filter/view:
+
+All
+Weekly
+Daily
+4H
+1H
+15m
+5m
+1m
+
+The exact set should reflect supported timeframes.
+
+--------------------------------------------------
+2E. ANNOTATIONS
+--------------------------------------------------
+
+Preserve the current annotation functionality.
+
+Do not redesign the drawing tool unnecessarily.
+
+However, ensure the annotation belongs to the correct screenshot record and therefore the correct timeframe.
+
+Also inspect the current known issue where annotations are not persisted on trade save.
+
+If this issue is still present, FIX IT as part of this work.
+
+Do not leave a known data-loss bug in the affected workflow.
+
+The current reverse-engineering report identified this as a high-severity issue. :contentReference[oaicite:2]{index=2}
+
+--------------------------------------------------
+3. NEWS EVENT SELECTOR
+--------------------------------------------------
+
+In Trade Info, the current High / Medium / Low news selector is not useful enough.
+
+Replace that field with a structured news-event selector.
+
+Use these event options:
+
+No News
+FOMC Fund Rate
+NFP
+FOMC Minutes
+CPI
+ISM Manufacture
+GDP
+CAD GDP m/m
+JOLTS Job
+AUD News
+ADP Em.
+ISM Service
+Unemploye claim
+EUR Monetary Fund
+GBP Climant Change
+Empire State Manufacture Index
+Retail Sales
+CAD CPI
+GBP CPI
+Flash manufacture
+Fed Chair Powell Speak
+Prelim UoM Consumer Sentiment
+
+IMPORTANT:
+
+Preserve these user-facing labels unless there is a very strong reason to normalize one internally.
+
+Store a stable internal enum/value rather than relying on the displayed label as a database key.
+
+Example concept:
+
+displayLabel = "FOMC Fund Rate"
+value = "FOMC_FUND_RATE"
+
+Do not change existing historical records incorrectly.
+
+--------------------------------------------------
+3A. NO NEWS
+--------------------------------------------------
+
+"No News" should be the default when no relevant event affected the trade.
+
+The field should not require users to choose a fake event.
+
+--------------------------------------------------
+3B. MULTI-EVENT SUPPORT
+--------------------------------------------------
+
+Inspect whether a trade can realistically be affected by more than one news event.
+
+If the current data model can safely support multiple events, implement the selector as a multi-select.
+
+If the current model is intentionally single-event, preserve that architecture and use the best single-event UX.
+
+Do not create unnecessary schema complexity.
+
+--------------------------------------------------
+3C. FUTURE-PROOFING
+--------------------------------------------------
+
+Keep the news event system extensible.
+
+Do not make adding another event require rewriting the trade form.
+
+--------------------------------------------------
+4. NEW USER WALKTHROUGH
+--------------------------------------------------
+
+The current onboarding exists, but the guided tour is not properly highlighting the actual UI components.
+
+Fix the onboarding.
+
+The walkthrough must guide the user using the REAL CURRENT APPLICATION UI.
+
+Do not show generic centered instructions when the user is supposed to learn where a feature exists.
+
+The current report identified that tour selectors do not match actual sidebar DOM elements, causing the spotlight to fall back to centered panels. Fix the actual targeting rather than hiding the issue. :contentReference[oaicite:3]{index=3}
+
+--------------------------------------------------
+4A. REAL SPOTLIGHT SYSTEM
+--------------------------------------------------
+
+Every important tour step should:
+
+- identify a real DOM element
+- highlight the actual element
+- dim the rest of the UI
+- position the tooltip adjacent to the highlighted element
+- explain what it does
+- provide Next / Back / Skip
+- work after navigation
+- scroll the element into view if necessary
+- reposition on viewport changes
+
+Do not hardcode fragile CSS selectors where stable component attributes can be used.
+
+Use stable selectors such as:
+
+data-tour="dashboard"
+data-tour="journal"
+data-tour="daily-plans"
+data-tour="strategies"
+data-tour="add-trade"
+data-tour="calendar"
+data-tour="analytics"
+data-tour="settings"
+
+Ensure the actual DOM contains those exact targets.
+
+--------------------------------------------------
+4B. WALKTHROUGH CONTENT
+--------------------------------------------------
+
+Do not teach every feature.
+
+The goal is to make a completely new user understand the DnD workflow quickly.
+
+Recommended core walkthrough:
+
+STEP 1 — Dashboard
+
+Highlight the actual Dashboard navigation item.
+
+Explain:
+
+"This is your trading command center. Your results, equity curve and key performance metrics appear here."
+
+--------------------------------------------------
+
+STEP 2 — Strategies / Playbooks
+
+Highlight the actual strategy navigation item.
+
+Explain:
+
+"Define how you trade here. Your strategies contain the rules used to evaluate your setups."
+
+--------------------------------------------------
+
+STEP 3 — Daily Plans
+
+Highlight the actual Daily Plan feature.
+
+Explain:
+
+"Plan your trading day before you enter the market. Record your bias, liquidity targets, important levels, session and conditions."
+
+This is an important part of the DnD workflow and must be included.
+
+--------------------------------------------------
+
+STEP 4 — Add Trade
+
+Highlight the actual Add Trade button.
+
+Explain:
+
+"Record what you planned and what actually happened. DnD keeps the setup, execution, risk, psychology and evidence together."
+
+--------------------------------------------------
+
+STEP 5 — Instrument
+
+When possible, highlight the instrument selector INSIDE the real Add Trade form.
+
+Explain:
+
+"Choose the instrument so DnD can apply the correct market-specific price, pip, tick and sizing behavior."
+
+--------------------------------------------------
+
+STEP 6 — Strategy + Checklist
+
+Highlight the actual strategy/checklist area.
+
+Explain:
+
+"Your strategy determines the rules used to evaluate this setup."
+
+Show the real checklist UI, not a fake walkthrough component.
+
+--------------------------------------------------
+
+STEP 7 — Evidence / Timeframes
+
+Highlight the actual evidence upload area.
+
+Explain:
+
+"Attach chart evidence and organize screenshots by timeframe so you can reconstruct your analysis later."
+
+--------------------------------------------------
+
+STEP 8 — Calendar
+
+Highlight Calendar.
+
+Explain:
+
+"Review your trading history day by day and open each day's activity."
+
+--------------------------------------------------
+
+STEP 9 — Analytics
+
+Highlight Analytics.
+
+Explain:
+
+"Find patterns in your trading by instrument, strategy, session, behavior and other dimensions."
+
+--------------------------------------------------
+
+STEP 10 — Reviews
+
+ONLY include Reviews if the current product actively exposes the feature.
+
+If Reviews are currently not part of the primary navigation, do not create a fake tour step for them.
+
+--------------------------------------------------
+
+STEP 11 — Settings
+
+Highlight Settings.
+
+Explain:
+
+"Customize your timezone, trading defaults, appearance, legal preferences and other account settings."
+
+--------------------------------------------------
+4C. DAILY PLAN SHOULD BE PRACTICAL
+--------------------------------------------------
+
+The walkthrough should not merely explain Daily Plans.
+
+Where technically appropriate, give the user an optional:
+
+"Try it"
+
+action.
+
+For example:
+
+"Create your first Daily Plan"
+
+The user should be able to perform the real action.
+
+Do not create fake onboarding-only forms.
+
+The onboarding should teach the real application.
+
+--------------------------------------------------
+4D. WALKTHROUGH ORDER
+--------------------------------------------------
+
+Recommended mental model:
+
+PLAN
+→ TRADE
+→ DOCUMENT
+→ REVIEW
+→ ANALYZE
+→ IMPROVE
+
+The onboarding should make this relationship clear.
+
+Do not force the user through every advanced feature before they understand the core loop.
+
+--------------------------------------------------
+4E. TOUR BEHAVIOR
+--------------------------------------------------
+
+The tour must support:
+
+- first-time automatic launch
+- progress indicator
+- Back
+- Next
+- Skip
+- Finish
+- replay from user menu/settings
+- per-user state
+- correct behavior after refresh
+- correct behavior after logout/login
+- mobile adaptation
+
+Do not break existing onboarding state.
+
+--------------------------------------------------
+4F. MOBILE TOUR
+--------------------------------------------------
+
+The tour must work on mobile.
+
+If a component is in:
+- mobile bottom navigation
+- More menu
+- mobile drawer
+
+adapt the tour target accordingly.
+
+Do not highlight a desktop element that does not exist on mobile.
+
+--------------------------------------------------
+5. SETTINGS REORGANIZATION
+--------------------------------------------------
+
+The current Profile settings contain:
+
+General Preferences
+- Base Currency Symbol
+- Default Risk %
+- Default Session
+- Daily Trade Limits
+- Daily Loss Limit %
+- Normal Risk Max %
+- Warning Risk Max %
+- Critical Risk Max %
+
+This is not the best information architecture.
+
+Do not simply add more fields to the same section.
+
+Reorganize Settings based on what the setting actually controls.
+
+--------------------------------------------------
+5A. PROFILE TAB
+--------------------------------------------------
+
+Profile should focus on identity and presentation.
+
+Recommended:
+
+PROFILE
+
+Personal
+- Display Name
+- Email
+- Avatar/profile image if already supported
+- Account status where appropriate
+
+Regional Preferences
+- Timezone
+- Date format
+- Time format
+- Week starts on
+- Number formatting if relevant
+
+Display Preferences
+ONLY if they logically belong here.
+
+Do not put trading risk configuration in Profile.
+
+--------------------------------------------------
+5B. TRADING TAB
+--------------------------------------------------
+
+Create a much more useful Trading Preferences structure.
+
+Recommended sections:
+
+DEFAULTS
+
+- Default Trading Account
+- Default Instrument
+- Favorite Instruments
+- Default Risk %
+- Default Session
+- Default trade direction if genuinely useful
+- Default chart timeframe if genuinely useful
+
+RISK MANAGEMENT
+
+- Maximum trades per day
+- Daily loss limit %
+- Maximum risk per trade %
+- Maximum total daily risk %
+- Optional minimum risk/reward target
+- Optional minimum acceptable setup grade
+
+The final fields should only be included if the current DnD workflow can actually use them meaningfully.
+
+Do not create settings that have no effect.
+
+--------------------------------------------------
+5C. RISK THRESHOLDS
+--------------------------------------------------
+
+The existing:
+
+Normal Risk Max %
+Warning Risk Max %
+Critical Risk Max %
+
+can be kept if they are actually used by the risk UI.
+
+But simplify the presentation.
+
+Instead of making this a large prominent section, make it a compact:
+
+Risk Thresholds
+
+Normal
+Warning
+Critical
+
+with a short explanation.
+
+The values should drive actual banners/visual states.
+
+Do not add settings that only change a preview card but have no effect elsewhere.
+
+--------------------------------------------------
+5D. TRADING SAFETY
+--------------------------------------------------
+
+If supported by the current architecture, add useful behavioral guardrails such as:
+
+- Maximum trades per day
+- Daily loss limit
+- Maximum daily risk
+- Maximum risk per trade
+- Minimum setup quality
+- Prevent trade logging when daily loss limit has been breached
+
+IMPORTANT:
+
+Do not hard-block the user without a deliberate product decision.
+
+If the application currently uses informational risk banners rather than hard enforcement, keep the default behavior informational and configurable.
+
+Do not silently turn warnings into trade-blocking rules.
+
+--------------------------------------------------
+5E. INSTRUMENT PREFERENCES
+--------------------------------------------------
+
+Add a clean instrument preference area:
+
+Preferred Instruments
+
+with the same categorized instrument selector used in Add Trade.
+
+Allow:
+
+- default instrument
+- favorite instruments
+
+Do not create a separate instrument database.
+
+--------------------------------------------------
+6. SETTINGS UX
+--------------------------------------------------
+
+The settings page should become easier to scan.
+
+Use clear sections with:
+
+Title
+Short explanation
+Controls
+
+Do not turn the page into a giant form.
+
+Group related settings logically.
+
+Example:
+
+PROFILE
+Personal
+Regional
+Display
+
+TRADING
+Defaults
+Risk Management
+Instrument Preferences
+
+APPEARANCE
+Theme
+
+LEGAL
+Terms
+Privacy
+Cookies
+
+etc.
+
+Use the existing DnD design system.
+
+Do not redesign the entire settings visual language.
+
+--------------------------------------------------
+7. TIMEZONE CONSISTENCY
+--------------------------------------------------
+
+The timezone selected in Settings must actually affect the application consistently.
+
+Inspect all date/time logic.
+
+At minimum verify:
+
+- Dashboard date grouping
+- Calendar
+- Daily Plans
+- Trade timestamps
+- Analytics
+- Reviews if exposed
+- Day boundaries
+- Session labels
+- onboarding where relevant
+
+Do not leave timezone as a cosmetic setting.
+
+Use the current architecture.
+
+--------------------------------------------------
+8. LANDING PAGE OPTIMIZATION
+--------------------------------------------------
+
+The current landing page has too many sections/cards.
+
+Reduce it substantially.
+
+Do NOT redesign the rest of the application.
+
+Only improve the public landing page.
+
+The new landing page should be:
+
+minimal
+modern
+premium
+professional
+product-focused
+
+Keep only information that helps a new visitor answer:
+
+1. What is DnD?
+2. Why is it different?
+3. How does it work?
+4. What does the product actually look like?
+5. How do I start?
+
+Recommended structure:
+
+HERO
+
+A strong headline.
+One concise supporting sentence.
+Primary CTA.
+Secondary CTA.
+One refined real DnD product preview.
+
+WHY DnD
+
+One concise section explaining:
+
+"Most journals record results.
+DnD connects the decisions behind those results."
+
+HOW IT WORKS
+
+PLAN → TRADE → DOCUMENT → REVIEW → ANALYZE → IMPROVE
+
+Use a clean visual system, not five repetitive cards.
+
+CORE PRODUCT
+
+Show only the strongest capabilities:
+
+Strategy
+Daily Plans
+Structured Trade Journal
+Evidence + Timeframes
+Analytics
+Reviews
+
+Do not make six giant cards.
+
+Use compact editorial presentation.
+
+PRODUCT PREVIEW
+
+Show 2 to 4 real application previews.
+
+FINAL CTA
+
+One clean closing statement and CTA.
+
+FOOTER
+
+Minimal.
+
+Do not include:
+- fake statistics
+- fake testimonials
+- fake logos
+- long walls of text
+- excessive cards
+- generic AI marketing
+- financial promises
+- trading signal claims
+
+The landing page should match the existing DnD product UI.
+
+--------------------------------------------------
+9. CROSS-FEATURE INTEGRATION
+--------------------------------------------------
+
+Make sure these features actually connect.
+
+Example:
+
+User selects EURUSD
+↓
+Instrument metadata loaded
+↓
+Trade form adapts
+↓
+Risk calculation uses correct instrument definition
+↓
+Pip / tick / point terminology is appropriate
+↓
+Trade saved
+↓
+Analytics uses normalized instrument
+↓
+Calendar displays normalized symbol
+
+Another flow:
+
+Strategy selected
+↓
+Strategy version loaded
+↓
+Rules loaded
+↓
+Checklist displayed
+↓
+Trade answers evaluated
+↓
+Grade calculated
+↓
+Evaluation saved against historical strategy version
+
+Another flow:
+
+Screenshot uploaded
+↓
+Timeframe selected
+↓
+Media record stores timeframe
+↓
+Annotation belongs to that media item
+↓
+Trade detail groups it by timeframe
+
+--------------------------------------------------
+10. BACKEND REQUIREMENTS
+--------------------------------------------------
+
+Do not implement these features purely in React state.
+
+All authoritative behavior must remain server-side.
+
+For:
+
+- instrument normalization
+- instrument validation
+- financial calculations
+- checklist evaluation
+- news-event validation
+- screenshot metadata
+- legal/account state
+- user settings
+
+the server/database must remain authoritative.
+
+Use existing API/server-action patterns.
+
+Do not create duplicate business logic between frontend and backend.
+
+--------------------------------------------------
+11. DATABASE REQUIREMENTS
+--------------------------------------------------
+
+Inspect the existing Prisma schema.
+
+Only create migrations where required.
+
+Preserve existing data.
+
+Do not destroy historical trades.
+
+Do not invalidate historical strategy version relationships.
+
+For existing records:
+
+- old trades must remain readable
+- existing instruments must remain mapped
+- historical media must remain accessible
+- historical screenshots must remain valid
+
+For new timeframe metadata, safely migrate existing media to an appropriate "Unknown / Unclassified" state if necessary rather than inventing a timeframe.
+
+--------------------------------------------------
+12. HISTORICAL DATA
+--------------------------------------------------
+
+Do not corrupt old trades.
+
+If the new instrument metadata system changes representation, create a safe migration.
+
+If historical records contain lowercase symbols:
+
+normalize them safely to uppercase.
+
+Do not change their financial meaning.
+
+If historical news values use the old High/Medium/Low system:
+
+do NOT randomly convert them to a specific event.
+
+Preserve them or migrate them to a compatible legacy representation.
+
+--------------------------------------------------
+13. UX / VISUAL RULES
+--------------------------------------------------
+
+Preserve:
+
+- current DnD colors
+- current typography
+- current theme system
+- current sidebar
+- current top bar
+- current dashboard
+- current component language
+- current cards
+- current forms
+- current spacing system
+
+Use:
+- Lucide icons
+- existing shadcn/ui
+- existing Tailwind system
+
+Do not introduce another visual language.
+
+Do not add emoji.
+
+Do not create unnecessary gradients.
+
+Do not make every element a card.
+
+--------------------------------------------------
+14. ACCESSIBILITY
+--------------------------------------------------
+
+All new selectors and controls must support:
+
+- keyboard navigation
+- focus states
+- labels
+- screen readers
+- Escape to close menus
+- arrow navigation where appropriate
+- mobile touch targets
+
+The instrument selector and news selector are especially important.
+
+--------------------------------------------------
+15. TESTING / VERIFICATION
+--------------------------------------------------
+
+After implementation, test at least:
+
+INSTRUMENTS
+
+- type lowercase symbol
+- verify uppercase conversion
+- select from dropdown
+- search
+- switch market categories
+- select preferred instrument in Settings
+- create trade with several different market types
+- verify financial formatting changes appropriately
+
+TRADE CALCULATIONS
+
+Test at least:
+- EURUSD
+- XAUUSD
+- NQ
+- ES
+
+Verify that price/point/pip/tick/quantity logic follows the instrument metadata and does not use universal hardcoded assumptions.
+
+NEWS
+
+- No News
+- every configured event
+- invalid event rejected by server
+- historical records remain intact
+
+SCREENSHOTS
+
+- upload screenshot
+- choose timeframe
+- save trade
+- reload trade
+- verify timeframe persists
+- upload multiple screenshots for same timeframe
+- upload screenshots across multiple timeframes
+- verify filtering/grouping
+- verify annotation persistence
+- verify caption/description persistence if applicable
+
+ONBOARDING
+
+Run as a brand-new user.
+
+Verify every spotlight:
+
+- points to the actual component
+- tooltip is adjacent
+- target is visible
+- navigation occurs correctly
+- target changes correctly
+- mobile works
+- Back works
+- Skip works
+- Finish works
+- replay works
+
+DAILY PLAN
+
+Verify:
+- walkthrough explains it
+- actual Daily Plan UI is highlighted
+- user can access it immediately
+- first plan can be created if Try It is implemented
+
+SETTINGS
+
+Verify:
+- timezone
+- default instrument
+- favorite instruments
+- default risk
+- default session
+- daily limits
+- all changed settings persist
+- settings actually affect relevant features
+
+LANDING PAGE
+
+Verify:
+- new page is substantially simpler
+- no broken links
+- responsive
+- polished at desktop/tablet/mobile
+
+--------------------------------------------------
+16. REGRESSION TESTING
+--------------------------------------------------
+
+Do not break:
+
+- authentication
+- signup
+- legal consent
+- onboarding
+- dashboard
+- journal
+- add trade
+- trade detail
+- strategies
+- calendar
+- analytics
+- accounts
+- settings
+- backup/restore
+- media
+- themes
+- command palette
+
+The current application already contains substantial functionality. This is an enhancement pass, not a rewrite.
+
+--------------------------------------------------
+17. KNOWN CURRENT ISSUES TO WATCH
+--------------------------------------------------
+
+Inspect whether these previously identified issues still exist:
+
+1. Image annotations not persisted
+2. Media descriptions not persisted
+3. Tour spotlight selectors mismatch actual DOM
+4. Insecure secret fallbacks
+5. Local-only rate limiting
+6. TypeScript build errors being ignored
+
+Do not silently expand the scope to unrelated fixes.
+
+However, if annotation persistence or tour targeting is directly affected by this task, fix those correctly rather than working around them.
+
+--------------------------------------------------
+18. IMPLEMENTATION RULE
+--------------------------------------------------
+
+Before coding:
+
+Inspect.
+
+Understand the existing architecture.
+
+Identify the minimum safe changes.
+
+Then implement.
+
+Do not duplicate:
+- instrument logic
+- timeframe logic
+- news event logic
+- settings state
+- onboarding state
+
+Prefer reusable centralized definitions.
+
+--------------------------------------------------
+19. FINAL DELIVERABLE
+--------------------------------------------------
+
+After implementation provide:
+
+1. Summary of changes
+2. Files/components changed
+3. Database/migration changes
+4. New instrument architecture
+5. New timeframe media behavior
+6. New news-event behavior
+7. New onboarding behavior
+8. Settings changes
+9. Landing-page changes
+10. Tests performed
+11. Any blocked/unverified tests
+12. Any remaining known issues
+
+Do not simply say "implemented successfully."
+
+Give concrete verification results.
+
+--------------------------------------------------
+FINAL GOAL
+--------------------------------------------------
+
+The finished DnD experience should feel like the SAME application, just significantly smarter and easier to use.
+
+A new trader should be able to:
+
+Choose a properly categorized instrument
+→ DnD understands that market's financial conventions
+→ Log the trade using the correct price/pip/tick/size behavior
+→ Select the relevant news event
+→ Upload screenshots organized by timeframe
+→ Evaluate the strategy checklist
+→ Link the trade to the Daily Plan
+→ Review the trade later
+→ Analyze the result
+
+And a brand-new user should be able to understand this workflow through a real, interactive walkthrough that highlights the actual UI components instead of showing disconnected instructions.
+
+Make these changes carefully.
+Preserve everything that already works.
+Do not redesign unrelated areas.
+Do not invent functionality.
+Do not fake verification.

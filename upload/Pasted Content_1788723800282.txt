@@ -1,0 +1,1792 @@
+# DnD — PRESERVATION-FIRST PRODUCT REMEDIATION & HARDENING
+
+You are working on the existing **DnD trading performance application** that you have already built.
+
+Your job is **NOT to rebuild DnD from scratch**.
+
+Your job is to carefully inspect the current implementation, preserve the existing product/UI/UX wherever it is already good, and then fix the specific architectural and product weaknesses listed below.
+
+The existing implementation may use different file names, database models, services, routes, state-management patterns, or component structures than the examples in this prompt.
+
+**Do not force my examples into your existing architecture.**
+
+Instead:
+
+> Understand the intended behavior and product outcome, then implement the cleanest solution that fits the architecture you already created.
+
+The final result should feel like the **same DnD application you already built**, but with the broken/missing connections fixed and the underlying data model made reliable.
+
+---
+
+# 0. FIRST: CREATE A COMPLETE BACKUP
+
+Before changing **anything**, create a complete ZIP backup of the current application.
+
+The backup must contain the entire current project, including:
+
+* source code
+* configuration
+* database schema/migrations
+* seed data
+* tests
+* scripts
+* environment/configuration templates
+* assets
+* documentation
+* package configuration
+* deployment configuration
+* generated application files that are necessary to reconstruct the current state
+
+Exclude only genuinely unnecessary/generated dependency directories or secrets where appropriate.
+
+The ZIP must be saved into the user's **Downloads** folder.
+
+Use a descriptive filename such as:
+
+`DnD_BEFORE_REMEDIATION_YYYYMMDD_HHMMSS.zip`
+
+Verify that the ZIP exists and is readable before making source changes.
+
+Do not delete or overwrite the backup.
+
+---
+
+# 1. ABSOLUTE PRESERVATION RULE
+
+I like the application you already created.
+
+Do NOT redesign or unnecessarily replace things simply because you personally prefer another implementation.
+
+Preserve the existing:
+
+* visual design
+* layout
+* navigation
+* responsive behavior
+* typography
+* colors/theme system
+* dashboard presentation
+* journal experience
+* trade form structure
+* trade detail experience
+* planned vs actual UI
+* psychology UI
+* ICT setup UI
+* strategy UI
+* media/annotation UI
+* calendar UI
+* review UI
+* analytics presentation where it is already functional
+* command palette
+* existing reusable components
+* existing interaction patterns
+* existing animations
+* existing icons
+* existing UX conventions
+
+Do not perform a broad refactor unless it is necessary to make one of the requested features correct.
+
+Do not change unrelated features.
+
+Do not introduce a new visual design system.
+
+Do not remove existing functionality simply because it is not mentioned below.
+
+Think:
+
+> Preserve the product. Repair the architecture and missing connections.
+
+---
+
+# 2. DO NOT ASSUME MY ARCHITECTURE
+
+The examples below describe **behavior and product requirements**, not implementation instructions.
+
+Your current codebase may have:
+
+* different model names
+* different relationships
+* different database structure
+* different service boundaries
+* different APIs
+* different server actions
+* different state management
+* different component hierarchy
+
+That is acceptable.
+
+First inspect the current codebase and determine:
+
+1. how the existing system currently represents each concept
+2. where the current source of truth is
+3. which existing structures can be extended safely
+4. which existing relationships are incomplete
+5. what minimum changes are required to produce the desired behavior
+
+Then implement the solution **using the architecture that best fits the existing codebase**.
+
+Do not create duplicate parallel systems merely because the examples below use different names.
+
+---
+
+# 3. MOST IMPORTANT PRODUCT FIX: REAL A+ SETUP SCORING
+
+This is the highest-priority product correction.
+
+The current application visually contains an A+ setup/checklist system, but the current score is effectively determined from the selected grade rather than from the actual checklist answers.
+
+For example, the current behavior is conceptually similar to:
+
+```text
+A+ → 0.92
+A  → 0.80
+B  → 0.62
+C  → 0.45
+```
+
+That is not acceptable.
+
+The application must actually **evaluate the setup**.
+
+## Required behavior
+
+The trader should be presented with the applicable checklist when evaluating a trade.
+
+A checklist may contain weighted conditions such as:
+
+```text
+HTF Bias aligned                 15%
+Liquidity taken                  15%
+MSS/BOS confirmed                15%
+Displacement                     15%
+FVG / entry model                15%
+Session alignment                10%
+Target liquidity identified      10%
+Risk rules satisfied              5%
+```
+
+The exact weights and checklist items should remain configurable through the application's existing checklist/strategy infrastructure.
+
+The important behavior is:
+
+```text
+raw checklist answers
+        ↓
+weighted calculation
+        ↓
+score
+        ↓
+derived grade
+```
+
+For example:
+
+```text
+8 / 8
+= 100%
+= A+
+```
+
+or:
+
+```text
+6 / 8
+= 75%
+= A
+```
+
+The precise grade boundaries should come from a clear, consistent rule in the application's configuration/domain logic rather than being hardcoded in UI components.
+
+## Critical rule
+
+The user must **NOT manually choose the final grade**.
+
+The application calculates the grade.
+
+The user only supplies the underlying checklist answers.
+
+The resulting grade should be derived from those answers.
+
+---
+
+# 4. UNIFY THE TWO CHECKLIST CONCEPTS
+
+The current system appears to have two concepts:
+
+```text
+Strategy Rules Checklist
++
+A+ Checklist infrastructure
+```
+
+These need to become one coherent workflow.
+
+Do not create another checklist system.
+
+Use the existing checklist infrastructure where possible.
+
+Conceptually, DnD should behave like:
+
+```text
+STRATEGY
+   ↓
+STRATEGY VERSION
+   ↓
+CHECKLIST / CHECKLIST VERSION
+   ↓
+TRADE
+   ↓
+RAW CHECKLIST ANSWERS
+   ↓
+WEIGHTED SCORE
+   ↓
+CALCULATED GRADE
+```
+
+The existing database may already contain entities equivalent to:
+
+* checklist configuration
+* checklist version
+* trade checklist evaluation
+
+Reuse/adapt these if they are the appropriate structures.
+
+The important outcome is that the trade form, persisted evaluation, calculated score, strategy/version, and analytics all refer to the **same underlying checklist evaluation**.
+
+---
+
+# 5. CHECKLIST VERSIONING
+
+Checklist definitions must be historically stable.
+
+If a trader changes a checklist later, previous trades must not silently change their historical score.
+
+For example:
+
+```text
+Checklist v2.1
+```
+
+is used on a trade.
+
+Later:
+
+```text
+Checklist v2.2
+```
+
+is created.
+
+The old trade must still point to the exact checklist definition/version it used.
+
+Store enough immutable information to reproduce the historical calculation.
+
+Historical trade evaluation must therefore remain explainable.
+
+A historical trade should be able to answer:
+
+```text
+Which strategy version?
+Which checklist version?
+What were the answers?
+What weights were used?
+What score was calculated?
+What grade resulted?
+```
+
+Do not recalculate old historical grades from today's checklist definition.
+
+---
+
+# 6. STRATEGY VERSIONING MUST BE CONNECTED TO TRADES
+
+The existing strategy versioning concept is good and should remain.
+
+The problem is that historical trades are not reliably connected to the exact strategy version used when the trade was taken.
+
+Fix this.
+
+When creating a trade, the user should be able to select something conceptually like:
+
+```text
+Strategy:
+ICT NY AM Model
+
+Version:
+1.3
+```
+
+The trade must permanently retain the relationship to that strategy version.
+
+Conceptually:
+
+```text
+strategy_id
+strategy_version_id
+```
+
+or the equivalent relationship in your current architecture.
+
+The precise implementation may differ.
+
+The required behavior is:
+
+```text
+Strategy v1.3
+       ↓
+     Trade
+```
+
+Later:
+
+```text
+Strategy v1.4
+```
+
+is created.
+
+The historical trade must still belong to:
+
+```text
+Strategy v1.3
+```
+
+and must not automatically migrate to 1.4.
+
+---
+
+# 7. STRATEGY VERSION IMMUTABILITY
+
+Historical strategy versions must remain immutable.
+
+Do not allow editing an old version in a way that changes what historical trades actually referenced.
+
+When the trader changes the strategy:
+
+```text
+v1.3
+```
+
+becomes:
+
+```text
+v1.4
+```
+
+rather than silently mutating the historical version.
+
+Existing versioning infrastructure should be reused and strengthened rather than replaced unnecessarily.
+
+---
+
+# 8. FINANCIAL MODEL: REMOVE THE GENERIC POINT-VALUE ASSUMPTION
+
+The financial engine needs to become instrument-aware.
+
+The current implementation effectively relies on a generic assumption similar to:
+
+```text
+pointValueCents = 100
+```
+
+That is not sufficient for a serious trading-performance system.
+
+Do not simply replace this with another single hardcoded universal point value.
+
+The financial domain should be able to represent the instrument rules needed for different markets.
+
+## Forex
+
+Support concepts such as:
+
+* pip size
+* pip value
+* contract size
+* base currency
+* quote currency
+* account currency
+
+## Gold / metals
+
+Support appropriate concepts such as:
+
+* contract size
+* tick size
+* tick value
+* quote currency
+
+## Futures
+
+Support appropriate concepts such as:
+
+* tick size
+* tick value
+* contract multiplier
+
+## Indices / index products
+
+Support the applicable:
+
+* point/tick size
+* point/tick value
+* contract multiplier
+* quote/account currency relationship
+
+Do not assume all instruments behave identically.
+
+---
+
+# 9. MULTI-CURRENCY FINANCIAL FLOW
+
+The financial architecture should be capable of handling:
+
+```text
+account currency
+       ↓
+instrument denomination
+       ↓
+required FX conversion
+       ↓
+final P&L in account currency
+```
+
+The exact implementation should fit your current architecture.
+
+At minimum, the domain model must not permanently assume that:
+
+```text
+instrument currency == account currency
+```
+
+Financial calculations must remain deterministic and testable.
+
+Do not introduce floating-point shortcuts that can create inaccurate money calculations.
+
+Preserve the application's existing monetary precision approach where it is good, and strengthen it where necessary.
+
+---
+
+# 10. TRADE FINANCIAL CALCULATIONS MUST USE ONE AUTHORITATIVE SOURCE
+
+Avoid multiple competing P&L calculations scattered throughout UI components.
+
+There should be a clear authoritative financial calculation path used by:
+
+* trade detail
+* journal
+* dashboard
+* analytics
+* calendar
+* reviews
+* exports
+* strategy analytics
+* plan-adherence calculations where financial values are involved
+
+The UI must not independently "guess" P&L.
+
+Avoid stale derived values.
+
+When trade financial inputs change, derived values must remain consistent.
+
+Protect against:
+
+* NaN
+* Infinity
+* invalid negative values where prohibited
+* precision errors
+* overflow
+* stale P&L
+* inconsistent R calculations
+
+---
+
+# 11. PLANNED VS ACTUAL MUST BECOME AN ANALYTICAL FEATURE
+
+The current application already has a very good concept:
+
+```text
+PLANNED
+
+Entry
+Stop
+Target
+Risk
+Session
+Strategy
+```
+
+and:
+
+```text
+ACTUAL
+
+Entry
+Exit
+Risk
+Session
+Result
+```
+
+Keep this UI.
+
+Do not replace it.
+
+The missing piece is the analytical relationship between them.
+
+DnD should be able to answer:
+
+> Did I execute the trade I planned?
+
+Conceptually calculate things such as:
+
+```text
+Planned R:R
+Actual R:R
+
+Planned risk
+Actual risk
+
+Planned session
+Actual session
+
+Planned target
+Actual target
+
+Planned strategy
+Actual strategy
+
+Plan adherence
+```
+
+The exact metric formula can be designed based on the current data model, but it must be explicit, deterministic, and explainable.
+
+For example:
+
+```text
+Planned R:R      2.0R
+Actual R:R       1.42R
+
+Planned risk     0.5%
+Actual risk      0.78%
+
+Planned session  NY AM
+Actual session   NY AM
+
+Plan adherence   72%
+```
+
+Do not make "plan adherence" a meaningless arbitrary number.
+
+It should derive from actual measurable differences between planned and executed behavior.
+
+---
+
+# 12. PLAN ADHERENCE MUST WORK WITH DAILY PLANS
+
+The current application already has a Daily Plan concept containing information such as:
+
+* weekly bias
+* daily bias
+* instruments
+* PWH
+* PWL
+* PDH
+* PDL
+* HTF levels
+* liquidity targets
+* session
+* setup conditions
+* invalidation
+* max trades
+* max daily risk
+
+This is valuable and should remain.
+
+Strengthen the connection between Daily Plan and Trade.
+
+A trade created from a trading day/session should be linkable to the applicable plan.
+
+Conceptually:
+
+```text
+DAILY PLAN
+    ↓
+TRADE
+```
+
+Then:
+
+```text
+DAILY PLAN
+    ↓
+planned conditions
+    ↓
+TRADE
+    ↓
+actual execution
+    ↓
+plan adherence
+```
+
+The exact database relationship may differ from this example.
+
+Use your existing architecture.
+
+---
+
+# 13. DAILY PLAN SHOULD SUPPORT THE CORE DnD LOOP
+
+The application should ultimately support this workflow:
+
+```text
+DAILY PLAN
+     ↓
+TRADE
+     ↓
+PLANNED
+     ↓
+EXECUTED
+     ↓
+RESULT
+     ↓
+REVIEW
+     ↓
+ANALYTICS
+```
+
+The Daily Plan should not be an isolated form.
+
+Trades should be able to inherit/reference appropriate planning context without duplicating conflicting sources of truth.
+
+---
+
+# 14. PSYCHOLOGY ANALYTICS MUST ACTUALLY WORK
+
+Keep the existing psychology capture experience.
+
+The current application captures valuable information such as:
+
+* mood
+* confidence
+* energy
+* behavior flags
+
+Do not redesign this unnecessarily.
+
+Fix the underlying analytics so these values are actually parsed, persisted, and analyzed correctly.
+
+For example, the system should eventually be capable of detecting relationships such as:
+
+```text
+REVENGE TRADING
+
+27 trades
+Win rate: 33%
+Average R: -0.41R
+
+Normal trades:
+Average R: +0.38R
+
+Difference:
+-0.79R
+
+Estimated impact:
+-21.3R
+```
+
+But do NOT display conclusions like this when there is insufficient evidence.
+
+---
+
+# 15. SAMPLE-SIZE GATING
+
+All behavioral and psychological insights must be evidence-aware.
+
+Never generate confident statements from tiny samples.
+
+The exact thresholds can be designed appropriately, but the system should distinguish between things such as:
+
+```text
+insufficient sample
+early observation
+developing pattern
+reliable pattern
+```
+
+or an equivalent model.
+
+For example, do not say:
+
+```text
+"You perform better under condition X"
+```
+
+based on two trades.
+
+Insights should be generated from actual stored data.
+
+No hardcoded behavioral conclusions.
+
+No fake statistics.
+
+No placeholder percentages.
+
+---
+
+# 16. ANALYTICS MUST USE REAL DATA ONLY
+
+Remove or replace any remaining fake/hardcoded analytics values.
+
+Do not use values such as:
+
+```text
+XAUUSD 65%
+EURUSD 30%
+A+ 80%
+Non-A+ 40%
+```
+
+unless they are genuinely calculated from persisted user data.
+
+Every displayed performance statistic should trace back to actual records.
+
+This applies to:
+
+* dashboard
+* analytics
+* strategy analytics
+* calendar
+* reviews
+* psychology
+* behavioral insights
+* setup-grade analysis
+
+---
+
+# 17. ANALYTICS SHOULD BE QUESTION-ORIENTED
+
+Keep the current analytics foundation where useful, but improve the information architecture so that the data answers useful trading questions.
+
+Conceptually organize analysis around:
+
+## Performance
+
+> How am I performing?
+
+## Strategy
+
+> Which strategies actually work?
+
+## Execution
+
+> Am I executing my plans correctly?
+
+## Behavior
+
+> What behaviors hurt my performance?
+
+## Psychology
+
+> What mental states correlate with poor execution?
+
+## Time
+
+> When do I perform best?
+
+## Setup Quality
+
+> Do my A+ setups actually outperform?
+
+Do not blindly redesign the page.
+
+Adapt this concept to the existing UI.
+
+---
+
+# 18. STRATEGY ANALYTICS MUST DISPLAY HUMAN-READABLE STRATEGY NAMES
+
+Where analytics currently expose only raw strategy IDs, replace them with the appropriate user-facing strategy identity.
+
+The underlying IDs may remain internal.
+
+The user should see meaningful names such as:
+
+```text
+ICT NY AM Model
+```
+
+rather than a UUID.
+
+---
+
+# 19. ANALYTICS DRILL-DOWN
+
+The user should eventually be able to move from an aggregate result into the underlying trades.
+
+For example:
+
+```text
+NY AM
+37 trades
+```
+
+should provide a meaningful way to inspect:
+
+```text
+those 37 trades
+```
+
+The exact interaction may fit your existing UI.
+
+It could be:
+
+* clickable metric
+* drawer
+* modal
+* filtered journal
+* route with persisted filters
+* another mechanism already consistent with the application
+
+Do not create a completely different navigation paradigm.
+
+The important requirement is that aggregate analytics remain traceable to source trades.
+
+---
+
+# 20. PERIOD COMPARISON
+
+Support meaningful comparisons such as:
+
+```text
+Last 30 days
+vs
+Previous 30 days
+```
+
+and equivalent useful periods.
+
+The comparison must use actual calculated data.
+
+Do not fake trend percentages.
+
+---
+
+# 21. ADD THE MOST IMPORTANT MISSING ANALYTICAL DIMENSIONS
+
+Extend analytics where the existing data supports it.
+
+Useful dimensions include:
+
+* plan adherence
+* risk category
+* account
+* setup quality
+* psychology
+* behavior
+* strategy version
+* session
+* instrument
+* day/time
+
+Do not add meaningless dimensions simply to increase feature count.
+
+Every dimension should answer a useful performance question.
+
+---
+
+# 22. EQUITY CURVE MUST START FROM THE ACTUAL STARTING BALANCE
+
+Fix the current equity-curve baseline issue.
+
+The curve currently behaves as though the account starts at zero.
+
+It should correctly represent:
+
+```text
+starting account balance
++
+chronological realized performance
+```
+
+The starting balance must come from the application's actual account data/source of truth.
+
+Do not hardcode it.
+
+Do not alter the existing visual style unnecessarily.
+
+---
+
+# 23. CALENDAR MUST BECOME A MINI PERFORMANCE REPORT
+
+Keep the existing calendar presentation.
+
+Improve the day-level data shown or accessible within each day.
+
+A trading day should be capable of showing information such as:
+
+```text
+September 4
+
+3 trades
++$420
++1.8R
+66.7% win rate
+
+Best trade:
++$310 / +1.4R
+
+A+ setups:
+2
+
+Rule violations:
+0
+
+Primary session:
+NY AM
+```
+
+Use only metrics that genuinely exist in the data.
+
+Where information is unavailable, represent that honestly rather than inventing it.
+
+The calendar should respect the user's configured timezone.
+
+---
+
+# 24. TIMEZONE MUST BE USER-AWARE
+
+Do not use a fixed server timezone for trading-day analysis.
+
+The application should have a clear concept of the user's preferred trading timezone.
+
+That timezone should be used consistently for:
+
+* trade day boundaries
+* calendar grouping
+* session analysis
+* time analytics
+* Daily Plans
+* daily/weekly/monthly reviews
+* relevant timestamps shown to users
+
+The exact storage/implementation should fit your architecture.
+
+Do not assume UTC is the user's trading day.
+
+Do not assume one global timezone such as:
+
+```text
+America/New_York
+```
+
+for every user.
+
+---
+
+# 25. HANDLE DAY BOUNDARIES AND DST CORRECTLY
+
+Timezone logic must account for:
+
+* midnight boundaries
+* UTC offsets
+* daylight-saving transitions where applicable
+* non-DST timezones
+
+Test edge cases where a trade near midnight changes which trading day it belongs to.
+
+The same real timestamp must produce the appropriate local date for the configured user timezone.
+
+Do not rely on browser-local timezone accidentally controlling financial/trading analytics.
+
+---
+
+# 26. REVIEWS SHOULD CONNECT THE WHOLE SYSTEM
+
+The existing review concept is good.
+
+Keep:
+
+* Daily
+* Weekly
+* Monthly
+* market conditions
+* plan followed
+* biggest mistake
+* biggest lesson
+* next focus
+* reflection
+* best trade
+* worst trade
+* computed metrics
+
+Improve it so a review combines:
+
+```text
+AUTO-GENERATED PERFORMANCE SUMMARY
++
+AUTO-DETECTED PATTERNS
++
+USER REFLECTION
++
+ACTION ITEMS
+```
+
+For example:
+
+```text
+You took 14 trades this week.
+
+9 were A+ setups.
+
+A+ trades averaged +0.61R.
+
+Non-A+ trades averaged -0.18R.
+
+4 trades contained "entered early".
+
+Those trades averaged -0.42R.
+
+Your biggest measurable issue this week was early entry.
+```
+
+Then connect this to:
+
+```text
+Action item:
+Improve entry confirmation.
+```
+
+The insight must be based on real data and sample-size rules.
+
+---
+
+# 27. ACTION ITEMS SHOULD FEED IMPROVEMENT
+
+Where the existing application already supports action items, make them meaningfully connected to the review/insight workflow.
+
+Conceptually:
+
+```text
+Analytics
+   ↓
+Insight
+   ↓
+Review
+   ↓
+Action Item
+   ↓
+Next Trading Period
+```
+
+Do not create another task-management system.
+
+Use the existing review/action architecture.
+
+---
+
+# 28. MEDIA MUST REMAIN PART OF TRADE EVIDENCE
+
+The existing media system is valuable.
+
+Keep:
+
+* image upload
+* video upload
+* pasted screenshots
+* captions
+* annotation
+* media library
+* trade evidence
+
+The media system should remain tied to the relevant trade/evidence context.
+
+Do not turn Media into an unrelated gallery.
+
+---
+
+# 29. MEDIA IMPROVEMENTS
+
+Fix the known weak points where practical:
+
+### Video playback
+
+Uploaded videos should have a proper playback experience rather than simply behaving like generic files.
+
+### Thumbnails
+
+Images and appropriate video previews should have useful thumbnails/previews.
+
+### Downloads
+
+Users should have an appropriate way to retrieve their media.
+
+### Upload security
+
+Validate file types robustly.
+
+Where relevant, use:
+
+* MIME validation
+* extension validation
+* magic-byte/content verification
+* size limits
+* private storage
+* authenticated access
+
+Do not trust the client-provided filename or MIME type alone.
+
+### Large files
+
+Avoid unnecessarily loading very large media entirely into browser memory.
+
+Use an architecture appropriate for efficient large-file handling.
+
+### Annotation state
+
+Warn users about unsaved annotation changes before destructive navigation where appropriate.
+
+---
+
+# 30. FIX MEDIA QUERY EFFICIENCY
+
+Review the existing media data loading for unnecessary N+1 queries.
+
+Do not blindly optimize everything.
+
+Find the actual inefficient relationships and make them efficient using the application's existing data-access architecture.
+
+The result should remain functionally identical to the user.
+
+---
+
+# 31. COMPLETE THE STRATEGY → TRADE → REVIEW CONNECTION
+
+This is the central DnD product loop.
+
+The final system should conceptually support:
+
+```text
+STRATEGY
+   ↓
+STRATEGY VERSION
+   ↓
+CHECKLIST VERSION
+   ↓
+DAILY PLAN
+   ↓
+TRADE
+   ↓
+EXECUTION
+   ↓
+EVIDENCE
+   ↓
+PSYCHOLOGY
+   ↓
+RESULT
+   ↓
+REVIEW
+   ↓
+ANALYTICS
+   ↓
+INSIGHT
+   ↓
+ACTION ITEM
+   ↓
+STRATEGY IMPROVEMENT
+```
+
+You do NOT have to implement this as literal one-to-one database tables matching this diagram.
+
+The diagram represents the product relationship.
+
+Make the existing systems actually communicate with one another.
+
+---
+
+# 32. DATA OWNERSHIP AND AUTHORIZATION
+
+Do not weaken the existing authorization/security model while making these changes.
+
+Every user's data must remain isolated.
+
+The corrected relationships must preserve ownership for:
+
+* trades
+* executions
+* strategies
+* strategy versions
+* checklists
+* checklist evaluations
+* Daily Plans
+* reviews
+* analytics
+* psychology
+* media
+* annotations
+* account settings
+* audit information
+
+Use the authorization architecture already present in the application unless a change is necessary to fix a security defect.
+
+Do not create a convenience endpoint that bypasses ownership checks.
+
+---
+
+# 33. IMPORT/EXPORT MUST REMAIN CONSISTENT
+
+Existing import/export functionality should continue working after these changes.
+
+Where new data becomes historically important, decide appropriately whether it belongs in exports.
+
+At minimum, exported trade data should not lose critical information such as:
+
+* strategy
+* strategy version
+* checklist evaluation
+* calculated grade
+* planned values
+* actual values
+* relevant psychology
+* review linkage where appropriate
+
+Do not break existing export behavior simply to add new fields.
+
+---
+
+# 34. TEST THE ENTIRE DATA FLOW
+
+Add or improve tests around the actual DnD relationships.
+
+At minimum cover:
+
+```text
+Financial calculations
+        ↓
+Trade creation/update
+        ↓
+Strategy linkage
+        ↓
+Strategy version immutability
+        ↓
+Checklist evaluation
+        ↓
+Weighted A+ scoring
+        ↓
+Calculated grade
+        ↓
+Plan adherence
+        ↓
+Analytics
+        ↓
+Timezone grouping
+        ↓
+Calendar
+        ↓
+Reviews
+        ↓
+Authorization
+        ↓
+Media/evidence
+        ↓
+Import/export
+```
+
+Tests should verify **behavior**, not simply that functions execute.
+
+---
+
+# 35. SPECIFIC A+ CHECKLIST TESTS
+
+Create meaningful automated tests for at least:
+
+### Full score
+
+All requirements satisfied:
+
+```text
+100%
+A+
+```
+
+### Partial score
+
+Example:
+
+```text
+75%
+A
+```
+
+### Lower score
+
+Appropriate lower grade according to the configured grading system.
+
+### Weighted items
+
+Ensure weights are actually respected.
+
+### Checklist changes
+
+Ensure historical evaluations remain tied to the checklist version used.
+
+### User cannot manually override calculated grade
+
+The grade should be derived from the answers.
+
+### Analytics
+
+Verify A+ vs non-A+ statistics are based on actual calculated grades.
+
+---
+
+# 36. SPECIFIC STRATEGY VERSION TESTS
+
+Verify:
+
+```text
+Strategy v1.3
+      ↓
+Trade A
+```
+
+Then:
+
+```text
+Strategy v1.4 created
+```
+
+Trade A must still report:
+
+```text
+v1.3
+```
+
+Changing the current strategy must not mutate historical trade attribution.
+
+---
+
+# 37. SPECIFIC PLANNED VS ACTUAL TESTS
+
+Verify that differences between planned and executed values are calculated correctly.
+
+Include cases involving:
+
+* planned and actual risk
+* planned and actual R:R
+* session
+* target
+* strategy
+* rule violations
+
+Ensure the resulting plan-adherence metric is deterministic and explainable.
+
+---
+
+# 38. SPECIFIC TIMEZONE TESTS
+
+Include tests for:
+
+* normal trading day
+* trade around midnight UTC
+* trade around midnight in user timezone
+* UTC offset changes
+* DST spring transition where applicable
+* DST autumn transition where applicable
+* timezone without DST
+* calendar grouping
+* weekly grouping
+* monthly grouping
+
+Do not rely exclusively on the developer machine's timezone.
+
+---
+
+# 39. SPECIFIC FINANCIAL TESTS
+
+Test several instrument models rather than one generic point value.
+
+At minimum verify that:
+
+* Forex calculations use the appropriate pip/contract model
+* Gold calculations use the appropriate tick/contract model
+* Futures calculations use the appropriate tick-value model
+* index products use the appropriate product model
+* account currency conversion is handled correctly where required
+* monetary precision is preserved
+* invalid numerical states are rejected
+
+Do not merely assert that the code returns a number.
+
+Verify that the number is mathematically correct.
+
+---
+
+# 40. DO NOT INTRODUCE FAKE COMPLETENESS
+
+The following are prohibited:
+
+* hardcoded analytics
+* fake behavioral insights
+* fake performance percentages
+* fake A+ scores
+* manually selected grades pretending to be calculated
+* placeholder financial values
+* silently ignored relationships
+* UI elements that claim functionality that the backend does not support
+
+If a capability genuinely cannot be completed because an external dependency is unavailable, clearly report that.
+
+Do not fake a PASS.
+
+---
+
+# 41. DO NOT REBUILD GOOD EXISTING FEATURES
+
+Before replacing anything, ask:
+
+> Can this existing implementation simply be corrected or connected?
+
+Prefer:
+
+```text
+extend
+connect
+correct
+harden
+```
+
+over:
+
+```text
+delete
+rewrite
+replace
+```
+
+unless the existing implementation is fundamentally unsafe or incapable of supporting the required behavior.
+
+---
+
+# 42. MAINTAIN CURRENT PRODUCT QUALITY
+
+Do not degrade:
+
+* UX
+* page performance
+* responsiveness
+* visual hierarchy
+* accessibility
+* existing navigation
+* existing trade workflow
+* media annotations
+* existing strategy management experience
+
+New functionality should feel native to the current application.
+
+---
+
+# 43. IMPLEMENTATION PROCESS
+
+Follow this order:
+
+## Step 1 — Backup
+
+Create and verify the ZIP in Downloads.
+
+## Step 2 — Inspect
+
+Audit the actual current architecture before making changes.
+
+Identify:
+
+* current trade model
+* current financial model
+* current strategy model
+* strategy version model
+* checklist model
+* checklist evaluation flow
+* Daily Plan
+* review flow
+* analytics flow
+* psychology flow
+* timezone handling
+* media flow
+* import/export
+* authorization
+
+## Step 3 — Map
+
+Create a short internal mapping of:
+
+```text
+CURRENT IMPLEMENTATION
+        ↓
+REQUIRED BEHAVIOR
+        ↓
+MINIMUM SAFE CHANGE
+```
+
+Do not generate unnecessary duplicate systems.
+
+## Step 4 — Implement
+
+Apply the requested changes incrementally.
+
+After each major domain:
+
+* typecheck
+* lint
+* relevant tests
+* build where appropriate
+
+## Step 5 — Integration
+
+Verify the complete cross-domain flow.
+
+## Step 6 — Regression
+
+Confirm the existing application still behaves as before in all unrelated areas.
+
+---
+
+# 44. REQUIRED ACCEPTANCE CHECK
+
+Before declaring the work complete, verify all of the following.
+
+### A+ System
+
+* [ ] Grade is calculated from checklist answers
+* [ ] Weighted scoring works
+* [ ] User cannot manually select final grade
+* [ ] Checklist version is historically preserved
+* [ ] A+ vs non-A+ analytics use calculated results
+* [ ] Existing checklist/strategy systems are unified rather than duplicated
+
+### Strategy
+
+* [ ] Trade records its strategy
+* [ ] Trade records the exact strategy version used
+* [ ] Historical strategy versions remain immutable
+* [ ] Strategy analytics use human-readable names
+
+### Financial System
+
+* [ ] No universal fake point value assumption
+* [ ] Instrument-aware financial rules
+* [ ] Forex supported correctly
+* [ ] Gold/metals supported correctly
+* [ ] Futures supported correctly
+* [ ] Index products handled appropriately
+* [ ] Account currency supported
+* [ ] Currency conversion supported where necessary
+* [ ] Accurate monetary calculations
+* [ ] No stale P&L
+
+### Plan Adherence
+
+* [ ] Planned values remain separate from actual values
+* [ ] Trade can reference the applicable Daily Plan where appropriate
+* [ ] Planned vs actual values are compared
+* [ ] Plan adherence is calculated from real differences
+* [ ] Plan adherence is available for analytics/reviews
+
+### Psychology
+
+* [ ] Psychology data is correctly captured
+* [ ] Psychology analytics correctly read stored values
+* [ ] Behavioral patterns use actual data
+* [ ] Sample-size gating prevents premature conclusions
+
+### Analytics
+
+* [ ] No fake metrics
+* [ ] Strategy names displayed correctly
+* [ ] Drill-down to source trades is possible
+* [ ] Period comparison works
+* [ ] Plan adherence analytics available
+* [ ] Relevant risk/account dimensions supported
+* [ ] Equity curve uses starting balance
+* [ ] A+ vs non-A+ comparison is real
+* [ ] Analytics answer actual trading questions
+
+### Calendar
+
+* [ ] Real daily trade count
+* [ ] Real daily P&L
+* [ ] Real daily R
+* [ ] Real daily win rate
+* [ ] Best trade where available
+* [ ] A+ count
+* [ ] Rule violations where available
+* [ ] Primary session where available
+* [ ] Correct user timezone
+
+### Reviews
+
+* [ ] Daily review works
+* [ ] Weekly review works
+* [ ] Monthly review works
+* [ ] Metrics come from real trades
+* [ ] Best/worst trade data is real
+* [ ] Behavioral patterns are data-driven
+* [ ] Action items connect to insights/reviews
+
+### Media
+
+* [ ] Existing media workflow preserved
+* [ ] Video playback works
+* [ ] Thumbnails/previews work appropriately
+* [ ] Downloads work appropriately
+* [ ] Upload validation hardened
+* [ ] Large media handled efficiently
+* [ ] N+1 query issues addressed
+* [ ] Unsaved annotation changes are protected
+
+### Security
+
+* [ ] User ownership remains enforced
+* [ ] No cross-user access
+* [ ] New relationships do not bypass authorization
+* [ ] Private evidence remains private
+
+### Regression
+
+* [ ] Tests pass
+* [ ] Typecheck passes
+* [ ] Lint passes
+* [ ] Build passes
+* [ ] Existing unrelated features still work
+* [ ] No new fake/mock/placeholder business data exists
+
+---
+
+# 45. FINAL VERIFICATION REPORT
+
+At the end, produce a concise but technically accurate report containing:
+
+## 1. Backup
+
+```text
+Backup:
+[path/filename]
+
+Verified:
+PASS / FAIL
+```
+
+## 2. What changed
+
+Group changes under:
+
+```text
+A+ / Checklist
+Strategy Versioning
+Financial Engine
+Plan Adherence
+Psychology
+Analytics
+Calendar
+Reviews
+Media
+Security
+Tests
+```
+
+## 3. What was preserved
+
+Explicitly state that unrelated UI/UX/product features were preserved.
+
+## 4. Validation
+
+Report:
+
+```text
+Tests:
+PASS/FAIL
+
+Typecheck:
+PASS/FAIL
+
+Lint:
+PASS/FAIL
+
+Build:
+PASS/FAIL
+```
+
+Include the actual commands/results.
+
+## 5. Remaining limitations
+
+Do not hide anything.
+
+Clearly distinguish:
+
+```text
+PASS
+PARTIAL
+BLOCKED
+UNVERIFIED
+```
+
+Do not claim COMPLETE when important runtime verification was not actually performed.
+
+---
+
+# 46. IMPORTANT FINAL RULE
+
+Do NOT start building Phase 7 or unrelated new features.
+
+This task is about **correcting and connecting the existing DnD system**.
+
+The goal is not to make the codebase larger.
+
+The goal is to make the existing product **truthful, connected, reliable, historically correct, analytically useful, and financially trustworthy**.
+
+The most important final product relationship is:
+
+```text
+STRATEGY
+   ↓
+STRATEGY VERSION
+   ↓
+CHECKLIST VERSION
+   ↓
+DAILY PLAN
+   ↓
+TRADE
+   ↓
+PLANNED VS ACTUAL
+   ↓
+EXECUTION
+   ↓
+EVIDENCE
+   ↓
+PSYCHOLOGY
+   ↓
+RESULT
+   ↓
+REVIEW
+   ↓
+ANALYTICS
+   ↓
+INSIGHT
+   ↓
+ACTION ITEM
+   ↓
+STRATEGY IMPROVEMENT
+```
+
+Again:
+
+**Implement this relationship using the architecture you already built.**
+
+Do not force the codebase to resemble examples in this prompt.
+
+Preserve what is already good.
+
+Change only what is necessary.
+
+Prefer the smallest robust architectural change that produces the correct behavior.
+
+And never manufacture a PASS where the implementation has not actually been verified.

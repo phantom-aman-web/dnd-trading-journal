@@ -1,0 +1,1282 @@
+     1→"use client";
+     2→
+     3→/**
+     4→ * Settings — reorganised into four focused tabs.
+     5→ *
+     6→ *   1. Profile    — Personal (display name + email) · Regional preferences
+     7→ *                   (timezone, date format, time format, week starts on).
+     8→ *   2. Trading    — Defaults (account, instrument, risk %, session, timeframe)
+     9→ *                   · Risk management (max trades/day, daily loss limit %,
+    10→ *                   max risk per trade %, Normal/Warning/Critical banners)
+    11→ *                   · Instrument preferences (multi-select favourites).
+    12→ *   3. Appearance — Theme picker, density, larger text, reduced motion.
+    13→ *   4. Legal      — Terms / Privacy / Cookies + cookie consent management.
+    14→ *
+    15→ * Visual identity is unchanged: bg-background wrapper, bg-card sections with
+    16→ * border-border, primary CTA, semantic tokens only.
+    17→ */
+    18→
+    19→import { useQuery, useQueryClient } from "@tanstack/react-query";
+    20→import { useState, useEffect, useMemo } from "react";
+    21→import { Button } from "@/components/ui/button";
+    22→import { Input } from "@/components/ui/input";
+    23→import { InstrumentSelector } from "@/components/common/instrument-selector";
+    24→import { Switch } from "@/components/ui/switch";
+    25→import { Separator } from "@/components/ui/separator";
+    26→import { Skeleton } from "@/components/ui/skeleton";
+    27→import { Badge } from "@/components/ui/badge";
+    28→import { Checkbox } from "@/components/ui/checkbox";
+    29→import {
+    30→  Select,
+    31→  SelectContent,
+    32→  SelectItem,
+    33→  SelectTrigger,
+    34→  SelectValue,
+    35→} from "@/components/ui/select";
+    36→import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+    37→import {
+    38→  Dialog,
+    39→  DialogContent,
+    40→  DialogDescription,
+    41→  DialogHeader,
+    42→  DialogTitle,
+    43→} from "@/components/ui/dialog";
+    44→import {
+    45→  AlertDialog,
+    46→  AlertDialogContent,
+    47→  AlertDialogHeader,
+    48→  AlertDialogFooter,
+    49→  AlertDialogTitle,
+    50→  AlertDialogDescription,
+    51→  AlertDialogAction,
+    52→  AlertDialogCancel,
+    53→} from "@/components/ui/alert-dialog";
+    54→import {
+    55→  setTheme,
+    56→  setDensity,
+    57→  setLargerText,
+    58→  setReducedMotion,
+    59→  useTheme,
+    60→} from "@/components/theme-provider";
+    61→import { useConsent } from "@/lib/consent-store";
+    62→import { useAuth } from "@/lib/auth-store";
+    63→import { TimezoneSelect } from "@/components/common/timezone-select";
+    64→import { toast } from "sonner";
+    65→import {
+    66→  LogOut,
+    67→  Save,
+    68→  Shield,
+    69→  Palette,
+    70→  User,
+    71→  Sliders,
+    72→  Check,
+    73→  AlertTriangle,
+    74→  X,
+    75→  Trash2,
+    76→  UserX,
+    77→} from "lucide-react";
+    78→import { cn } from "@/lib/utils";
+    79→import { FieldLabel } from "@/components/common/field-label";
+    80→
+    81→// ---------------------------------------------------------------------------
+    82→// Constants shared with the trade form for consistent option lists.
+    83→// ---------------------------------------------------------------------------
+    84→
+    85→const SESSIONS = [
+    86→  { value: "asia", label: "Asia" },
+    87→  { value: "london", label: "London" },
+    88→  { value: "ny_am", label: "New York AM" },
+    89→  { value: "ny_pm", label: "New York PM" },
+    90→];
+    91→
+    92→const TIMEFRAMES = ["1m", "5m", "15m", "1h", "4h", "1D"];
+    93→
+    94→const DATE_FORMATS = [
+    95→  { value: "MMM D, YYYY", label: "Sep 9, 2025" },
+    96→  { value: "D MMM YYYY", label: "9 Sep 2025" },
+    97→  { value: "YYYY-MM-DD", label: "2025-09-09" },
+    98→  { value: "MM/DD/YYYY", label: "09/09/2025 (US)" },
+    99→  { value: "DD/MM/YYYY", label: "09/09/2025 (EU)" },
+   100→];
+   101→
+   102→const TIME_FORMATS = [
+   103→  { value: "HH:mm", label: "14:30 (24h)" },
+   104→  { value: "hh:mm A", label: "02:30 PM (12h)" },
+   105→];
+   106→
+   107→const WEEK_STARTS = [
+   108→  { value: "monday", label: "Monday" },
+   109→  { value: "sunday", label: "Sunday" },
+   110→];
+   111→
+   112→// ---------------------------------------------------------------------------
+   113→// Fetchers
+   114→// ---------------------------------------------------------------------------
+   115→
+   116→async function fetchSettings() {
+   117→  const res = await fetch("/api/settings", { cache: "no-store" });
+   118→  if (!res.ok) throw new Error("Failed to fetch settings");
+   119→  return res.json();
+   120→}
+   121→
+   122→async function fetchMeta() {
+   123→  const res = await fetch("/api/me", { cache: "no-store" });
+   124→  if (!res.ok) throw new Error("Failed to fetch meta");
+   125→  return res.json();
+   126→}
+   127→
+   128→// ---------------------------------------------------------------------------
+   129→// Main view
+   130→// ---------------------------------------------------------------------------
+   131→
+   132→export function SettingsView() {
+   133→  const qc = useQueryClient();
+   134→  const { data, isLoading } = useQuery({
+   135→    queryKey: ["settings"],
+   136→    queryFn: fetchSettings,
+   137→  });
+   138→  const { data: meta } = useQuery({
+   139→    queryKey: ["me"],
+   140→    queryFn: fetchMeta,
+   141→  });
+   142→
+   143→  // Personal (Profile)
+   144→  const [name, setName] = useState("");
+   145→  const { user } = useAuth();
+   146→  const email = user?.email ?? "";
+   147→
+   148→  // Regional preferences (Profile)
+   149→  const [timezone, setTimezone] = useState("UTC");
+   150→  const [dateFormat, setDateFormat] = useState("MMM D, YYYY");
+   151→  const [timeFormat, setTimeFormat] = useState("HH:mm");
+   152→  const [weekStartsOn, setWeekStartsOn] = useState("monday");
+   153→  const [nyMarketOffset, setNyMarketOffset] = useState("UTC-4");
+   154→
+   155→  // Trading defaults
+   156→  const [defaultAccountId, setDefaultAccountId] = useState<string>("__none");
+   157→  const [defaultInstrument, setDefaultInstrument] = useState("");
+   158→  const [defaultRiskPct, setDefaultRiskPct] = useState("1");
+   159→  const [defaultSession, setDefaultSession] = useState("ny_am");
+   160→  const [defaultTimeframe, setDefaultTimeframe] = useState("5m");
+   161→
+   162→  // Risk management
+   163→  const [maxTradesPerDay, setMaxTradesPerDay] = useState<number | "">("");
+   164→  const [dailyLossLimitPct, setDailyLossLimitPct] = useState("");
+   165→  const [maxRiskPerTradePct, setMaxRiskPerTradePct] = useState("");
+   166→  const [normalRiskMaxPct, setNormalRiskMaxPct] = useState("1.5");
+   167→  const [warningRiskMaxPct, setWarningRiskMaxPct] = useState("3");
+   168→  const [criticalRiskMaxPct, setCriticalRiskMaxPct] = useState("5");
+   169→
+   170→  // Instrument preferences (multi-select from existing instruments)
+   171→  const [preferredInstruments, setPreferredInstruments] = useState<string[]>([]);
+   172→  const [preferredCustom, setPreferredCustom] = useState("");
+   173→
+   174→  // Appearance
+   175→  const [density, setDensityState] = useState("comfortable");
+   176→  const [largerText, setLargerTextState] = useState(false);
+   177→  const [reducedMotion, setReducedMotionState] = useState(false);
+   178→  const { theme, setTheme: applyTheme } = useTheme();
+   179→
+   180→  // Auth (Sign Out).
+   181→  const { signOut } = useAuth();
+   182→
+   183→  // Dialog state for Clear Data / Delete Account (website-built popups,
+   184→  // not browser confirm() dialogs).
+   185→  const [clearDataOpen, setClearDataOpen] = useState(false);
+   186→  const [clearDataConfirmOpen, setClearDataConfirmOpen] = useState(false);
+   187→  const [deleteAccountOpen, setDeleteAccountOpen] = useState(false);
+   188→  const [deleteAccountConfirmOpen, setDeleteAccountConfirmOpen] = useState(false);
+   189→
+   190→  // Hydrate state from the settings GET response once data arrives.
+   191→  useEffect(() => {
+   192→    if (!data?.settings) return;
+   193→    const s = data.settings;
+   194→    setTimezone(s.timezone ?? "UTC");
+   195→    setDateFormat(s.dateFormat ?? "MMM D, YYYY");
+   196→    setTimeFormat(s.timeFormat ?? "HH:mm");
+   197→    setWeekStartsOn(s.weekStartsOn ?? "monday");
+   198→    setNyMarketOffset(s.nyMarketOffset ?? "UTC-4");
+   199→    setDefaultAccountId(s.defaultAccountId ?? "__none");
+   200→    setDefaultInstrument(s.defaultInstrument ?? "");
+   201→    setDefaultRiskPct(s.defaultRiskPct ?? "1");
+   202→    setDefaultSession(s.defaultSession ?? "ny_am");
+   203→    setDefaultTimeframe(s.defaultTimeframe ?? "5m");
+   204→    setMaxTradesPerDay(s.maxTradesPerDay ?? s.dailyTradeLimit ?? "");
+   205→    setDailyLossLimitPct(s.dailyLossLimitPct ?? "");
+   206→    setMaxRiskPerTradePct(s.maxRiskPerTradePct != null ? String(s.maxRiskPerTradePct) : "");
+   207→    setNormalRiskMaxPct(String(s.normalRiskMaxPct ?? 1.5));
+   208→    setWarningRiskMaxPct(String(s.warningRiskMaxPct ?? 3));
+   209→    setCriticalRiskMaxPct(String(s.criticalRiskMaxPct ?? 5));
+   210→    setDensityState(s.density || "comfortable");
+   211→    setLargerTextState(s.largerText ?? false);
+   212→    setReducedMotionState(s.reducedMotion ?? false);
+   213→    // Preferred instruments is a JSON array of symbols.
+   214→    try {
+   215→      const parsed = s.preferredInstruments ? JSON.parse(s.preferredInstruments) : [];
+   216→      if (Array.isArray(parsed)) setPreferredInstruments(parsed);
+   217→    } catch {
+   218→      setPreferredInstruments([]);
+   219→    }
+   220→  }, [data]);
+   221→
+   222→  useEffect(() => {
+   223→    if (data?.user?.name != null) setName(data.user.name);
+   224→  }, [data]);
+   225→
+   226→  // Derived: account options + instrument options from /api/me.
+   227→  const accounts = useMemo<any[]>(() => meta?.accounts ?? [], [meta]);
+   228→  const instruments = useMemo<any[]>(() => meta?.instruments ?? [], [meta]);
+   229→
+   230→  function togglePreferred(symbol: string) {
+   231→    setPreferredInstruments((prev) =>
+   232→      prev.includes(symbol) ? prev.filter((s) => s !== symbol) : [...prev, symbol],
+   233→    );
+   234→  }
+   235→
+   236→  function addCustomPreferred() {
+   237→    const sym = preferredCustom.trim().toUpperCase();
+   238→    if (!sym) return;
+   239→    if (!preferredInstruments.includes(sym)) {
+   240→      setPreferredInstruments((prev) => [...prev, sym]);
+   241→    }
+   242→    setPreferredCustom("");
+   243→  }
+   244→
+   245→  function removePreferred(symbol: string) {
+   246→    setPreferredInstruments((prev) => prev.filter((s) => s !== symbol));
+   247→  }
+   248→
+   249→  async function saveSettings() {
+   250→    const res = await fetch("/api/settings", {
+   251→      method: "PATCH",
+   252→      headers: { "Content-Type": "application/json" },
+   253→      body: JSON.stringify({
+   254→        name,
+   255→        theme,
+   256→        density,
+   257→        largerText,
+   258→        reducedMotion,
+   259→        defaultRiskPct,
+   260→        defaultSession,
+   261→        defaultTimeframe,
+   262→        timezone,
+   263→        dateFormat,
+   264→        timeFormat,
+   265→        weekStartsOn,
+   266→        nyMarketOffset,
+   267→        // Use __none sentinel as null on the API side.
+   268→        defaultAccountId: defaultAccountId === "__none" ? null : defaultAccountId,
+   269→        defaultInstrument: defaultInstrument.trim() || null,
+   270→        maxTradesPerDay: maxTradesPerDay === "" ? null : maxTradesPerDay,
+   271→        dailyLossLimitPct: dailyLossLimitPct.trim() === "" ? null : dailyLossLimitPct,
+   272→        maxRiskPerTradePct:
+   273→          maxRiskPerTradePct.trim() === "" ? null : Number(maxRiskPerTradePct),
+   274→        preferredInstruments: JSON.stringify(preferredInstruments),
+   275→        normalRiskMaxPct: Number(normalRiskMaxPct),
+   276→        warningRiskMaxPct: Number(warningRiskMaxPct),
+   277→        criticalRiskMaxPct: Number(criticalRiskMaxPct),
+   278→      }),
+   279→    });
+   280→    if (res.ok) {
+   281→      toast.success("Settings saved.");
+   282→      setTheme(theme as any);
+   283→      setDensity(density as any);
+   284→      setLargerText(largerText);
+   285→      setReducedMotion(reducedMotion);
+   286→      qc.invalidateQueries({ queryKey: ["settings"] });
+   287→    } else {
+   288→      toast.error("Failed to save settings.");
+   289→    }
+   290→  }
+   291→
+   292→  if (isLoading) {
+   293→    return (
+   294→      <div className="min-h-full bg-background p-4 md:p-6 lg:p-8">
+   295→        <div className="mx-auto max-w-4xl space-y-6">
+   296→          <Skeleton className="h-10 w-48 rounded-lg" />
+   297→          <Skeleton className="h-10 w-full rounded-lg" />
+   298→          <Skeleton className="h-96 rounded-xl" />
+   299→        </div>
+   300→      </div>
+   301→    );
+   302→  }
+   303→
+   304→  return (
+   305→    <div className="min-h-full bg-background">
+   306→      <div className="mx-auto max-w-4xl px-4 py-6 md:px-6 md:py-8 lg:px-8 space-y-6">
+   307→        {/* Header */}
+   308→        <div>
+   309→          <h1 className="text-2xl md:text-3xl font-bold text-foreground tracking-tight">
+   310→            Settings
+   311→          </h1>
+   312→          <p className="text-sm text-muted-foreground mt-1">
+   313→            Profile, trading defaults, appearance &amp; legal preferences.
+   314→          </p>
+   315→        </div>
+   316→
+   317→        <Tabs defaultValue="profile">
+   318→          <div className="border-b border-border overflow-x-auto">
+   319→            <TabsList className="bg-transparent h-auto p-0 rounded-none gap-0 w-auto">
+   320→              <SettingsTabTrigger value="profile" icon={User}>Profile</SettingsTabTrigger>
+   321→              <SettingsTabTrigger value="trading" icon={Sliders}>Trading</SettingsTabTrigger>
+   322→              <SettingsTabTrigger value="appearance" icon={Palette}>Appearance</SettingsTabTrigger>
+   323→              <SettingsTabTrigger value="legal" icon={Shield}>Legal</SettingsTabTrigger>
+   324→            </TabsList>
+   325→          </div>
+   326→
+   327→          {/* PROFILE TAB ------------------------------------------------- */}
+   328→          <TabsContent value="profile" className="mt-6 space-y-6 focus-visible:outline-none">
+   329→            {/* Personal */}
+   330→            <SettingsCard>
+   331→              <SettingsSectionHeading>Personal</SettingsSectionHeading>
+   332→              <p className="text-xs text-muted-foreground mt-1">
+   333→                How DnD addresses you. Email is read-only — used for sign-in and audit.
+   334→              </p>
+   335→              <div className="grid sm:grid-cols-2 gap-4 mt-5">
+   336→                <div className="space-y-1.5">
+   337→                  <FieldLabel hint="Display name shown across the app">Display Name</FieldLabel>
+   338→                  <Input
+   339→                    value={name}
+   340→                    onChange={(e) => setName(e.target.value)}
+   341→                    placeholder="Your name"
+   342→                    className="border-input rounded-lg focus-visible:ring-foreground focus-visible:border-foreground"
+   343→                  />
+   344→                </div>
+   345→                <div className="space-y-1.5">
+   346→                  <FieldLabel hint="Email is read-only">Email</FieldLabel>
+   347→                  <Input
+   348→                    value={email}
+   349→                    readOnly
+   350→                    disabled
+   351→                    placeholder="you@example.com"
+   352→                    className="border-input rounded-lg bg-muted/40 text-muted-foreground"
+   353→                  />
+   354→                </div>
+   355→              </div>
+   356→            </SettingsCard>
+   357→
+   358→            {/* Regional Preferences */}
+   359→            <SettingsCard>
+   360→              <SettingsSectionHeading>Regional Preferences</SettingsSectionHeading>
+   361→              <p className="text-xs text-muted-foreground mt-1">
+   362→                Used for calendar day bucketing, date/time rendering and weekly aggregation.
+   363→              </p>
+   364→              <div className="grid sm:grid-cols-2 gap-4 mt-5">
+   365→                <div className="space-y-1.5 sm:col-span-2">
+   366→                  <FieldLabel required hint="IANA timezone for calendar bucketing">Timezone</FieldLabel>
+   367→                  <TimezoneSelect value={timezone} onChange={setTimezone} />
+   368→                </div>
+   369→                <div className="space-y-1.5">
+   370→                  <FieldLabel hint="How dates are rendered across the app">Date Format</FieldLabel>
+   371→                  <Select value={dateFormat} onValueChange={setDateFormat}>
+   372→                    <SelectTrigger className="border-input rounded-lg focus-visible:ring-foreground focus-visible:border-foreground">
+   373→                      <SelectValue />
+   374→                    </SelectTrigger>
+   375→                    <SelectContent>
+   376→                      {DATE_FORMATS.map((d) => (
+   377→                        <SelectItem key={d.value} value={d.value}>{d.label}</SelectItem>
+   378→                      ))}
+   379→                    </SelectContent>
+   380→                  </Select>
+   381→                </div>
+   382→                <div className="space-y-1.5">
+   383→                  <FieldLabel hint="How times are rendered">Time Format</FieldLabel>
+   384→                  <Select value={timeFormat} onValueChange={setTimeFormat}>
+   385→                    <SelectTrigger className="border-input rounded-lg focus-visible:ring-foreground focus-visible:border-foreground">
+   386→                      <SelectValue />
+   387→                    </SelectTrigger>
+   388→                    <SelectContent>
+   389→                      {TIME_FORMATS.map((t) => (
+   390→                        <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>
+   391→                      ))}
+   392→                    </SelectContent>
+   393→                  </Select>
+   394→                </div>
+   395→                <div className="space-y-1.5">
+   396→                  <FieldLabel hint="First day of the week in calendars">Week Starts On</FieldLabel>
+   397→                  <Select value={weekStartsOn} onValueChange={setWeekStartsOn}>
+   398→                    <SelectTrigger className="border-input rounded-lg focus-visible:ring-foreground focus-visible:border-foreground">
+   399→                      <SelectValue />
+   400→                    </SelectTrigger>
+   401→                    <SelectContent>
+   402→                      {WEEK_STARTS.map((w) => (
+   403→                        <SelectItem key={w.value} value={w.value}>{w.label}</SelectItem>
+   404→                      ))}
+   405→                    </SelectContent>
+   406→                  </Select>
+   407→                </div>
+   408→                <div className="space-y-1.5">
+   409→                  <FieldLabel hint="Choose the New York market-time offset shown in the navbar.">New York Market Time</FieldLabel>
+   410→                  <Select value={nyMarketOffset} onValueChange={setNyMarketOffset}>
+   411→                    <SelectTrigger className="border-input rounded-lg focus-visible:ring-foreground focus-visible:border-foreground">
+   412→                      <SelectValue />
+   413→                    </SelectTrigger>
+   414→                    <SelectContent>
+   415→                      <SelectItem value="UTC-4">UTC-4 (EDT)</SelectItem>
+   416→                      <SelectItem value="UTC-5">UTC-5 (EST)</SelectItem>
+   417→                    </SelectContent>
+   418→                  </Select>
+   419→                </div>
+   420→              </div>
+   421→            </SettingsCard>
+   422→
+   423→            <div className="flex justify-end">
+   424→              <Button
+   425→                onClick={saveSettings}
+   426→                className="bg-primary text-primary-foreground hover:bg-primary/90 rounded-lg shadow-sm"
+   427→              >
+   428→                <Save className="h-4 w-4" /> Save Profile
+   429→              </Button>
+   430→            </div>
+   431→          </TabsContent>
+   432→
+   433→          {/* TRADING TAB -------------------------------------------------- */}
+   434→          <TabsContent value="trading" className="mt-6 space-y-6 focus-visible:outline-none">
+   435→            {/* Defaults */}
+   436→            <SettingsCard>
+   437→              <SettingsSectionHeading>Defaults</SettingsSectionHeading>
+   438→              <p className="text-xs text-muted-foreground mt-1">
+   439→                Pre-filled when you create a new trade. Pick the account and instrument you
+   440→                trade most often to skip a step every time.
+   441→              </p>
+   442→              <div className="grid sm:grid-cols-2 gap-4 mt-5">
+   443→                <div className="space-y-1.5">
+   444→                  <FieldLabel hint="Pre-selected account in the trade form">Default Trading Account</FieldLabel>
+   445→                  <Select value={defaultAccountId} onValueChange={setDefaultAccountId}>
+   446→                    <SelectTrigger className="border-input rounded-lg focus-visible:ring-foreground focus-visible:border-foreground">
+   447→                      <SelectValue />
+   448→                    </SelectTrigger>
+   449→                    <SelectContent>
+   450→                      <SelectItem value="__none">No default</SelectItem>
+   451→                      {accounts.map((a: any) => (
+   452→                        <SelectItem key={a.id} value={a.id}>
+   453→                          {a.name}{a.currency ? ` · ${a.currency}` : ""}
+   454→                        </SelectItem>
+   455→                      ))}
+   456→                    </SelectContent>
+   457→                  </Select>
+   458→                  {accounts.length === 0 && (
+   459→                    <p className="text-[11px] text-muted-foreground">
+   460→                      No accounts yet — add one from Accounts.
+   461→                    </p>
+   462→                  )}
+   463→                </div>
+   464→
+   465→                <div className="space-y-1.5">
+   466→                  <FieldLabel hint="Symbol pre-filled in the trade form">Default Instrument</FieldLabel>
+   467→                  <InstrumentSelector
+   468→                    value={defaultInstrument}
+   469→                    onChange={(sym) => setDefaultInstrument(sym)}
+   470→                    placeholder="Select instrument…"
+   471→                  />
+   472→                </div>
+   473→
+   474→                <div className="space-y-1.5">
+   475→                  <FieldLabel hint="Default risk per trade (as % of equity)">Default Risk %</FieldLabel>
+   476→                  <Input
+   477→                    type="number"
+   478→                    min="0"
+   479→                    step="0.1"
+   480→                    value={defaultRiskPct}
+   481→                    onChange={(e) => setDefaultRiskPct(e.target.value)}
+   482→                    className="border-input rounded-lg focus-visible:ring-foreground focus-visible:border-foreground"
+   483→                  />
+   484→                </div>
+   485→
+   486→                <div className="space-y-1.5">
+   487→                  <FieldLabel hint="Default session for new trades">Default Session</FieldLabel>
+   488→                  <Select value={defaultSession} onValueChange={setDefaultSession}>
+   489→                    <SelectTrigger className="border-input rounded-lg focus-visible:ring-foreground focus-visible:border-foreground">
+   490→                      <SelectValue />
+   491→                    </SelectTrigger>
+   492→                    <SelectContent>
+   493→                      {SESSIONS.map((s) => (
+   494→                        <SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>
+   495→                      ))}
+   496→                    </SelectContent>
+   497→                  </Select>
+   498→                </div>
+   499→
+   500→                <div className="space-y-1.5">
+   501→                  <FieldLabel hint="Default chart timeframe for new trades">Default Timeframe</FieldLabel>
+   502→                  <Select value={defaultTimeframe} onValueChange={setDefaultTimeframe}>
+   503→                    <SelectTrigger className="border-input rounded-lg focus-visible:ring-foreground focus-visible:border-foreground">
+   504→                      <SelectValue />
+   505→                    </SelectTrigger>
+   506→                    <SelectContent>
+   507→                      {TIMEFRAMES.map((tf) => (
+   508→                        <SelectItem key={tf} value={tf}>{tf}</SelectItem>
+   509→                      ))}
+   510→                    </SelectContent>
+   511→                  </Select>
+   512→                </div>
+   513→              </div>
+   514→            </SettingsCard>
+   515→
+   516→            {/* Risk Management */}
+   517→            <SettingsCard>
+   518→              <SettingsSectionHeading>Risk Management</SettingsSectionHeading>
+   519→              <p className="text-xs text-muted-foreground mt-1">
+   520→                Hard limits DnD will flag during trade entry. Leave blank to disable a guardrail.
+   521→              </p>
+   522→              <div className="grid sm:grid-cols-3 gap-4 mt-5">
+   523→                <div className="space-y-1.5">
+   524→                  <FieldLabel hint="Maximum number of trades per day">Max Trades / Day</FieldLabel>
+   525→                  <Input
+   526→                    type="number"
+   527→                    min="0"
+   528→                    value={maxTradesPerDay}
+   529→                    onChange={(e) =>
+   530→                      setMaxTradesPerDay(e.target.value === "" ? "" : Number(e.target.value))
+   531→                    }
+   532→                    placeholder="—"
+   533→                    className="border-input rounded-lg focus-visible:ring-foreground focus-visible:border-foreground"
+   534→                  />
+   535→                </div>
+   536→                <div className="space-y-1.5">
+   537→                  <FieldLabel hint="Max daily loss as % of equity">Daily Loss Limit %</FieldLabel>
+   538→                  <Input
+   539→                    type="number"
+   540→                    min="0"
+   541→                    step="0.1"
+   542→                    value={dailyLossLimitPct}
+   543→                    onChange={(e) => setDailyLossLimitPct(e.target.value)}
+   544→                    placeholder="—"
+   545→                    className="border-input rounded-lg focus-visible:ring-foreground focus-visible:border-foreground"
+   546→                  />
+   547→                </div>
+   548→                <div className="space-y-1.5">
+   549→                  <FieldLabel hint="Maximum risk allowed on any single trade">Max Risk / Trade %</FieldLabel>
+   550→                  <Input
+   551→                    type="number"
+   552→                    min="0"
+   553→                    step="0.1"
+   554→                    value={maxRiskPerTradePct}
+   555→                    onChange={(e) => setMaxRiskPerTradePct(e.target.value)}
+   556→                    placeholder="—"
+   557→                    className="border-input rounded-lg focus-visible:ring-foreground focus-visible:border-foreground"
+   558→                  />
+   559→                </div>
+   560→              </div>
+   561→
+   562→              <Separator className="bg-border my-5" />
+   563→
+   564→              {/* Compact risk threshold banners */}
+   565→              <div className="text-[10px] uppercase tracking-wide text-muted-foreground font-semibold mb-2">
+   566→                Risk Threshold Banners (compact)
+   567→              </div>
+   568→              <p className="text-xs text-muted-foreground mb-3">
+   569→                DnD flags a trade&apos;s planned risk against these thresholds.
+   570→              </p>
+   571→              <div className="grid sm:grid-cols-3 gap-3">
+   572→                <CompactThreshold
+   573→                  label="Normal"
+   574→                  value={normalRiskMaxPct}
+   575→                  onChange={setNormalRiskMaxPct}
+   576→                  tone="profit"
+   577→                />
+   578→                <CompactThreshold
+   579→                  label="Warning"
+   580→                  value={warningRiskMaxPct}
+   581→                  onChange={setWarningRiskMaxPct}
+   582→                  tone="warning"
+   583→                />
+   584→                <CompactThreshold
+   585→                  label="Critical"
+   586→                  value={criticalRiskMaxPct}
+   587→                  onChange={setCriticalRiskMaxPct}
+   588→                  tone="loss"
+   589→                />
+   590→              </div>
+   591→            </SettingsCard>
+   592→
+   593→            {/* Instrument Preferences */}
+   594→            <SettingsCard>
+   595→              <SettingsSectionHeading>Instrument Preferences</SettingsSectionHeading>
+   596→              <p className="text-xs text-muted-foreground mt-1">
+   597→                Favourite the instruments you trade most. They appear first in selectors,
+   598→                quick-add menus and analytics filters.
+   599→              </p>
+   600→
+   601→              {preferredInstruments.length > 0 && (
+   602→                <div className="mt-4 flex flex-wrap gap-1.5">
+   603→                  {preferredInstruments.map((sym) => (
+   604→                    <span
+   605→                      key={sym}
+   606→                      className="inline-flex items-center gap-1 rounded-md border border-border bg-muted/50 px-2 py-1 text-xs font-medium"
+   607→                    >
+   608→                      {sym}
+   609→                      <button
+   610→                        aria-label={`Remove ${sym}`}
+   611→                        onClick={() => removePreferred(sym)}
+   612→                        className="ml-0.5 text-muted-foreground hover:text-foreground"
+   613→                      >
+   614→                        <X className="h-3 w-3" />
+   615→                      </button>
+   616→                    </span>
+   617→                  ))}
+   618→                </div>
+   619→              )}
+   620→
+   621→              <div className="mt-4 grid sm:grid-cols-2 gap-4">
+   622→                <div className="space-y-1.5 sm:col-span-2">
+   623→                  <FieldLabel hint="Tick instruments to mark them as favourites">
+   624→                    Available Instruments
+   625→                  </FieldLabel>
+   626→                  {instruments.length === 0 ? (
+   627→                    <p className="text-[11px] text-muted-foreground">
+   628→                      No instruments yet — add some from Accounts.
+   629→                    </p>
+   630→                  ) : (
+   631→                    <div className="rounded-lg border border-border bg-muted/20 p-3 max-h-56 overflow-y-auto scroll-thin">
+   632→                      <div className="grid sm:grid-cols-2 gap-2">
+   633→                        {instruments.map((i: any) => {
+   634→                          const checked = preferredInstruments.includes(i.symbol);
+   635→                          return (
+   636→                            <label
+   637→                              key={i.id}
+   638→                              className={cn(
+   639→                                "flex items-center gap-2.5 rounded-md border px-3 py-2 cursor-pointer transition-colors",
+   640→                                checked
+   641→                                  ? "border-foreground/30 bg-card"
+   642→                                  : "border-border bg-card hover:bg-muted/50",
+   643→                              )}
+   644→                            >
+   645→                              <Checkbox
+   646→                                checked={checked}
+   647→                                onCheckedChange={() => togglePreferred(i.symbol)}
+   648→                                aria-label={`Toggle favourite ${i.symbol}`}
+   649→                                onClick={(e) => e.stopPropagation()}
+   650→                              />
+   651→                            <span className="flex flex-col min-w-0">
+   652→                              <span className="text-sm font-medium tracking-tight truncate">
+   653→                                {i.symbol}
+   654→                              </span>
+   655→                              {i.name && (
+   656→                                <span className="text-[10px] text-muted-foreground truncate">
+   657→                                  {i.name} · {i.market}
+   658→                                </span>
+   659→                              )}
+   660→                            </span>
+   661→                          </label>
+   662→                          );
+   663→                        })}
+   664→                      </div>
+   665→                    </div>
+   666→                  )}
+   667→                </div>
+   668→
+   669→                <div className="space-y-1.5 sm:col-span-2">
+   670→                  <FieldLabel hint="Add a symbol not listed above">Add Custom Symbol</FieldLabel>
+   671→                  <div className="flex gap-2">
+   672→                    <Input
+   673→                      placeholder="e.g. NAS100, SPX500"
+   674→                      value={preferredCustom}
+   675→                      onChange={(e) => setPreferredCustom(e.target.value)}
+   676→                      onKeyDown={(e) => {
+   677→                        if (e.key === "Enter") {
+   678→                          e.preventDefault();
+   679→                          addCustomPreferred();
+   680→                        }
+   681→                      }}
+   682→                      className="border-input rounded-lg focus-visible:ring-foreground focus-visible:border-foreground"
+   683→                    />
+   684→                    <Button
+   685→                      type="button"
+   686→                      variant="outline"
+   687→                      onClick={addCustomPreferred}
+   688→                      className="border-input rounded-lg shrink-0"
+   689→                    >
+   690→                      Add
+   691→                    </Button>
+   692→                  </div>
+   693→                </div>
+   694→              </div>
+   695→            </SettingsCard>
+   696→
+   697→            {/* Save Preferences */}
+   698→            <div className="flex justify-end">
+   699→              <Button
+   700→                onClick={saveSettings}
+   701→                className="bg-primary text-primary-foreground hover:bg-primary/90 rounded-lg shadow-sm"
+   702→              >
+   703→                <Save className="h-4 w-4" /> Save Trading
+   704→              </Button>
+   705→            </div>
+   706→
+   707→            {/* Account & Session */}
+   708→            <SettingsCard>
+   709→              <SettingsSectionHeading>Account &amp; Session</SettingsSectionHeading>
+   710→              <p className="text-xs text-muted-foreground mt-1">
+   711→                Manage your active session and account. Signing out will return you to the landing page.
+   712→              </p>
+   713→              <div className="mt-5 flex flex-col sm:flex-row gap-3">
+   714→                <Button
+   715→                  variant="outline"
+   716→                  onClick={() => signOut()}
+   717→                  className="bg-red-50 text-loss hover:bg-loss/15 border-red-200 rounded-lg"
+   718→                >
+   719→                  <LogOut className="h-4 w-4" />
+   720→                  Sign Out
+   721→                </Button>
+   722→                <Button
+   723→                  variant="outline"
+   724→                  onClick={() => setClearDataOpen(true)}
+   725→                  className="bg-red-50 text-loss hover:bg-loss/15 border-red-200 rounded-lg"
+   726→                >
+   727→                  <Trash2 className="h-4 w-4" />
+   728→                  Clear User Data
+   729→                </Button>
+   730→              </div>
+   731→              <p className="mt-3 text-xs text-muted-foreground">
+   732→                "Clear User Data" permanently deletes all your trades, strategies, accounts, media, and settings. This action cannot be undone.
+   733→              </p>
+   734→            </SettingsCard>
+   735→
+   736→            {/* Danger Zone — Delete Account */}
+   737→            <SettingsCard>
+   738→              <SettingsSectionHeading className="text-loss">Danger Zone</SettingsSectionHeading>
+   739→              <p className="text-xs text-muted-foreground mt-1">
+   740→                Permanently delete your entire account, including all data, credentials, and settings. This action is irreversible.
+   741→              </p>
+   742→              <div className="mt-5">
+   743→                <Button
+   744→                  variant="outline"
+   745→                  onClick={() => setDeleteAccountOpen(true)}
+   746→                  className="bg-red-50 text-loss hover:bg-loss/15 border-red-200 rounded-lg"
+   747→                >
+   748→                  <UserX className="h-4 w-4" />
+   749→                  Delete Account
+   750→                </Button>
+   751→                <p className="mt-3 text-xs text-muted-foreground">
+   752→                  "Delete Account" removes your user record entirely. You will need to sign up again to use DnD. All data is permanently lost.
+   753→                </p>
+   754→              </div>
+   755→            </SettingsCard>
+   756→
+   757→            {/* Clear User Data Confirmation Dialog */}
+   758→            <AlertDialog open={clearDataOpen} onOpenChange={setClearDataOpen}>
+   759→              <AlertDialogContent className="max-w-md">
+   760→                <AlertDialogHeader>
+   761→                  <AlertDialogTitle className="flex items-center gap-2">
+   762→                    <AlertTriangle className="h-5 w-5 text-loss" />
+   763→                    Clear All User Data?
+   764→                  </AlertDialogTitle>
+   765→                  <AlertDialogDescription className="text-sm text-muted-foreground leading-relaxed">
+   766→                    This will permanently delete ALL your data — trades, strategies, accounts, media, settings, and everything else.
+   767→                    <br /><br />
+   768→                    <span className="font-semibold text-foreground">This cannot be undone.</span> Are you sure you want to continue?
+   769→                  </AlertDialogDescription>
+   770→                </AlertDialogHeader>
+   771→                <AlertDialogFooter className="gap-2">
+   772→                  <AlertDialogCancel className="rounded-lg">Cancel</AlertDialogCancel>
+   773→                  <AlertDialogAction
+   774→                    onClick={async () => {
+   775→                      setClearDataOpen(false);
+   776→                      setClearDataConfirmOpen(true);
+   777→                    }}
+   778→                    className="rounded-lg bg-loss text-white hover:bg-loss/90"
+   779→                  >
+   780→                    Yes, continue
+   781→                  </AlertDialogAction>
+   782→                </AlertDialogFooter>
+   783→              </AlertDialogContent>
+   784→            </AlertDialog>
+   785→
+   786→            {/* Clear User Data — Final Warning */}
+   787→            <AlertDialog open={clearDataConfirmOpen} onOpenChange={setClearDataConfirmOpen}>
+   788→              <AlertDialogContent className="max-w-md">
+   789→                <AlertDialogHeader>
+   790→                  <AlertDialogTitle className="flex items-center gap-2">
+   791→                    <AlertTriangle className="h-5 w-5 text-loss" />
+   792→                    Final Warning
+   793→                  </AlertDialogTitle>
+   794→                  <AlertDialogDescription className="text-sm text-muted-foreground leading-relaxed">
+   795→                    ALL your trading data will be permanently deleted. This includes every trade, strategy, account, screenshot, and setting.
+   796→                    <br /><br />
+   797→                    <span className="font-semibold text-foreground">There is no recovery from this action.</span>
+   798→                  </AlertDialogDescription>
+   799→                </AlertDialogHeader>
+   800→                <AlertDialogFooter className="gap-2">
+   801→                  <AlertDialogCancel className="rounded-lg">Cancel</AlertDialogCancel>
+   802→                  <AlertDialogAction
+   803→                    onClick={async () => {
+   804→                      setClearDataConfirmOpen(false);
+   805→                      try {
+   806→                        const res = await fetch("/api/clear-data", { method: "DELETE" });
+   807→                        if (res.ok) {
+   808→                          toast.success("All user data has been cleared.");
+   809→                          qc.invalidateQueries();
+   810→                        } else {
+   811→                          toast.error("Failed to clear data. Please try again.");
+   812→                        }
+   813→                      } catch {
+   814→                        toast.error("Network error while clearing data.");
+   815→                      }
+   816→                    }}
+   817→                    className="rounded-lg bg-loss text-white hover:bg-loss/90"
+   818→                  >
+   819→                    Yes, delete everything
+   820→                  </AlertDialogAction>
+   821→                </AlertDialogFooter>
+   822→              </AlertDialogContent>
+   823→            </AlertDialog>
+   824→
+   825→            {/* Delete Account Confirmation Dialog */}
+   826→            <AlertDialog open={deleteAccountOpen} onOpenChange={setDeleteAccountOpen}>
+   827→              <AlertDialogContent className="max-w-md">
+   828→                <AlertDialogHeader>
+   829→                  <AlertDialogTitle className="flex items-center gap-2">
+   830→                    <UserX className="h-5 w-5 text-loss" />
+   831→                    Delete Your Account?
+   832→                  </AlertDialogTitle>
+   833→                  <AlertDialogDescription className="text-sm text-muted-foreground leading-relaxed">
+   834→                    This will PERMANENTLY DELETE your entire account — your user record, all trades, strategies, accounts, media, settings, and legal consent records.
+   835→                    <br /><br />
+   836→                    <span className="font-semibold text-foreground">This is completely irreversible.</span> Are you absolutely sure?
+   837→                  </AlertDialogDescription>
+   838→                </AlertDialogHeader>
+   839→                <AlertDialogFooter className="gap-2">
+   840→                  <AlertDialogCancel className="rounded-lg">Cancel</AlertDialogCancel>
+   841→                  <AlertDialogAction
+   842→                    onClick={() => {
+   843→                      setDeleteAccountOpen(false);
+   844→                      setDeleteAccountConfirmOpen(true);
+   845→                    }}
+   846→                    className="rounded-lg bg-loss text-white hover:bg-loss/90"
+   847→                  >
+   848→                    Yes, continue
+   849→                  </AlertDialogAction>
+   850→                </AlertDialogFooter>
+   851→              </AlertDialogContent>
+   852→            </AlertDialog>
+   853→
+   854→            {/* Delete Account — Final Warning */}
+   855→            <AlertDialog open={deleteAccountConfirmOpen} onOpenChange={setDeleteAccountConfirmOpen}>
+   856→              <AlertDialogContent className="max-w-md">
+   857→                <AlertDialogHeader>
+   858→                  <AlertDialogTitle className="flex items-center gap-2">
+   859→                    <UserX className="h-5 w-5 text-loss" />
+   860→                    Final Warning
+   861→                  </AlertDialogTitle>
+   862→                  <AlertDialogDescription className="text-sm text-muted-foreground leading-relaxed">
+   863→                    Your account and ALL associated data will be permanently deleted. You will need to create a new account to use DnD again.
+   864→                    <br /><br />
+   865→                    <span className="font-semibold text-foreground">All data is permanently lost.</span>
+   866→                  </AlertDialogDescription>
+   867→                </AlertDialogHeader>
+   868→                <AlertDialogFooter className="gap-2">
+   869→                  <AlertDialogCancel className="rounded-lg">Cancel</AlertDialogCancel>
+   870→                  <AlertDialogAction
+   871→                    onClick={async () => {
+   872→                      setDeleteAccountConfirmOpen(false);
+   873→                      try {
+   874→                        const res = await fetch("/api/delete-account", { method: "DELETE" });
+   875→                        if (res.ok) {
+   876→                          toast.success("Account deleted. Redirecting...");
+   877→                          localStorage.clear();
+   878→                          sessionStorage.clear();
+   879→                          window.location.href = "/";
+   880→                        } else {
+   881→                          const data = await res.json().catch(() => null);
+   882→                          toast.error(data?.error ?? "Failed to delete account.");
+   883→                        }
+   884→                      } catch {
+   885→                        toast.error("Network error while deleting account.");
+   886→                      }
+   887→                    }}
+   888→                    className="rounded-lg bg-loss text-white hover:bg-loss/90"
+   889→                  >
+   890→                    Yes, delete my account
+   891→                  </AlertDialogAction>
+   892→                </AlertDialogFooter>
+   893→              </AlertDialogContent>
+   894→            </AlertDialog>
+   895→          </TabsContent>
+   896→
+   897→          {/* APPEARANCE TAB --------------------------------------------- */}
+   898→          <TabsContent value="appearance" className="mt-6 space-y-6 focus-visible:outline-none">
+   899→            <SettingsCard>
+   900→              <SettingsSectionHeading>Theme</SettingsSectionHeading>
+   901→              <p className="text-xs text-muted-foreground mt-1">
+   902→                Choose how DnD looks. Each theme is a complete visual system.
+   903→              </p>
+   904→              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mt-5">
+   905→                {[
+   906→                  { key: "nordic", label: "Nordic Clean", desc: "Light, quiet, precise" },
+   907→                  { key: "terminal", label: "Sleek Terminal", desc: "Dark, technical" },
+   908→                  { key: "institutional", label: "Institutional", desc: "Premium, analytical" },
+   909→                ].map((t) => (
+   910→                  <button
+   911→                    key={t.key}
+   912→                    onClick={() => applyTheme(t.key as any)}
+   913→                    className={cn(
+   914→                      "p-4 rounded-lg border text-left transition-colors",
+   915→                      theme === t.key
+   916→                        ? "border-foreground ring-2 ring-foreground/20 bg-card"
+   917→                        : "border-border hover:bg-muted/50 bg-card",
+   918→                    )}
+   919→                  >
+   920→                    <div className="font-medium text-sm text-foreground">{t.label}</div>
+   921→                    <div className="text-xs text-muted-foreground mt-1">{t.desc}</div>
+   922→                    {theme === t.key && (
+   923→                      <div className="mt-2 inline-flex items-center gap-1 text-[10px] font-semibold text-primary uppercase tracking-wide">
+   924→                        <Check className="h-3 w-3" /> Active
+   925→                      </div>
+   926→                    )}
+   927→                  </button>
+   928→                ))}
+   929→              </div>
+   930→            </SettingsCard>
+   931→
+   932→            <SettingsCard>
+   933→              <SettingsSectionHeading>Display</SettingsSectionHeading>
+   934→              <div className="mt-5 space-y-4">
+   935→                <div className="space-y-1.5">
+   936→                  <FieldLabel required>Density</FieldLabel>
+   937→                  <Select
+   938→                    value={density}
+   939→                    onValueChange={(v) => {
+   940→                      setDensityState(v);
+   941→                      setDensity(v as any);
+   942→                    }}
+   943→                  >
+   944→                    <SelectTrigger className="border-input rounded-lg focus-visible:ring-foreground focus-visible:border-foreground">
+   945→                      <SelectValue />
+   946→                    </SelectTrigger>
+   947→                    <SelectContent>
+   948→                      <SelectItem value="comfortable">Comfortable</SelectItem>
+   949→                      <SelectItem value="compact">Compact</SelectItem>
+   950→                    </SelectContent>
+   951→                  </Select>
+   952→                </div>
+   953→                <Separator className="bg-border" />
+   954→                <div className="flex items-center justify-between gap-3">
+   955→                  <div>
+   956→                    <div className="text-sm font-medium text-foreground">Larger Text</div>
+   957→                    <div className="text-xs text-muted-foreground">
+   958→                      Increase base font size for readability.
+   959→                    </div>
+   960→                  </div>
+   961→                  <Switch
+   962→                    checked={largerText}
+   963→                    onCheckedChange={(v) => {
+   964→                      setLargerTextState(v);
+   965→                      setLargerText(v);
+   966→                    }}
+   967→                  />
+   968→                </div>
+   969→                <Separator className="bg-border" />
+   970→                <div className="flex items-center justify-between gap-3">
+   971→                  <div>
+   972→                    <div className="text-sm font-medium text-foreground">Reduced Motion</div>
+   973→                    <div className="text-xs text-muted-foreground">
+   974→                      Minimize animations and transitions.
+   975→                    </div>
+   976→                  </div>
+   977→                  <Switch
+   978→                    checked={reducedMotion}
+   979→                    onCheckedChange={(v) => {
+   980→                      setReducedMotionState(v);
+   981→                      setReducedMotion(v);
+   982→                    }}
+   983→                  />
+   984→                </div>
+   985→              </div>
+   986→            </SettingsCard>
+   987→
+   988→            <div className="flex justify-end">
+   989→              <Button
+   990→                onClick={saveSettings}
+   991→                className="bg-primary text-primary-foreground hover:bg-primary/90 rounded-lg shadow-sm"
+   992→              >
+   993→                <Save className="h-4 w-4" /> Save Appearance
+   994→              </Button>
+   995→            </div>
+   996→          </TabsContent>
+   997→
+   998→          {/* LEGAL TAB -------------------------------------------------- */}
+   999→          <TabsContent value="legal" className="mt-6 space-y-6 focus-visible:outline-none">
+  1000→            <SettingsCard>
+  1001→              <SettingsSectionHeading>Legal Documents</SettingsSectionHeading>
+  1002→              <p className="text-xs text-muted-foreground mt-1">
+  1003→                Review the policies that govern your use of DnD. Acceptance is recorded against
+  1004→                the version shown.
+  1005→              </p>
+  1006→              <div className="mt-5 space-y-2">
+  1007→                <LegalDoc doc="terms" label="Terms of Service" />
+  1008→                <LegalDoc doc="privacy" label="Privacy Policy" />
+  1009→                <LegalDoc doc="cookies" label="Cookie Policy" />
+  1010→              </div>
+  1011→              <Separator className="bg-border my-4" />
+  1012→              <CookieConsentManagement />
+  1013→              <Separator className="bg-border my-4" />
+  1014→              <p className="text-xs text-muted-foreground">
+  1015→                DnD is a trading journaling, analytics and performance-management product. It is
+  1016→                not financial advice, not investment advice, and does not guarantee profit.
+  1017→              </p>
+  1018→            </SettingsCard>
+  1019→          </TabsContent>
+  1020→        </Tabs>
+  1021→      </div>
+  1022→    </div>
+  1023→  );
+  1024→}
+  1025→
+  1026→// ---------------------------------------------------------------------------
+  1027→// Shared presentational primitives (premium navy/white-card aesthetic)
+  1028→// ---------------------------------------------------------------------------
+  1029→
+  1030→function SettingsCard({ children }: { children: React.ReactNode }) {
+  1031→  return (
+  1032→    <div className="bg-card rounded-xl border border-border p-6 shadow-sm">
+  1033→      {children}
+  1034→    </div>
+  1035→  );
+  1036→}
+  1037→
+  1038→function SettingsSectionHeading({ children }: { children: React.ReactNode }) {
+  1039→  return (
+  1040→    <h2 className="text-sm font-semibold text-foreground uppercase tracking-wide">
+  1041→      {children}
+  1042→    </h2>
+  1043→  );
+  1044→}
+  1045→
+  1046→function SettingsTabTrigger({
+  1047→  value,
+  1048→  icon: Icon,
+  1049→  children,
+  1050→}: {
+  1051→  value: string;
+  1052→  icon?: React.ComponentType<{ className?: string }>;
+  1053→  children: React.ReactNode;
+  1054→}) {
+  1055→  return (
+  1056→    <TabsTrigger
+  1057→      value={value}
+  1058→      className={cn(
+  1059→        "rounded-none border-b-2 border-transparent bg-transparent px-4 py-3 text-sm font-medium whitespace-nowrap gap-1.5",
+  1060→        "data-[state=active]:bg-transparent data-[state=active]:shadow-none data-[state=active]:border-foreground data-[state=active]:text-foreground",
+  1061→        "text-muted-foreground hover:text-foreground",
+  1062→      )}
+  1063→    >
+  1064→      {Icon && <Icon className="h-4 w-4" />}
+  1065→      {children}
+  1066→    </TabsTrigger>
+  1067→  );
+  1068→}
+  1069→
+  1070→// Compact threshold input used in the Risk Management card.
+  1071→
+  1072→function CompactThreshold({
+  1073→  label,
+  1074→  value,
+  1075→  onChange,
+  1076→  tone,
+  1077→}: {
+  1078→  label: string;
+  1079→  value: string;
+  1080→  onChange: (v: string) => void;
+  1081→  tone: "profit" | "warning" | "loss";
+  1082→}) {
+  1083→  const toneRing =
+  1084→    tone === "profit"
+  1085→      ? "focus-visible:ring-emerald-500 focus-visible:border-emerald-500"
+  1086→      : tone === "warning"
+  1087→        ? "focus-visible:ring-amber-500 focus-visible:border-amber-500"
+  1088→        : "focus-visible:ring-red-500 focus-visible:border-red-500";
+  1089→  const toneChip =
+  1090→    tone === "profit"
+  1091→      ? "border-emerald-200 bg-emerald-50 text-profit"
+  1092→      : tone === "warning"
+  1093→        ? "border-amber-200 bg-amber-50 text-warning"
+  1094→        : "border-red-200 bg-red-50 text-loss";
+  1095→  return (
+  1096→    <div className="space-y-1.5">
+  1097→      <FieldLabel hint={`Up to this % is ${label.toLowerCase()}`}>{label} Max %</FieldLabel>
+  1098→      <Input
+  1099→        type="number"
+  1100→        min="0"
+  1101→        step="0.1"
+  1102→        value={value}
+  1103→        onChange={(e) => onChange(e.target.value)}
+  1104→        className={cn("border-input rounded-lg", toneRing)}
+  1105→      />
+  1106→      <div className={cn("inline-flex items-center gap-1 rounded-md border px-2 py-0.5 text-[10px] font-medium", toneChip)}>
+  1107→        {tone === "profit" && <Check className="h-3 w-3" />}
+  1108→        {tone !== "profit" && <AlertTriangle className="h-3 w-3" />}
+  1109→        {label}
+  1110→      </div>
+  1111→    </div>
+  1112→  );
+  1113→}
+  1114→
+  1115→// ---------------------------------------------------------------------------
+  1116→// LegalDoc — preserved from prior task (reads /api/legal/[doc], allows
+  1117→// acceptance / re-acceptation on version changes).
+  1118→// ---------------------------------------------------------------------------
+  1119→
+  1120→function LegalDoc({ doc, label }: { doc: string; label: string }) {
+  1121→  const [state, setState] = useState<any>(null);
+  1122→  const [open, setOpen] = useState(false);
+  1123→
+  1124→  useEffect(() => {
+  1125→    fetch(`/api/legal/${doc}`).then((r) => r.json()).then(setState);
+  1126→  }, [doc]);
+  1127→
+  1128→  async function accept() {
+  1129→    const res = await fetch(`/api/legal/${doc}`, {
+  1130→      method: "POST",
+  1131→      headers: { "Content-Type": "application/json" },
+  1132→      body: JSON.stringify({}),
+  1133→    });
+  1134→    if (res.ok) {
+  1135→      toast.success(`${label} accepted.`);
+  1136→      const data = await res.json();
+  1137→      setState({
+  1138→        ...state,
+  1139→        accepted: true,
+  1140→        acceptedAt: data.acceptedAt,
+  1141→        isCurrent: true,
+  1142→        version: data.version,
+  1143→      });
+  1144→    }
+  1145→  }
+  1146→
+  1147→  const needsAccept = state && (!state.accepted || state.isCurrent === false);
+  1148→
+  1149→  return (
+  1150→    <div className="flex items-center justify-between gap-3 py-2 rounded-lg hover:bg-muted/50 px-2 -mx-2">
+  1151→      <div className="min-w-0">
+  1152→        <div className="font-medium text-sm text-foreground">{label}</div>
+  1153→        <div className="text-xs text-muted-foreground">
+  1154→          {state ? (
+  1155→            <>
+  1156→              Version {state.version}
+  1157→              {" · "}
+  1158→              {state.accepted
+  1159→                ? `Accepted ${new Date(state.acceptedAt).toLocaleDateString()}`
+  1160→                : "Not yet accepted"}
+  1161→              {state.isCurrent === false && (
+  1162→                <span className="text-warning"> · outdated (v{state.acceptedVersion || "?"})</span>
+  1163→              )}
+  1164→            </>
+  1165→          ) : (
+  1166→            "Loading…"
+  1167→          )}
+  1168→        </div>
+  1169→      </div>
+  1170→      <div className="flex gap-2 shrink-0">
+  1171→        <Button
+  1172→          size="sm"
+  1173→          variant="ghost"
+  1174→          onClick={() => setOpen(true)}
+  1175→          className="text-muted-foreground hover:text-foreground hover:bg-background"
+  1176→        >
+  1177→          View
+  1178→        </Button>
+  1179→        {needsAccept && (
+  1180→          <Button
+  1181→            size="sm"
+  1182→            onClick={accept}
+  1183→            className="bg-primary text-primary-foreground hover:bg-primary/90"
+  1184→          >
+  1185→            Accept
+  1186→          </Button>
+  1187→        )}
+  1188→      </div>
+  1189→      <Dialog open={open} onOpenChange={setOpen}>
+  1190→        <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
+  1191→          <DialogHeader>
+  1192→            <DialogTitle>{label}</DialogTitle>
+  1193→            {state && <DialogDescription>Version {state.version}</DialogDescription>}
+  1194→          </DialogHeader>
+  1195→          <div className="text-sm text-muted-foreground whitespace-pre-wrap leading-relaxed">
+  1196→            {state?.content ?? "Document text."}
+  1197→          </div>
+  1198→        </DialogContent>
+  1199→      </Dialog>
+  1200→    </div>
+  1201→  );
+  1202→}
+  1203→
+  1204→/**
+  1205→ * Cookie consent management — lets the user review and change their cookie
+  1206→ * preferences from Settings → Legal. Reads from / writes to the same
+  1207→ * consent-store used by the public banner.
+  1208→ */
+  1209→function CookieConsentManagement() {
+  1210→  const { choice, timestamp, version, preferences, openSettings, reset } = useConsent();
+  1211→  const [mounted, setMounted] = useState(false);
+  1212→  useEffect(() => setMounted(true), []);
+  1213→
+  1214→  if (!mounted) return null;
+  1215→
+  1216→  return (
+  1217→    <div className="space-y-3">
+  1218→      <div className="text-sm font-semibold text-foreground uppercase tracking-wide">
+  1219→        Cookie Consent
+  1220→      </div>
+  1221→      <div className="flex items-center justify-between gap-3 py-1">
+  1222→        <div>
+  1223→          <div className="text-sm text-foreground">
+  1224→            {choice === "undecided"
+  1225→              ? "No choice made yet."
+  1226→              : choice === "accepted"
+  1227→                ? `Accepted · ${timestamp ? new Date(timestamp).toLocaleDateString() : ""}`
+  1228→                : `Rejected non-essential · ${timestamp ? new Date(timestamp).toLocaleDateString() : ""}`}
+  1229→          </div>
+  1230→          <div className="text-xs text-muted-foreground">consent v{version}</div>
+  1231→        </div>
+  1232→        <div className="flex gap-2">
+  1233→          <Button
+  1234→            size="sm"
+  1235→            variant="outline"
+  1236→            onClick={openSettings}
+  1237→            className="border-input text-foreground hover:bg-muted/50"
+  1238→          >
+  1239→            Manage
+  1240→          </Button>
+  1241→          <Button
+  1242→            size="sm"
+  1243→            variant="ghost"
+  1244→            onClick={reset}
+  1245→            className="text-muted-foreground hover:bg-background"
+  1246→          >
+  1247→            Re-show banner
+  1248→          </Button>
+  1249→        </div>
+  1250→      </div>
+  1251→      <div className="flex flex-wrap gap-2 text-[10px]">
+  1252→        <span className="rounded border border-emerald-200 bg-emerald-50 px-2 py-1 font-medium text-profit">
+  1253→          Essential: on
+  1254→        </span>
+  1255→        <span className="rounded border border-emerald-200 bg-emerald-50 px-2 py-1 font-medium text-profit">
+  1256→          Functional: on
+  1257→        </span>
+  1258→        <span
+  1259→          className={cn(
+  1260→            "rounded border px-2 py-1 font-medium",
+  1261→            preferences.analytics
+  1262→              ? "border-emerald-200 bg-emerald-50 text-profit"
+  1263→              : "border-border bg-muted/50 text-muted-foreground",
+  1264→          )}
+  1265→        >
+  1266→          Analytics: {preferences.analytics ? "on" : "off"}
+  1267→        </span>
+  1268→        <span
+  1269→          className={cn(
+  1270→            "rounded border px-2 py-1 font-medium",
+  1271→            preferences.marketing
+  1272→              ? "border-emerald-200 bg-emerald-50 text-profit"
+  1273→              : "border-border bg-muted/50 text-muted-foreground",
+  1274→          )}
+  1275→        >
+  1276→          Marketing: {preferences.marketing ? "on" : "off"}
+  1277→        </span>
+  1278→      </div>
+  1279→    </div>
+  1280→  );
+  1281→}
+  1282→

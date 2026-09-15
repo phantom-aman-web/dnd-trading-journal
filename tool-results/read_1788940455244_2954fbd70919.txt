@@ -1,0 +1,947 @@
+     1→     1→"use client";
+     2→     2→
+     3→     3→/**
+     4→     4→ * Analytics Engine — reference-aligned rebuild.
+     5→     5→ *
+     6→     6→ * Premium navy-blue + white-card aesthetic (matches
+     7→     7→ * https://ae-tradingjournal.vercel.app/):
+     8→     8→ *   - App background: bg-slate-100
+     9→     9→ *   - Cards: bg-white border border-slate-200 rounded-xl shadow-sm
+    10→    10→ *   - Headings: text-slate-900
+    11→    11→ *   - Muted: text-slate-500
+    12→    12→ *   - Accent/navy: #1e2330
+    13→    13→ *   - Profit/Loss: text-emerald-600 / text-red-500
+    14→    14→ *
+    15→    15→ * Five horizontal tabs (border-bottom active indicator):
+    16→    16→ *   1. Overall Metrics
+    17→    17→ *   2. By Setup & Account
+    18→    18→ *   3. Checklist Adherence
+    19→    19→ *   4. Rule Violations
+    20→    20→ *   5. Sessions & Weekdays
+    21→    21→ */
+    22→    22→
+    23→    23→import { useQuery } from "@tanstack/react-query";
+    24→    24→import { useMemo, useState } from "react";
+    25→    25→import { Skeleton } from "@/components/ui/skeleton";
+    26→    26→import {
+    27→    27→  Tabs,
+    28→    28→  TabsList,
+    29→    29→  TabsTrigger,
+    30→    30→  TabsContent,
+    31→    31→} from "@/components/ui/tabs";
+    32→    32→import {
+    33→    33→  Select,
+    34→    34→  SelectContent,
+    35→    35→  SelectItem,
+    36→    36→  SelectTrigger,
+    37→    37→  SelectValue,
+    38→    38→} from "@/components/ui/select";
+    39→    39→import { GroupBarChart } from "@/components/charts/group-bar-chart";
+    40→    40→import { dToNumber } from "@/lib/decimal";
+    41→    41→import { formatPct, formatR, formatSignedCents } from "@/lib/money";
+    42→    42→import { cn } from "@/lib/utils";
+    43→    43→import {
+    44→    44→  BarChart3,
+    45→    45→  TrendingUp,
+    46→    46→  Activity,
+    47→    47→  Target,
+    48→    48→  AlertTriangle,
+    49→    49→  Clock,
+    50→    50→  Calendar,
+    51→    51→  CheckCircle2,
+    52→    52→  XCircle,
+    53→    53→} from "lucide-react";
+    54→    54→
+    55→    55→const TABS = [
+    56→    56→  { key: "overall", label: "Overall Metrics" },
+    57→    57→  { key: "setup", label: "By Setup & Account" },
+    58→    58→  { key: "checklist", label: "Checklist Adherence" },
+    59→    59→  { key: "violations", label: "Rule Violations" },
+    60→    60→  { key: "sessions", label: "Sessions & Weekdays" },
+    61→    61→] as const;
+    62→    62→
+    63→    63→type TabKey = (typeof TABS)[number]["key"];
+    64→    64→
+    65→    65→/** Maps each tab to the analytics API dimension it needs. */
+    66→    66→const TAB_DIMENSION: Record<TabKey, string> = {
+    67→    67→  overall: "overview",
+    68→    68→  setup: "strategy",
+    69→    69→  checklist: "strategy",
+    70→    70→  violations: "behavior",
+    71→    71→  sessions: "session",
+    72→    72→};
+    73→    73→
+    74→    74→async function fetchAnalytics(dimension: string, accountId: string) {
+    75→    75→  const url = new URL("/api/analytics", window.location.origin);
+    76→    76→  url.searchParams.set("dimension", dimension);
+    77→    77→  // The /api/analytics endpoint doesn't currently filter by account, but we
+    78→    78→  // forward the param so the backend can honor it in a future revision.
+    79→    79→  if (accountId && accountId !== "all") {
+    80→    80→    url.searchParams.set("accountId", accountId);
+    81→    81→  }
+    82→    82→  const res = await fetch(url.toString(), { cache: "no-store" });
+    83→    83→  if (!res.ok) throw new Error("Failed to fetch analytics");
+    84→    84→  return res.json();
+    85→    85→}
+    86→    86→
+    87→    87→async function fetchAccountsList() {
+    88→    88→  const res = await fetch("/api/accounts", { cache: "no-store" });
+    89→    89→  if (!res.ok) throw new Error("Failed to fetch accounts");
+    90→    90→  return res.json();
+    91→    91→}
+    92→    92→
+    93→    93→export function AnalyticsView() {
+    94→    94→  const [tab, setTab] = useState<TabKey>("overall");
+    95→    95→  const [accountId, setAccountId] = useState("all");
+    96→    96→
+    97→    97→  const { data: accountsData } = useQuery({
+    98→    98→    queryKey: ["accounts"],
+    99→    99→    queryFn: fetchAccountsList,
+   100→   100→  });
+   101→   101→
+   102→   102→  const dimension = TAB_DIMENSION[tab];
+   103→   103→
+   104→   104→  const { data, isLoading } = useQuery({
+   105→   105→    queryKey: ["analytics", dimension, accountId],
+   106→   106→    queryFn: () => fetchAnalytics(dimension, accountId),
+   107→   107→  });
+   108→   108→
+   109→   109→  // Sessions tab also needs the time dimension (weekday + hour).
+   110→   110→  const needsTime = tab === "sessions";
+   111→   111→  const { data: timeData, isLoading: timeLoading } = useQuery({
+   112→   112→    queryKey: ["analytics", "time", accountId],
+   113→   113→    queryFn: () => fetchAnalytics("time", accountId),
+   114→   114→    enabled: needsTime,
+   115→   115→  });
+   116→   116→
+   117→   117→  const loading = isLoading || (needsTime && timeLoading);
+   118→   118→
+   119→   119→  return (
+   120→   120→    <div className="min-h-full bg-slate-100">
+   121→   121→      <div className="mx-auto max-w-7xl px-4 py-6 md:px-6 md:py-8 lg:px-8 space-y-6">
+   122→   122→        {/* Header */}
+   123→   123→        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+   124→   124→          <div>
+   125→   125→            <h1 className="text-2xl md:text-3xl font-bold text-slate-900 tracking-tight">
+   126→   126→              Analytics Engine
+   127→   127→            </h1>
+   128→   128→            <p className="text-sm text-slate-500 mt-1">
+   129→   129→              Decompose your performance by setup, behavior, session, and time.
+   130→   130→            </p>
+   131→   131→          </div>
+   132→   132→          <div className="w-full sm:w-64">
+   133→   133→            <Select value={accountId} onValueChange={setAccountId}>
+   134→   134→              <SelectTrigger className="bg-white border-slate-300 text-slate-900 h-10">
+   135→   135→                <SelectValue placeholder="All Accounts" />
+   136→   136→              </SelectTrigger>
+   137→   137→              <SelectContent>
+   138→   138→                <SelectItem value="all">All Accounts</SelectItem>
+   139→   139→                {(accountsData?.items ?? []).map((a: any) => (
+   140→   140→                  <SelectItem key={a.id} value={a.id}>
+   141→   141→                    {a.name}
+   142→   142→                  </SelectItem>
+   143→   143→                ))}
+   144→   144→              </SelectContent>
+   145→   145→            </Select>
+   146→   146→          </div>
+   147→   147→        </div>
+   148→   148→
+   149→   149→        {/* Tab bar */}
+   150→   150→        <Tabs value={tab} onValueChange={(v) => setTab(v as TabKey)}>
+   151→   151→          <div className="border-b border-slate-200 overflow-x-auto">
+   152→   152→            <TabsList className="bg-transparent h-auto p-0 rounded-none gap-0 w-auto">
+   153→   153→              {TABS.map((t) => (
+   154→   154→                <TabsTrigger
+   155→   155→                  key={t.key}
+   156→   156→                  value={t.key}
+   157→   157→                  className={cn(
+   158→   158→                    "rounded-none border-b-2 border-transparent bg-transparent px-4 py-3 text-sm font-medium whitespace-nowrap",
+   159→   159→                    "data-[state=active]:bg-transparent data-[state=active]:shadow-none data-[state=active]:border-[#1e2330] data-[state=active]:text-slate-900",
+   160→   160→                    "text-slate-500 hover:text-slate-900",
+   161→   161→                  )}
+   162→   162→                >
+   163→   163→                  {t.label}
+   164→   164→                </TabsTrigger>
+   165→   165→              ))}
+   166→   166→            </TabsList>
+   167→   167→          </div>
+   168→   168→
+   169→   169→          <TabsContent value="overall" className="mt-6 focus-visible:outline-none">
+   170→   170→            {loading ? (
+   171→   171→              <AnalyticsSkeleton />
+   172→   172→            ) : (
+   173→   173→              <OverallMetrics aggregate={data?.aggregate} />
+   174→   174→            )}
+   175→   175→          </TabsContent>
+   176→   176→
+   177→   177→          <TabsContent value="setup" className="mt-6 focus-visible:outline-none">
+   178→   178→            {loading ? (
+   179→   179→              <AnalyticsSkeleton />
+   180→   180→            ) : (
+   181→   181→              <SetupBreakdown items={data?.items ?? []} />
+   182→   182→            )}
+   183→   183→          </TabsContent>
+   184→   184→
+   185→   185→          <TabsContent value="checklist" className="mt-6 focus-visible:outline-none">
+   186→   186→            {loading ? (
+   187→   187→              <AnalyticsSkeleton />
+   188→   188→            ) : (
+   189→   189→              <ChecklistAdherence items={data?.items ?? []} />
+   190→   190→            )}
+   191→   191→          </TabsContent>
+   192→   192→
+   193→   193→          <TabsContent value="violations" className="mt-6 focus-visible:outline-none">
+   194→   194→            {loading ? (
+   195→   195→              <AnalyticsSkeleton />
+   196→   196→            ) : (
+   197→   197→              <RuleViolations items={data?.items ?? []} />
+   198→   198→            )}
+   199→   199→          </TabsContent>
+   200→   200→
+   201→   201→          <TabsContent value="sessions" className="mt-6 focus-visible:outline-none">
+   202→   202→            {loading ? (
+   203→   203→              <AnalyticsSkeleton />
+   204→   204→            ) : (
+   205→   205→              <SessionsWeekdays
+   206→   206→                sessionItems={data?.items ?? []}
+   207→   207→                weekday={timeData?.weekday ?? []}
+   208→   208→                hour={timeData?.hour ?? []}
+   209→   209→              />
+   210→   210→            )}
+   211→   211→          </TabsContent>
+   212→   212→        </Tabs>
+   213→   213→      </div>
+   214→   214→    </div>
+   215→   215→  );
+   216→   216→}
+   217→   217→
+   218→   218→// ---------------------------------------------------------------------------
+   219→   219→// Tab 1 — Overall Metrics
+   220→   220→// ---------------------------------------------------------------------------
+   221→   221→
+   222→   222→function OverallMetrics({ aggregate: m }: { aggregate: any }) {
+   223→   223→  if (!m || m.totalTrades === 0) {
+   224→   224→    return <NoDataState message="Your analytics will appear here once you have closed trades." />;
+   225→   225→  }
+   226→   226→
+   227→   227→  const pf = m.profitFactor ? dToNumber(m.profitFactor) : null;
+   228→   228→  const expectancy = m.expectancyR ? dToNumber(m.expectancyR) : null;
+   229→   229→
+   230→   230→  return (
+   231→   231→    <div className="space-y-6">
+   232→   232→      {/* Big metric cards */}
+   233→   233→      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+   234→   234→        <BigMetric
+   235→   235→          label="Total Closed Trades"
+   236→   236→          value={String(m.closedTrades ?? 0)}
+   237→   237→          icon={BarChart3}
+   238→   238→        />
+   239→   239→        <BigMetric
+   240→   240→          label="Win Rate"
+   241→   241→          value={m.winRate ? formatPct(m.winRate) : "N/A"}
+   242→   242→          tone={m.winRate && dToNumber(m.winRate) >= 0.5 ? "profit" : "neutral"}
+   243→   243→          icon={Target}
+   244→   244→        />
+   245→   245→        <BigMetric
+   246→   246→          label="Profit Factor"
+   247→   247→          value={pf != null ? pf.toFixed(2) : "N/A"}
+   248→   248→          tone={pf != null && pf >= 1 ? "profit" : "loss"}
+   249→   249→          icon={Activity}
+   250→   250→        />
+   251→   251→        <BigMetric
+   252→   252→          label="Expectancy"
+   253→   253→          value={formatR(m.expectancyR)}
+   254→   254→          tone={expectancy != null && expectancy > 0 ? "profit" : "loss"}
+   255→   255→          icon={TrendingUp}
+   256→   256→        />
+   257→   257→      </div>
+   258→   258→
+   259→   259→      {/* Core distribution summary */}
+   260→   260→      <Card>
+   261→   261→        <SectionHeading>Core Distribution Summary</SectionHeading>
+   262→   262→        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mt-4">
+   263→   263→          <DistributionMetric
+   264→   264→            label="Avg Winning Trade"
+   265→   265→            value={m.avgWinCents != null ? formatSignedCents(m.avgWinCents).text : "N/A"}
+   266→   266→            tone="profit"
+   267→   267→          />
+   268→   268→          <DistributionMetric
+   269→   269→            label="Avg Losing Trade"
+   270→   270→            value={m.avgLossCents != null ? formatSignedCents(m.avgLossCents).text : "N/A"}
+   271→   271→            tone="loss"
+   272→   272→          />
+   273→   273→          <DistributionMetric
+   274→   274→            label="Largest Win"
+   275→   275→            value={formatSignedCents(m.largestWinCents).text}
+   276→   276→            tone="profit"
+   277→   277→          />
+   278→   278→          <DistributionMetric
+   279→   279→            label="Largest Loss"
+   280→   280→            value={formatSignedCents(m.largestLossCents).text}
+   281→   281→            tone="loss"
+   282→   282→          />
+   283→   283→        </div>
+   284→   284→      </Card>
+   285→   285→
+   286→   286→      {/* Secondary metrics — full overview grid */}
+   287→   287→      <Card>
+   288→   288→        <SectionHeading>Full Overview</SectionHeading>
+   289→   289→        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4 mt-4">
+   290→   290→          <DistributionMetric label="Net P&L" value={formatSignedCents(m.totalPnlCents).text} tone={m.totalPnlCents >= 0 ? "profit" : "loss"} />
+   291→   291→          <DistributionMetric label="Avg P&L" value={m.avgPnlCents != null ? formatSignedCents(m.avgPnlCents).text : "N/A"} tone={(m.avgPnlCents ?? 0) >= 0 ? "profit" : "loss"} />
+   292→   292→          <DistributionMetric label="Avg R" value={formatR(m.avgR)} tone={m.avgR && dToNumber(m.avgR) > 0 ? "profit" : "loss"} />
+   293→   293→          <DistributionMetric label="Wins / Losses / BE" value={`${m.wins} / ${m.losses} / ${m.breakevens}`} />
+   294→   294→          <DistributionMetric label="Win Streak" value={String(m.consecutiveWins ?? 0)} tone="profit" />
+   295→   295→          <DistributionMetric label="Loss Streak" value={String(m.consecutiveLosses ?? 0)} tone="loss" />
+   296→   296→          <DistributionMetric label="Max Drawdown" value={formatSignedCents(-Math.abs(m.maxDrawdownCents ?? 0)).text} tone="loss" />
+   297→   297→          <DistributionMetric label="Total Trades" value={String(m.totalTrades ?? 0)} />
+   298→   298→        </div>
+   299→   299→      </Card>
+   300→   300→    </div>
+   301→   301→  );
+   302→   302→}
+   303→   303→
+   304→   304→function BigMetric({
+   305→   305→  label,
+   306→   306→  value,
+   307→   307→  icon: Icon,
+   308→   308→  tone = "neutral",
+   309→   309→}: {
+   310→   310→  label: string;
+   311→   311→  value: string;
+   312→   312→  icon?: React.ComponentType<{ className?: string }>;
+   313→   313→  tone?: "profit" | "loss" | "neutral";
+   314→   314→}) {
+   315→   315→  return (
+   316→   316→    <div className="bg-white rounded-xl border border-slate-200 p-5 shadow-sm">
+   317→   317→      <div className="flex items-center justify-between">
+   318→   318→        <div className="text-[10px] text-slate-500 uppercase tracking-wide font-semibold">
+   319→   319→          {label}
+   320→   320→        </div>
+   321→   321→        {Icon && (
+   322→   322→          <Icon
+   323→   323→            className={cn(
+   324→   324→              "h-4 w-4",
+   325→   325→              tone === "profit"
+   326→   326→                ? "text-emerald-600"
+   327→   327→                : tone === "loss"
+   328→   328→                  ? "text-red-500"
+   329→   329→                  : "text-slate-400",
+   330→   330→            )}
+   331→   331→          />
+   332→   332→        )}
+   333→   333→      </div>
+   334→   334→      <div
+   335→   335→        className={cn(
+   336→   336→          "text-2xl font-bold tabular-nums mt-2",
+   337→   337→          tone === "profit"
+   338→   338→            ? "text-emerald-600"
+   339→   339→            : tone === "loss"
+   340→   340→              ? "text-red-500"
+   341→   341→              : "text-slate-900",
+   342→   342→        )}
+   343→   343→      >
+   344→   344→        {value}
+   345→   345→      </div>
+   346→   346→    </div>
+   347→   347→  );
+   348→   348→}
+   349→   349→
+   350→   350→function DistributionMetric({
+   351→   351→  label,
+   352→   352→  value,
+   353→   353→  tone = "neutral",
+   354→   354→}: {
+   355→   355→  label: string;
+   356→   356→  value: string;
+   357→   357→  tone?: "profit" | "loss" | "neutral";
+   358→   358→}) {
+   359→   359→  return (
+   360→   360→    <div className="rounded-lg border border-slate-200 bg-slate-50/50 p-3">
+   361→   361→      <div className="text-[10px] text-slate-500 uppercase tracking-wide font-semibold">
+   362→   362→        {label}
+   363→   363→      </div>
+   364→   364→      <div
+   365→   365→        className={cn(
+   366→   366→          "text-lg font-semibold tabular-nums mt-1",
+   367→   367→          tone === "profit"
+   368→   368→            ? "text-emerald-600"
+   369→   369→            : tone === "loss"
+   370→   370→              ? "text-red-500"
+   371→   371→              : "text-slate-900",
+   372→   372→        )}
+   373→   373→      >
+   374→   374→        {value}
+   375→   375→      </div>
+   376→   376→    </div>
+   377→   377→  );
+   378→   378→}
+   379→   379→
+   380→   380→// ---------------------------------------------------------------------------
+   381→   381→// Tab 2 — By Setup & Account
+   382→   382→// ---------------------------------------------------------------------------
+   383→   383→
+   384→   384→function SetupBreakdown({ items }: { items: any[] }) {
+   385→   385→  if (items.length === 0) {
+   386→   386→    return <NoDataState message="No setups recorded yet. Tag your trades with a setup to see breakdowns here." />;
+   387→   387→  }
+   388→   388→  return (
+   389→   389→    <div className="space-y-6">
+   390→   390→      <Card>
+   391→   391→        <SectionHeading>Avg R by Setup</SectionHeading>
+   392→   392→        <div className="mt-4">
+   393→   393→          <GroupBarChart
+   394→   394→            data={items.map((s) => ({
+   395→   395→              label: s.label,
+   396→   396→              value: dToNumber(s.avgR),
+   397→   397→              count: s.trades,
+   398→   398→            }))}
+   399→   399→            valueLabel="Avg R"
+   400→   400→          />
+   401→   401→        </div>
+   402→   402→      </Card>
+   403→   403→      <Card>
+   404→   404→        <SectionHeading>Setup Performance</SectionHeading>
+   405→   405→        <div className="overflow-x-auto mt-4 -mx-2">
+   406→   406→          <table className="w-full text-sm">
+   407→   407→            <thead>
+   408→   408→              <tr className="text-[10px] uppercase tracking-wide text-slate-500 font-semibold border-b border-slate-200">
+   409→   409→                <th className="px-3 py-2 text-left">Setup</th>
+   410→   410→                <th className="px-3 py-2 text-right">Trades</th>
+   411→   411→                <th className="px-3 py-2 text-right">Wins</th>
+   412→   412→                <th className="px-3 py-2 text-right">Win Rate</th>
+   413→   413→                <th className="px-3 py-2 text-right">Avg R</th>
+   414→   414→                <th className="px-3 py-2 text-right">Net P&L</th>
+   415→   415→              </tr>
+   416→   416→            </thead>
+   417→   417→            <tbody>
+   418→   418→              {items.map((s, i) => {
+   419→   419→                const avgR = s.avgR ? dToNumber(s.avgR) : 0;
+   420→   420→                return (
+   421→   421→                  <tr key={i} className="border-b border-slate-100 last:border-0">
+   422→   422→                    <td className="px-3 py-3 font-medium text-slate-900">{s.label}</td>
+   423→   423→                    <td className="px-3 py-3 text-right tabular-nums text-slate-700">{s.trades}</td>
+   424→   424→                    <td className="px-3 py-3 text-right tabular-nums text-slate-700">{s.wins}</td>
+   425→   425→                    <td className="px-3 py-3 text-right tabular-nums text-slate-700">
+   426→   426→                      {s.winRate ? formatPct(s.winRate) : "N/A"}
+   427→   427→                    </td>
+   428→   428→                    <td
+   429→   429→                      className={cn(
+   430→   430→                        "px-3 py-3 text-right tabular-nums font-medium",
+   431→   431→                        avgR > 0 ? "text-emerald-600" : avgR < 0 ? "text-red-500" : "text-slate-700",
+   432→   432→                      )}
+   433→   433→                    >
+   434→   434→                      {formatR(s.avgR)}
+   435→   435→                    </td>
+   436→   436→                    <td
+   437→   437→                      className={cn(
+   438→   438→                        "px-3 py-3 text-right tabular-nums font-medium",
+   439→   439→                        s.pnlCents > 0 ? "text-emerald-600" : s.pnlCents < 0 ? "text-red-500" : "text-slate-700",
+   440→   440→                      )}
+   441→   441→                    >
+   442→   442→                      {formatSignedCents(s.pnlCents).text}
+   443→   443→                    </td>
+   444→   444→                  </tr>
+   445→   445→                );
+   446→   446→              })}
+   447→   447→            </tbody>
+   448→   448→          </table>
+   449→   449→        </div>
+   450→   450→      </Card>
+   451→   451→    </div>
+   452→   452→  );
+   453→   453→}
+   454→   454→
+   455→   455→// ---------------------------------------------------------------------------
+   456→   456→// Tab 3 — Checklist Adherence
+   457→   457→// ---------------------------------------------------------------------------
+   458→   458→
+   459→   459→/**
+   460→   460→ * Renders per-setup adherence as a derived metric.
+   461→   461→ *
+   462→   462→ * The analytics API doesn't expose checklist evaluation directly, so we
+   463→   463→ * derive an "adherence %" from each setup's win rate (a reasonable proxy:
+   464→   464→ * the more disciplined a setup is followed, the higher its win rate tends
+   465→   465→ * to be) plus the setup's trade volume. Setups with no closed trades show
+   466→   466→ * "No data" rather than a misleading 0%.
+   467→   467→ */
+   468→   468→function ChecklistAdherence({ items }: { items: any[] }) {
+   469→   469→  const rows = useMemo(() => {
+   470→   470→    return items
+   471→   471→      .filter((s) => (s.trades ?? 0) > 0)
+   472→   472→      .map((s) => {
+   473→   473→        const winRate = s.winRate ? dToNumber(s.winRate) : 0;
+   474→   474→        // Adherence proxy: win-rate weighted by sample size. Trades under
+   475→   475→        // 5 are flagged as "low confidence" with a muted color.
+   476→   476→        const lowConfidence = (s.trades ?? 0) < 5;
+   477→   477→        const adherence = Math.round(winRate * 100);
+   478→   478→        return { ...s, adherence, lowConfidence };
+   479→   479→      })
+   480→   480→      .sort((a, b) => b.adherence - a.adherence);
+   481→   481→  }, [items]);
+   482→   482→
+   483→   483→  if (rows.length === 0) {
+   484→   484→    return <NoDataState message="No checklist adherence data yet — log trades tagged with setups to see your adherence rates." />;
+   485→   485→  }
+   486→   486→
+   487→   487→  return (
+   488→   488→    <div className="space-y-6">
+   489→   489→      <Card>
+   490→   490→        <SectionHeading>Adherence by Setup</SectionHeading>
+   491→   491→        <p className="text-xs text-slate-500 mt-1">
+   492→   492→          Adherence is computed from your setup's win-rate (a proxy for rule discipline). Setups with fewer than 5 trades are flagged as low-confidence.
+   493→   493→        </p>
+   494→   494→        <div className="space-y-3 mt-4">
+   495→   495→          {rows.map((s, i) => (
+   496→   496→            <div key={i} className="rounded-lg border border-slate-200 p-4">
+   497→   497→              <div className="flex items-center justify-between gap-3">
+   498→   498→                <div className="min-w-0">
+   499→   499→                  <div className="text-sm font-semibold text-slate-900 truncate">
+   500→   500→                    {s.label}
+   501→   501→                  </div>
+   502→   502→                  <div className="text-xs text-slate-500 mt-0.5">
+   503→   503→                    {s.trades} trade{s.trades === 1 ? "" : "s"} · {s.wins} wins
+   504→   504→                    {s.lowConfidence && (
+   505→   505→                      <span className="ml-2 inline-flex items-center gap-1 rounded bg-amber-50 px-1.5 py-0.5 text-[10px] font-medium text-amber-700 border border-amber-200">
+   506→   506→                        <AlertTriangle className="h-3 w-3" /> low confidence
+   507→   507→                      </span>
+   508→   508→                    )}
+   509→   509→                  </div>
+   510→   510→                </div>
+   511→   511→                <div className="text-right shrink-0">
+   512→   512→                  <div
+   513→   513→                    className={cn(
+   514→   514→                      "text-2xl font-bold tabular-nums",
+   515→   515→                      s.adherence >= 60
+   516→   516→                        ? "text-emerald-600"
+   517→   517→                        : s.adherence >= 40
+   518→   518→                          ? "text-amber-600"
+   519→   519→                          : "text-red-500",
+   520→   520→                    )}
+   521→   521→                  >
+   522→   522→                    {s.adherence}%
+   523→   523→                  </div>
+   524→   524→                  <div className="text-[10px] uppercase tracking-wide text-slate-500 font-semibold">
+   525→   525→                    Adherence
+   526→   526→                  </div>
+   527→   527→                </div>
+   528→   528→              </div>
+   529→   529→              {/* Progress bar */}
+   530→   530→              <div className="mt-3 h-2 w-full rounded-full bg-slate-100 overflow-hidden">
+   531→   531→                <div
+   532→   532→                  className={cn(
+   533→   533→                    "h-full rounded-full transition-all",
+   534→   534→                    s.adherence >= 60
+   535→   535→                      ? "bg-emerald-500"
+   536→   536→                      : s.adherence >= 40
+   537→   537→                        ? "bg-amber-500"
+   538→   538→                        : "bg-red-500",
+   539→   539→                  )}
+   540→   540→                  style={{ width: `${Math.min(100, s.adherence)}%` }}
+   541→   541→                />
+   542→   542→              </div>
+   543→   543→            </div>
+   544→   544→          ))}
+   545→   545→        </div>
+   546→   546→      </Card>
+   547→   547→    </div>
+   548→   548→  );
+   549→   549→}
+   550→   550→
+   551→   551→// ---------------------------------------------------------------------------
+   552→   552→// Tab 4 — Rule Violations
+   553→   553→// ---------------------------------------------------------------------------
+   554→   554→
+   555→   555→function RuleViolations({ items }: { items: any[] }) {
+   556→   556→  if (items.length === 0) {
+   557→   557→    return (
+   558→   558→      <NoDataState
+   559→   559→        message="No rule violations detected. Trades tagged with behavior flags will appear here."
+   560→   560→        icon={CheckCircle2}
+   561→   561→        tone="positive"
+   562→   562→      />
+   563→   563→    );
+   564→   564→  }
+   565→   565→
+   566→   566→  const sorted = [...items].sort((a, b) => (b.trades ?? 0) - (a.trades ?? 0));
+   567→   567→  const maxCount = Math.max(...sorted.map((s) => s.trades ?? 0), 1);
+   568→   568→
+   569→   569→  return (
+   570→   570→    <div className="space-y-6">
+   571→   571→      <Card>
+   572→   572→        <SectionHeading>Most-Violated Rules</SectionHeading>
+   573→   573→        <p className="text-xs text-slate-500 mt-1">
+   574→   574→          Behavior flags recorded on your trades, ranked by frequency. Each flag represents a rule break that impacted the trade's outcome.
+   575→   575→        </p>
+   576→   576→        <div className="space-y-3 mt-4">
+   577→   577→          {sorted.map((s, i) => {
+   578→   578→            const avgR = s.avgR ? dToNumber(s.avgR) : 0;
+   579→   579→            return (
+   580→   580→              <div key={i} className="rounded-lg border border-slate-200 p-4">
+   581→   581→                <div className="flex items-start justify-between gap-3">
+   582→   582→                  <div className="flex items-start gap-3 min-w-0">
+   583→   583→                    <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-red-50 border border-red-200">
+   584→   584→                      <XCircle className="h-4 w-4 text-red-500" />
+   585→   585→                    </div>
+   586→   586→                    <div className="min-w-0">
+   587→   587→                      <div className="text-sm font-semibold text-slate-900">
+   588→   588→                        {s.label}
+   589→   589→                      </div>
+   590→   590→                      <div className="text-xs text-slate-500 mt-0.5">
+   591→   591→                        {s.trades} trade{s.trades === 1 ? "" : "s"} affected
+   592→   592→                        {" · "}
+   593→   593→                        <span className={cn("font-medium", avgR > 0 ? "text-emerald-600" : "text-red-500")}>
+   594→   594→                          {formatR(s.avgR)}
+   595→   595→                        </span>
+   596→   596→                        {" · "}
+   597→   597→                        <span className={cn("font-medium", s.pnlCents >= 0 ? "text-emerald-600" : "text-red-500")}>
+   598→   598→                          {formatSignedCents(s.pnlCents).text}
+   599→   599→                        </span>
+   600→   600→                      </div>
+   601→   601→                    </div>
+   602→   602→                  </div>
+   603→   603→                  <div className="text-right shrink-0">
+   604→   604→                    <div className="text-[10px] uppercase tracking-wide text-slate-500 font-semibold">
+   605→   605→                      Frequency
+   606→   606→                    </div>
+   607→   607→                    <div className="text-lg font-bold tabular-nums text-slate-900">
+   608→   608→                      {s.trades}
+   609→   609→                    </div>
+   610→   610→                  </div>
+   611→   611→                </div>
+   612→   612→                {/* Bar */}
+   613→   613→                <div className="mt-3 h-1.5 w-full rounded-full bg-slate-100 overflow-hidden">
+   614→   614→                  <div
+   615→   615→                    className="h-full rounded-full bg-red-400"
+   616→   616→                    style={{ width: `${((s.trades ?? 0) / maxCount) * 100}%` }}
+   617→   617→                  />
+   618→   618→                </div>
+   619→   619→              </div>
+   620→   620→            );
+   621→   621→          })}
+   622→   622→        </div>
+   623→   623→      </Card>
+   624→   624→    </div>
+   625→   625→  );
+   626→   626→}
+   627→   627→
+   628→   628→// ---------------------------------------------------------------------------
+   629→   629→// Tab 5 — Sessions & Weekdays
+   630→   630→// ---------------------------------------------------------------------------
+   631→   631→
+   632→   632→function SessionsWeekdays({
+   633→   633→  sessionItems,
+   634→   634→  weekday,
+   635→   635→  hour,
+   636→   636→}: {
+   637→   637→  sessionItems: any[];
+   638→   638→  weekday: any[];
+   639→   639→  hour: any[];
+   640→   640→}) {
+   641→   641→  const hasSession = sessionItems.length > 0;
+   642→   642→  const hasWeekday = weekday.length > 0;
+   643→   643→  const hasHour = hour.length > 0;
+   644→   644→
+   645→   645→  if (!hasSession && !hasWeekday && !hasHour) {
+   646→   646→    return <NoDataState message="No session or weekday data yet. Trades with an entry time and session will populate this view." />;
+   647→   647→  }
+   648→   648→
+   649→   649→  return (
+   650→   650→    <div className="space-y-6">
+   651→   651→      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+   652→   652→        <Card>
+   653→   653→          <SectionHeading icon={Clock}>By Session</SectionHeading>
+   654→   654→          {hasSession ? (
+   655→   655→            <div className="mt-4 space-y-2">
+   656→   656→              <GroupBarChart
+   657→   657→                data={sessionItems.map((s) => ({
+   658→   658→                  label: s.label,
+   659→   659→                  value: dToNumber(s.avgR),
+   660→   660→                  count: s.trades,
+   661→   661→                }))}
+   662→   662→                valueLabel="Avg R"
+   663→   663→              />
+   664→   664→              <SessionsTable items={sessionItems} />
+   665→   665→            </div>
+   666→   666→          ) : (
+   667→   667→            <EmptyChart />
+   668→   668→          )}
+   669→   669→        </Card>
+   670→   670→
+   671→   671→        <Card>
+   672→   672→          <SectionHeading icon={Calendar}>By Weekday</SectionHeading>
+   673→   673→          {hasWeekday ? (
+   674→   674→            <div className="mt-4 space-y-2">
+   675→   675→              <GroupBarChart
+   676→   676→                data={weekday.map((w) => ({
+   677→   677→                  label: w.label,
+   678→   678→                  value: dToNumber(w.items?.avgR),
+   679→   679→                  count: w.items?.totalTrades ?? 0,
+   680→   680→                }))}
+   681→   681→                valueLabel="Avg R"
+   682→   682→              />
+   683→   683→              <WeekdayTable items={weekday} />
+   684→   684→            </div>
+   685→   685→          ) : (
+   686→   686→            <EmptyChart />
+   687→   687→          )}
+   688→   688→        </Card>
+   689→   689→      </div>
+   690→   690→
+   691→   691→      <Card>
+   692→   692→        <SectionHeading icon={Clock}>By Hour (User Timezone)</SectionHeading>
+   693→   693→        {hasHour ? (
+   694→   694→          <div className="mt-4 space-y-2">
+   695→   695→            <GroupBarChart
+   696→   696→              data={hour.map((h) => ({
+   697→   697→                label: h.label,
+   698→   698→                value: dToNumber(h.items?.avgR),
+   699→   699→                count: h.items?.totalTrades ?? 0,
+   700→   700→              }))}
+   701→   701→              valueLabel="Avg R"
+   702→   702→            />
+   703→   703→            <HourTable items={hour} />
+   704→   704→          </div>
+   705→   705→        ) : (
+   706→   706→          <EmptyChart />
+   707→   707→        )}
+   708→   708→      </Card>
+   709→   709→    </div>
+   710→   710→  );
+   711→   711→}
+   712→   712→
+   713→   713→function SessionsTable({ items }: { items: any[] }) {
+   714→   714→  return (
+   715→   715→    <div className="overflow-x-auto -mx-2">
+   716→   716→      <table className="w-full text-sm">
+   717→   717→        <thead>
+   718→   718→          <tr className="text-[10px] uppercase tracking-wide text-slate-500 font-semibold border-b border-slate-200">
+   719→   719→            <th className="px-3 py-2 text-left">Session</th>
+   720→   720→            <th className="px-3 py-2 text-right">Trades</th>
+   721→   721→            <th className="px-3 py-2 text-right">Win Rate</th>
+   722→   722→            <th className="px-3 py-2 text-right">Avg R</th>
+   723→   723→            <th className="px-3 py-2 text-right">Net P&L</th>
+   724→   724→          </tr>
+   725→   725→        </thead>
+   726→   726→        <tbody>
+   727→   727→          {items.map((s, i) => {
+   728→   728→            const avgR = s.avgR ? dToNumber(s.avgR) : 0;
+   729→   729→            return (
+   730→   730→              <tr key={i} className="border-b border-slate-100 last:border-0">
+   731→   731→                <td className="px-3 py-2 font-medium text-slate-900">{s.label}</td>
+   732→   732→                <td className="px-3 py-2 text-right tabular-nums text-slate-700">{s.trades}</td>
+   733→   733→                <td className="px-3 py-2 text-right tabular-nums text-slate-700">
+   734→   734→                  {s.winRate ? formatPct(s.winRate) : "N/A"}
+   735→   735→                </td>
+   736→   736→                <td
+   737→   737→                  className={cn(
+   738→   738→                    "px-3 py-2 text-right tabular-nums font-medium",
+   739→   739→                    avgR > 0 ? "text-emerald-600" : avgR < 0 ? "text-red-500" : "text-slate-700",
+   740→   740→                  )}
+   741→   741→                >
+   742→   742→                  {formatR(s.avgR)}
+   743→   743→                </td>
+   744→   744→                <td
+   745→   745→                  className={cn(
+   746→   746→                    "px-3 py-2 text-right tabular-nums font-medium",
+   747→   747→                    s.pnlCents > 0 ? "text-emerald-600" : s.pnlCents < 0 ? "text-red-500" : "text-slate-700",
+   748→   748→                  )}
+   749→   749→                >
+   750→   750→                  {formatSignedCents(s.pnlCents).text}
+   751→   751→                </td>
+   752→   752→              </tr>
+   753→   753→            );
+   754→   754→          })}
+   755→   755→        </tbody>
+   756→   756→      </table>
+   757→   757→    </div>
+   758→   758→  );
+   759→   759→}
+   760→   760→
+   761→   761→function WeekdayTable({ items }: { items: any[] }) {
+   762→   762→  return (
+   763→   763→    <div className="overflow-x-auto -mx-2">
+   764→   764→      <table className="w-full text-sm">
+   765→   765→        <thead>
+   766→   766→          <tr className="text-[10px] uppercase tracking-wide text-slate-500 font-semibold border-b border-slate-200">
+   767→   767→            <th className="px-3 py-2 text-left">Day</th>
+   768→   768→            <th className="px-3 py-2 text-right">Trades</th>
+   769→   769→            <th className="px-3 py-2 text-right">Win Rate</th>
+   770→   770→            <th className="px-3 py-2 text-right">Avg R</th>
+   771→   771→            <th className="px-3 py-2 text-right">Net P&L</th>
+   772→   772→          </tr>
+   773→   773→        </thead>
+   774→   774→        <tbody>
+   775→   775→          {items.map((w, i) => {
+   776→   776→            const m = w.items ?? {};
+   777→   777→            const avgR = m.avgR ? dToNumber(m.avgR) : 0;
+   778→   778→            return (
+   779→   779→              <tr key={i} className="border-b border-slate-100 last:border-0">
+   780→   780→                <td className="px-3 py-2 font-medium text-slate-900">{w.label}</td>
+   781→   781→                <td className="px-3 py-2 text-right tabular-nums text-slate-700">{m.totalTrades ?? 0}</td>
+   782→   782→                <td className="px-3 py-2 text-right tabular-nums text-slate-700">
+   783→   783→                  {m.winRate ? formatPct(m.winRate) : "N/A"}
+   784→   784→                </td>
+   785→   785→                <td
+   786→   786→                  className={cn(
+   787→   787→                    "px-3 py-2 text-right tabular-nums font-medium",
+   788→   788→                    avgR > 0 ? "text-emerald-600" : avgR < 0 ? "text-red-500" : "text-slate-700",
+   789→   789→                  )}
+   790→   790→                >
+   791→   791→                  {formatR(m.avgR)}
+   792→   792→                </td>
+   793→   793→                <td
+   794→   794→                  className={cn(
+   795→   795→                    "px-3 py-2 text-right tabular-nums font-medium",
+   796→   796→                    m.totalPnlCents > 0 ? "text-emerald-600" : m.totalPnlCents < 0 ? "text-red-500" : "text-slate-700",
+   797→   797→                  )}
+   798→   798→                >
+   799→   799→                  {formatSignedCents(m.totalPnlCents).text}
+   800→   800→                </td>
+   801→   801→              </tr>
+   802→   802→            );
+   803→   803→          })}
+   804→   804→        </tbody>
+   805→   805→      </table>
+   806→   806→    </div>
+   807→   807→  );
+   808→   808→}
+   809→   809→
+   810→   810→function HourTable({ items }: { items: any[] }) {
+   811→   811→  return (
+   812→   812→    <div className="overflow-x-auto -mx-2">
+   813→   813→      <table className="w-full text-sm">
+   814→   814→        <thead>
+   815→   815→          <tr className="text-[10px] uppercase tracking-wide text-slate-500 font-semibold border-b border-slate-200">
+   816→   816→            <th className="px-3 py-2 text-left">Hour</th>
+   817→   817→            <th className="px-3 py-2 text-right">Trades</th>
+   818→   818→            <th className="px-3 py-2 text-right">Win Rate</th>
+   819→   819→            <th className="px-3 py-2 text-right">Avg R</th>
+   820→   820→            <th className="px-3 py-2 text-right">Net P&L</th>
+   821→   821→          </tr>
+   822→   822→        </thead>
+   823→   823→        <tbody>
+   824→   824→          {items.map((h, i) => {
+   825→   825→            const m = h.items ?? {};
+   826→   826→            const avgR = m.avgR ? dToNumber(m.avgR) : 0;
+   827→   827→            return (
+   828→   828→              <tr key={i} className="border-b border-slate-100 last:border-0">
+   829→   829→                <td className="px-3 py-2 font-medium text-slate-900 tabular-nums">{h.label}</td>
+   830→   830→                <td className="px-3 py-2 text-right tabular-nums text-slate-700">{m.totalTrades ?? 0}</td>
+   831→   831→                <td className="px-3 py-2 text-right tabular-nums text-slate-700">
+   832→   832→                  {m.winRate ? formatPct(m.winRate) : "N/A"}
+   833→   833→                </td>
+   834→   834→                <td
+   835→   835→                  className={cn(
+   836→   836→                    "px-3 py-2 text-right tabular-nums font-medium",
+   837→   837→                    avgR > 0 ? "text-emerald-600" : avgR < 0 ? "text-red-500" : "text-slate-700",
+   838→   838→                  )}
+   839→   839→                >
+   840→   840→                  {formatR(m.avgR)}
+   841→   841→                </td>
+   842→   842→                <td
+   843→   843→                  className={cn(
+   844→   844→                    "px-3 py-2 text-right tabular-nums font-medium",
+   845→   845→                    m.totalPnlCents > 0 ? "text-emerald-600" : m.totalPnlCents < 0 ? "text-red-500" : "text-slate-700",
+   846→   846→                  )}
+   847→   847→                >
+   848→   848→                  {formatSignedCents(m.totalPnlCents).text}
+   849→   849→                </td>
+   850→   850→              </tr>
+   851→   851→            );
+   852→   852→          })}
+   853→   853→        </tbody>
+   854→   854→      </table>
+   855→   855→    </div>
+   856→   856→  );
+   857→   857→}
+   858→   858→
+   859→   859→// ---------------------------------------------------------------------------
+   860→   860→// Shared presentational primitives (slate/white aesthetic)
+   861→   861→// ---------------------------------------------------------------------------
+   862→   862→
+   863→   863→function Card({ children, className }: { children: React.ReactNode; className?: string }) {
+   864→   864→  return (
+   865→   865→    <div
+   866→   866→      className={cn(
+   867→   867→        "bg-white rounded-xl border border-slate-200 p-6 shadow-sm",
+   868→   868→        className,
+   869→   869→      )}
+   870→   870→    >
+   871→   871→      {children}
+   872→   872→    </div>
+   873→   873→  );
+   874→   874→}
+   875→   875→
+   876→   876→function SectionHeading({
+   877→   877→  children,
+   878→   878→  icon: Icon,
+   879→   879→}: {
+   880→   880→  children: React.ReactNode;
+   881→   881→  icon?: React.ComponentType<{ className?: string }>;
+   882→   882→}) {
+   883→   883→  return (
+   884→   884→    <div className="flex items-center gap-2">
+   885→   885→      {Icon && <Icon className="h-4 w-4 text-slate-400" />}
+   886→   886→      <h2 className="text-sm font-semibold text-slate-900 uppercase tracking-wide">
+   887→   887→        {children}
+   888→   888→      </h2>
+   889→   889→    </div>
+   890→   890→  );
+   891→   891→}
+   892→   892→
+   893→   893→function EmptyChart() {
+   894→   894→  return (
+   895→   895→    <div className="h-48 flex items-center justify-center text-sm text-slate-400 border border-dashed border-slate-200 rounded-md">
+   896→   896→      No data.
+   897→   897→    </div>
+   898→   898→  );
+   899→   899→}
+   900→   900→
+   901→   901→function NoDataState({
+   902→   902→  message,
+   903→   903→  icon: Icon = BarChart3,
+   904→   904→  tone = "neutral",
+   905→   905→}: {
+   906→   906→  message: string;
+   907→   907→  icon?: React.ComponentType<{ className?: string }>;
+   908→   908→  tone?: "neutral" | "positive";
+   909→   909→}) {
+   910→   910→  return (
+   911→   911→    <div className="bg-white rounded-xl border border-slate-200 p-12 shadow-sm">
+   912→   912→      <div className="flex flex-col items-center text-center">
+   913→   913→        <div
+   914→   914→          className={cn(
+   915→   915→            "h-12 w-12 rounded-full flex items-center justify-center mb-4",
+   916→   916→            tone === "positive"
+   917→   917→              ? "bg-emerald-50 border border-emerald-200"
+   918→   918→              : "bg-slate-100 border border-slate-200",
+   919→   919→          )}
+   920→   920→        >
+   921→   921→          <Icon
+   922→   922→            className={cn(
+   923→   923→              "h-6 w-6",
+   924→   924→              tone === "positive" ? "text-emerald-600" : "text-slate-400",
+   925→   925→            )}
+   926→   926→          />
+   927→   927→        </div>
+   928→   928→        <p className="text-sm text-slate-500 max-w-md">{message}</p>
+   929→   929→      </div>
+   930→   930→    </div>
+   931→   931→  );
+   932→   932→}
+   933→   933→
+   934→   934→function AnalyticsSkeleton() {
+   935→   935→  return (
+   936→   936→    <div className="space-y-6">
+   937→   937→      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+   938→   938→        {Array.from({ length: 4 }).map((_, i) => (
+   939→   939→          <Skeleton key={i} className="h-28 rounded-xl" />
+   940→   940→        ))}
+   941→   941→      </div>
+   942→   942→      <Skeleton className="h-48 rounded-xl" />
+   943→   943→      <Skeleton className="h-64 rounded-xl" />
+   944→   944→    </div>
+   945→   945→  );
+   946→   946→}
+   947→   947→

@@ -1,0 +1,711 @@
+     1→/**
+     2→ * DnD — Seed script.
+     3→ * Creates a demo user with realistic trades, accounts, instruments, strategies,
+     4→ * checklists, daily plans, reviews, action items, tags, and notifications.
+     5→ * Per spec section 123: clearly identified as demo data.
+     6→ *
+     7→ * Run with: bun run src/lib/seed.ts
+     8→ */
+     9→
+    10→import bcrypt from "bcryptjs";
+    11→import { db } from "./db";
+    12→import { calculateTradePnl } from "./calculations";
+    13→import {
+    14→  evaluateChecklist,
+    15→  parseChecklistItems,
+    16→  parseGradingThresholds,
+    17→  serializeAnswers,
+    18→  type ChecklistItem,
+    19→  type ChecklistAnswer,
+    20→} from "./checklist-evaluation";
+    21→
+    22→const DEMO_EMAIL = "trader@dnd.local";
+    23→const DEMO_PASSWORD = "dnd12345";
+    24→
+    25→const INSTRUMENTS = [
+    26→  { symbol: "XAUUSD", market: "gold", pipSize: "0.01", tickSize: "0.01", contractSize: "100", pricePrecision: 2, currency: "USD" },
+    27→  { symbol: "EURUSD", market: "forex", pipSize: "0.0001", tickSize: "0.00001", contractSize: "100000", pricePrecision: 5, currency: "USD" },
+    28→  { symbol: "GBPUSD", market: "forex", pipSize: "0.0001", tickSize: "0.00001", contractSize: "100000", pricePrecision: 5, currency: "USD" },
+    29→  { symbol: "NQ", market: "indices", pipSize: "0.25", tickSize: "0.25", contractSize: "20", pricePrecision: 2, currency: "USD" },
+    30→  { symbol: "ES", market: "indices", pipSize: "0.25", tickSize: "0.25", contractSize: "50", pricePrecision: 2, currency: "USD" },
+    31→  { symbol: "BTCUSD", market: "crypto", pipSize: "0.01", tickSize: "0.01", contractSize: "1", pricePrecision: 2, currency: "USD" },
+    32→];
+    33→
+    34→interface TradeSeed {
+    35→  daysAgo: number;
+    36→  hour: number;
+    37→  minute: number;
+    38→  symbol: string;
+    39→  direction: "long" | "short";
+    40→  session: string;
+    41→  entryPrice: string;
+    42→  stopPrice: string;
+    43→  targetPrice: string;
+    44→  exitPrice: string;
+    45→  qty: string;
+    46→  feesCents: number;
+    47→  commissionCents: number;
+    48→  swapCents: number;
+    49→  strategyName: string;
+    50→  grade: string;
+    51→  setupScore: string;
+    52→  behaviorFlags: string[];
+    53→  psychBefore: string[];
+    54→  psychAfter: string[];
+    55→  confidence: number;
+    56→  thesis: string;
+    57→  lessons?: string;
+    58→  tags: string[];
+    59→}
+    60→
+    61→// 60 realistic trades over the past ~60 days
+    62→function generateTrades(): TradeSeed[] {
+    63→  const out: TradeSeed[] = [];
+    64→  const symbols = INSTRUMENTS;
+    65→  const strategies = [
+    66→    { name: "London Sweep", grade: "A+", score: "0.92", flags: [] },
+    67→    { name: "London Sweep", grade: "A", score: "0.78", flags: [] },
+    68→    { name: "NY AM Reversal", grade: "A+", score: "0.95", flags: [] },
+    69→    { name: "NY AM Reversal", grade: "B", score: "0.62", flags: ["entered_early"] },
+    70→    { name: "Asia Range Break", grade: "C", score: "0.45", flags: ["chased_price"] },
+    71→    { name: "Asia Range Break", grade: "Invalid", score: "0.30", flags: ["broke_rules", "revenge_trade"] },
+    72→    { name: "FVG Retest", grade: "A", score: "0.80", flags: [] },
+    73→    { name: "Liquidity Sweep", grade: "A+", score: "0.91", flags: [] },
+    74→    { name: "MSS Confirmation", grade: "B", score: "0.58", flags: ["moved_stop"] },
+    75→  ];
+    76→  const sessions = ["asia", "london", "ny_am", "ny_pm"];
+    77→  const psychBeforeSets = [
+    78→    ["calm", "focused"],
+    79→    ["confident", "focused"],
+    80→    ["impatient", "distracted"],
+    81→    ["fomo", "excited"],
+    82→    ["hesitant", "fearful"],
+    83→  ];
+    84→  const psychAfterSets = [
+    85→    ["satisfied", "calm"],
+    86→    ["frustrated", "disappointed"],
+    87→    ["regret"],
+    88→    ["relief"],
+    89→    ["overconfident"],
+    90→    ["calm"],
+    91→  ];
+    92→
+    93→  // Seed pseudo-random with a fixed seed for reproducibility
+    94→  let seed = 1234;
+    95→  const rand = () => {
+    96→    seed = (seed * 9301 + 49297) % 233280;
+    97→    return seed / 233280;
+    98→  };
+    99→
+   100→  // Generate 70 trades over ~70 days
+   101→  for (let i = 0; i < 70; i++) {
+   102→    const daysAgo = Math.floor(rand() * 70);
+   103→    const hour = sessions[Math.floor(rand() * sessions.length)] === "asia" ? 2
+   104→      : sessions[Math.floor(rand() * sessions.length)] === "london" ? 8
+   105→      : sessions[Math.floor(rand() * sessions.length)] === "ny_am" ? 13
+   106→      : 17;
+   107→    const minute = Math.floor(rand() * 60);
+   108→    const instr = symbols[Math.floor(rand() * symbols.length)];
+   109→    const strat = strategies[Math.floor(rand() * strategies.length)];
+   110→    const direction = rand() > 0.45 ? "long" : "short";
+   111→    const session = sessions[Math.floor(rand() * sessions.length)];
+   112→
+   113→    // Build realistic prices per instrument
+   114→    let basePrice: number;
+   115→    switch (instr.symbol) {
+   116→      case "XAUUSD": basePrice = 2000 + rand() * 100; break;
+   117→      case "EURUSD": basePrice = 1.05 + rand() * 0.1; break;
+   118→      case "GBPUSD": basePrice = 1.2 + rand() * 0.1; break;
+   119→      case "NQ": basePrice = 15000 + rand() * 1000; break;
+   120→      case "ES": basePrice = 4500 + rand() * 200; break;
+   121→      case "BTCUSD": basePrice = 60000 + rand() * 10000; break;
+   122→      default: basePrice = 100;
+   123→    }
+   124→    const entry = basePrice.toFixed(instr.pricePrecision);
+   125→    const stopDist = basePrice * (0.002 + rand() * 0.005);
+   126→    const targetDist = stopDist * (1.5 + rand() * 2);
+   127→    const stop = direction === "long"
+   128→      ? (basePrice - stopDist).toFixed(instr.pricePrecision)
+   129→      : (basePrice + stopDist).toFixed(instr.pricePrecision);
+   130→    const target = direction === "long"
+   131→      ? (basePrice + targetDist).toFixed(instr.pricePrecision)
+   132→      : (basePrice - targetDist).toFixed(instr.pricePrecision);
+   133→
+   134→    // Win/loss outcome weighted by setup grade
+   135→    let isWin: boolean;
+   136→    if (strat.grade === "A+") isWin = rand() > 0.3;
+   137→    else if (strat.grade === "A") isWin = rand() > 0.45;
+   138→    else if (strat.grade === "B") isWin = rand() > 0.6;
+   139→    else if (strat.grade === "C") isWin = rand() > 0.7;
+   140→    else isWin = rand() > 0.85;
+   141→
+   142→    const rMultiple = isWin ? 0.5 + rand() * 2.5 : -(0.5 + rand() * 0.6);
+   143→    const exit = direction === "long"
+   144→      ? (basePrice + rMultiple * stopDist).toFixed(instr.pricePrecision)
+   145→      : (basePrice - rMultiple * stopDist).toFixed(instr.pricePrecision);
+   146→
+   147→    const qty = instr.market === "forex" ? (rand() > 0.5 ? "0.5" : "0.2")
+   148→      : instr.market === "crypto" ? "0.1"
+   149→      : "1";
+   150→
+   151→    const psychB = psychBeforeSets[Math.floor(rand() * psychBeforeSets.length)];
+   152→    const psychA = isWin
+   153→      ? psychAfterSets[0]
+   154→      : psychAfterSets[1 + Math.floor(rand() * (psychAfterSets.length - 1))];
+   155→
+   156→    const confidence = 2 + Math.floor(rand() * 4);
+   157→    const tags: string[] = [];
+   158→    if (strat.grade === "A+") tags.push("high-conviction");
+   159→    if (strat.flags.includes("entered_early")) tags.push("early");
+   160→    if (strat.flags.includes("revenge_trade")) tags.push("revenge");
+   161→    if (session === "ny_am") tags.push("ny-session");
+   162→
+   163→    out.push({
+   164→      daysAgo,
+   165→      hour,
+   166→      minute,
+   167→      symbol: instr.symbol,
+   168→      direction,
+   169→      session,
+   170→      entryPrice: entry,
+   171→      stopPrice: stop,
+   172→      targetPrice: target,
+   173→      exitPrice: exit,
+   174→      qty,
+   175→      feesCents: Math.round((rand() * 4 + 1) * 100),
+   176→      commissionCents: Math.round((rand() * 6 + 2) * 100),
+   177→      swapCents: Math.round(rand() * 100),
+   178→      strategyName: strat.name,
+   179→      grade: strat.grade,
+   180→      setupScore: strat.score,
+   181→      behaviorFlags: strat.flags,
+   182→      psychBefore: psychB,
+   183→      psychAfter: psychA,
+   184→      confidence,
+   185→      thesis: isWin
+   186→        ? "Clear liquidity sweep followed by displacement and MSS confirmation. Entry inside the FVG with defined risk to recent swing low."
+   187→        : "Setup appeared valid but market structure did not confirm; displacement stalled at first mitigation. Lesson recorded.",
+   188→      lessons: !isWin ? "Need to wait for explicit MSS confirmation before committing to entry." : undefined,
+   189→      tags,
+   190→    });
+   191→  }
+   192→  // sort oldest first
+   193→  return out.sort((a, b) => b.daysAgo - a.daysAgo);
+   194→}
+   195→
+   196→/**
+   197→ * Generate plausible checklist answers for a trade based on its intended
+   198→ * grade. The patterns follow the spec's remediation guidance:
+   199→ *   - A+ trades:        all 8 items checked
+   200→ *   - A trades:         6-7 items checked (one required unchecked)
+   201→ *   - B trades:         5 items checked
+   202→ *   - C trades:         3-4 items checked
+   203→ *   - Invalid trades:   2 items checked
+   204→ *
+   205→ * The actual evaluated grade/score is computed via `evaluateChecklist`
+   206→ * (which applies the required-item cap), so the stored `setupGrade` may
+   207→ * differ from the intended grade when a required item is unchecked —
+   208→ * that's the realistic behaviour the spec mandates.
+   209→ *
+   210→ * Items are expected in the order:
+   211→ *   [htf(req,2), liq(req,2), disp(req,2), mss(req,1.5),
+   212→ *    fvg(opt,1), zone(req,1.5), risk(req,1), session(req,1)]
+   213→ */
+   214→function generateChecklistAnswers(
+   215→  grade: string,
+   216→  items: ChecklistItem[],
+   217→): ChecklistAnswer {
+   218→  const answers: ChecklistAnswer = {};
+   219→  // Default everything to unchecked.
+   220→  for (const item of items) {
+   221→    answers[item.id] = { checked: false };
+   222→  }
+   223→  if (items.length === 0) return answers;
+   224→
+   225→  // Helper: check the first N items in declared order.
+   226→  const checkFirst = (n: number) => {
+   227→    for (let i = 0; i < Math.min(n, items.length); i++) {
+   228→      answers[items[i].id] = { checked: true };
+   229→    }
+   230→  };
+   231→
+   232→  switch (grade) {
+   233→    case "A+":
+   234→      // All items checked.
+   235→      checkFirst(items.length);
+   236→      break;
+   237→    case "A":
+   238→      // 6-7 items checked (one required unchecked). Check everything,
+   239→      // then uncheck the 4th item (mss — a "minor" required item being
+   240→      // missed is a plausible trader slip that turns an A-quality setup
+   241→      // into a capped-C).
+   242→      checkFirst(items.length);
+   243→      if (items[3]) {
+   244→        answers[items[3].id] = { checked: false };
+   245→      }
+   246→      break;
+   247→    case "B":
+   248→      // 5 items checked.
+   249→      checkFirst(5);
+   250→      break;
+   251→    case "C":
+   252→      // 3-4 items checked. Use 4 to leave the score non-trivial.
+   253→      checkFirst(4);
+   254→      break;
+   255→    case "Invalid":
+   256→    default:
+   257→      // 2 items checked.
+   258→      checkFirst(2);
+   259→      break;
+   260→  }
+   261→  return answers;
+   262→}
+   263→
+   264→async function seed() {
+   265→  console.log("Seeding DnD demo data...");
+   266→
+   267→  // Upsert demo user
+   268→  const passwordHash = await bcrypt.hash(DEMO_PASSWORD, 12);
+   269→  const user = await db.user.upsert({
+   270→    where: { email: DEMO_EMAIL },
+   271→    update: { passwordHash },
+   272→    create: { email: DEMO_EMAIL, name: "Demo Trader", passwordHash },
+   273→  });
+   274→
+   275→  // Settings
+   276→  await db.userSettings.upsert({
+   277→    where: { userId: user.id },
+   278→    update: {},
+   279→    create: {
+   280→      userId: user.id,
+   281→      timezone: "UTC",
+   282→      theme: "nordic",
+   283→      defaultRiskPct: "0.5",
+   284→    },
+   285→  });
+   286→
+   287→  await db.notificationPreferences.upsert({
+   288→    where: { userId: user.id },
+   289→    update: {},
+   290→    create: {
+   291→      userId: user.id,
+   292→      prefsJson: JSON.stringify({
+   293→        trading: { sessionReminder: true, dailyPlan: true, dailyLoss: true },
+   294→        journal: { incompleteTrade: true, eodReminder: true, weeklyReview: true },
+   295→        system: { importCompleted: true, uploadCompleted: false, syncConflict: true },
+   296→        quietHours: { enabled: false, start: "22:00", end: "07:00" },
+   297→      }),
+   298→    },
+   299→  });
+   300→
+   301→  // Accounts
+   302→  const accounts = [
+   303→    { name: "Primary Live", broker: "IC Markets", type: "live", currency: "USD", balance: 2500000 },
+   304→    { name: "Demo Practice", broker: "FTMO", type: "demo", currency: "USD", balance: 1000000 },
+   305→  ];
+   306→  for (const a of accounts) {
+   307→    const existing = await db.tradingAccount.findFirst({ where: { userId: user.id, name: a.name } });
+   308→    if (existing) continue;
+   309→    await db.tradingAccount.create({
+   310→      data: {
+   311→        userId: user.id,
+   312→        name: a.name,
+   313→        broker: a.broker,
+   314→        accountType: a.type,
+   315→        currency: a.currency,
+   316→        startingBalanceCents: a.balance,
+   317→        currentBalanceCents: a.balance,
+   318→        isDefault: a.name === "Primary Live",
+   319→      },
+   320→    });
+   321→  }
+   322→
+   323→  // Instruments
+   324→  for (const i of INSTRUMENTS) {
+   325→    await db.instrument.upsert({
+   326→      where: { userId_symbol: { userId: user.id, symbol: i.symbol } },
+   327→      update: {},
+   328→      create: { userId: user.id, ...i },
+   329→    });
+   330→  }
+   331→
+   332→  // Checklist config + version — create per-strategy checklists
+   333→  // Each strategy gets its own checklist with appropriate items
+   334→  const checklistDefs = [
+   335→    {
+   336→      name: "London Sweep A+ Checklist",
+   337→      description: "Setup evaluation for London Sweep strategy",
+   338→      items: [
+   339→        { id: "htf", text: "HTF bias aligned", required: true, weight: 2, evidenceRequired: true },
+   340→        { id: "liq", text: "Liquidity taken", required: true, weight: 2, evidenceRequired: true },
+   341→        { id: "disp", text: "Displacement confirmed", required: true, weight: 2, evidenceRequired: true },
+   342→        { id: "mss", text: "MSS confirmed", required: true, weight: 1.5, evidenceRequired: true },
+   343→        { id: "fvg", text: "FVG present", required: false, weight: 1, evidenceRequired: false },
+   344→        { id: "zone", text: "Entry inside defined zone", required: true, weight: 1.5, evidenceRequired: true },
+   345→        { id: "risk", text: "Risk compliant", required: true, weight: 1, evidenceRequired: false },
+   346→        { id: "session", text: "Valid session", required: true, weight: 1, evidenceRequired: false },
+   347→      ],
+   348→    },
+   349→    {
+   350→      name: "NY AM A+ Checklist",
+   351→      description: "Setup evaluation for NY AM Reversal strategy",
+   352→      items: [
+   353→        { id: "htf", text: "HTF bias aligned", required: true, weight: 1.5, evidenceRequired: true },
+   354→        { id: "liq", text: "Liquidity taken", required: true, weight: 1.5, evidenceRequired: true },
+   355→        { id: "mss", text: "MSS/BOS confirmed", required: true, weight: 2, evidenceRequired: true },
+   356→        { id: "disp", text: "Displacement", required: true, weight: 1.5, evidenceRequired: true },
+   357→        { id: "fvg", text: "FVG present", required: false, weight: 1, evidenceRequired: false },
+   358→        { id: "session", text: "Session alignment", required: true, weight: 1, evidenceRequired: false },
+   359→        { id: "target", text: "Target liquidity identified", required: true, weight: 1, evidenceRequired: false },
+   360→        { id: "risk", text: "Risk rules satisfied", required: true, weight: 0.5, evidenceRequired: false },
+   361→      ],
+   362→    },
+   363→    {
+   364→      name: "Generic A+ Checklist",
+   365→      description: "General setup evaluation for other strategies",
+   366→      items: [
+   367→        { id: "htf", text: "HTF bias aligned", required: true, weight: 2, evidenceRequired: true },
+   368→        { id: "liq", text: "Liquidity taken", required: true, weight: 2, evidenceRequired: true },
+   369→        { id: "disp", text: "Displacement confirmed", required: true, weight: 2, evidenceRequired: true },
+   370→        { id: "mss", text: "MSS confirmed", required: true, weight: 1.5, evidenceRequired: true },
+   371→        { id: "fvg", text: "FVG present", required: false, weight: 1, evidenceRequired: false },
+   372→        { id: "zone", text: "Entry inside defined zone", required: true, weight: 1.5, evidenceRequired: true },
+   373→        { id: "risk", text: "Risk compliant", required: true, weight: 1, evidenceRequired: false },
+   374→        { id: "session", text: "Valid session", required: true, weight: 1, evidenceRequired: false },
+   375→      ],
+   376→    },
+   377→  ];
+   378→
+   379→  const checklistMap = new Map<string, { id: string; versionId: string; items: ChecklistItem[]; thresholds: any }>();
+   380→  for (const def of checklistDefs) {
+   381→    const existing = await db.checklistConfig.findFirst({ where: { userId: user.id, name: def.name } });
+   382→    let cl: { id: string } | null = existing;
+   383→    if (!cl) {
+   384→      cl = await db.checklistConfig.create({
+   385→        data: { userId: user.id, name: def.name, description: def.description },
+   386→      });
+   387→      await db.checklistVersion.create({
+   388→        data: {
+   389→          checklistId: cl.id,
+   390→          versionLabel: "1.0",
+   391→          itemsJson: JSON.stringify(def.items),
+   392→          gradingThresholdsJson: JSON.stringify({ "A+": 0.9, A: 0.75, B: 0.6, C: 0.4 }),
+   393→          effectiveDate: new Date(Date.now() - 90 * 24 * 60 * 60 * 1000),
+   394→        },
+   395→      });
+   396→    }
+   397→    const version = await db.checklistVersion.findFirst({
+   398→      where: { checklistId: cl.id },
+   399→      orderBy: { effectiveDate: "desc" },
+   400→    });
+   401→    if (version) {
+   402→      checklistMap.set(def.name, {
+   403→        id: cl.id,
+   404→        versionId: version.id,
+   405→        items: parseChecklistItems(version.itemsJson),
+   406→        thresholds: parseGradingThresholds(version.gradingThresholdsJson),
+   407→      });
+   408→    }
+   409→  }
+   410→
+   411→  // For backward compat, keep a reference to the first checklist
+   412→  const checklist = checklistMap.get("Generic A+ Checklist");
+   413→  const checklistVersion = checklist ? await db.checklistVersion.findFirst({
+   414→    where: { checklistId: checklist.id },
+   415→    orderBy: { effectiveDate: "desc" },
+   416→  }) : null;
+   417→  const checklistItems: ChecklistItem[] = checklist?.items ?? [];
+   418→  const checklistThresholds = checklist?.thresholds ?? null;
+   419→
+   420→  // Strategies + versions
+   421→  const strategies = [
+   422→    { name: "London Sweep", description: "Trade London session liquidity sweeps with displacement confirmation.", checklistName: "London Sweep A+ Checklist" },
+   423→    { name: "NY AM Reversal", description: "Reversal entries during New York AM session after MSS.", checklistName: "NY AM A+ Checklist" },
+   424→    { name: "Asia Range Break", description: "Breakout trades from Asia session range.", checklistName: "Generic A+ Checklist" },
+   425→    { name: "FVG Retest", description: "Fair value gap retest continuation entries.", checklistName: "Generic A+ Checklist" },
+   426→    { name: "MSS Confirmation", description: "Strict market structure shift confirmation entries.", checklistName: "Generic A+ Checklist" },
+   427→  ];
+   428→  for (const s of strategies) {
+   429→    const existing = await db.strategy.findFirst({ where: { userId: user.id, name: s.name } });
+   430→    let strategy = existing;
+   431→    const checklistConfigId = checklistMap.get(s.checklistName)?.id ?? null;
+   432→    if (!strategy) {
+   433→      strategy = await db.strategy.create({
+   434→        data: {
+   435→          userId: user.id,
+   436→          name: s.name,
+   437→          description: s.description,
+   438→          market: "mixed",
+   439→          timeframe: "5m-1h",
+   440→          session: "mixed",
+   441→          checklistConfigId,
+   442→        },
+   443→      });
+   444→      await db.strategyVersion.create({
+   445→        data: {
+   446→          strategyId: strategy.id,
+   447→          versionLabel: "1.0",
+   448→          changeReason: "Initial version",
+   449→          changeSummary: "Baseline ruleset.",
+   450→          rulesJson: JSON.stringify({
+   451→            entry: ["Wait for liquidity sweep", "Confirm displacement", "Enter inside FVG"],
+   452→            stop: ["Beyond sweep wick"],
+   453→            target: ["Opposing liquidity"],
+   454→            management: ["Move stop to BE after 1R"],
+   455→            invalidation: ["No displacement", "MSS fails"],
+   456→          }),
+   457→          effectiveDate: new Date(Date.now() - 90 * 24 * 60 * 60 * 1000),
+   458→        },
+   459→      });
+   460→      await db.strategyVersion.create({
+   461→        data: {
+   462→          strategyId: strategy.id,
+   463→          versionLabel: "1.1",
+   464→          changeReason: "Tightened entry zone",
+   465→          changeSummary: "Require entry inside FVG instead of just near it.",
+   466→          rulesJson: JSON.stringify({
+   467→            entry: ["Wait for liquidity sweep", "Confirm displacement", "Enter inside FVG (strict)"],
+   468→            stop: ["Beyond sweep wick"],
+   469→            target: ["Opposing liquidity"],
+   470→            management: ["Move stop to BE after 1R"],
+   471→            invalidation: ["No displacement", "MSS fails", "Entry outside FVG"],
+   472→          }),
+   473→          effectiveDate: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000),
+   474→        },
+   475→      });
+   476→    }
+   477→  }
+   478→
+   479→
+   480→  // Tags
+   481→  const tagNames = ["high-conviction", "early", "revenge", "ny-session", "london-session", "followed-plan", "reviewed"];
+   482→  for (const name of tagNames) {
+   483→    await db.tag.upsert({
+   484→      where: { userId_name: { userId: user.id, name } },
+   485→      update: {},
+   486→      create: { userId: user.id, name },
+   487→    });
+   488→  }
+   489→
+   490→  // Trades. To make the seed reproducible (including
+   491→  // TradeChecklistEvaluation records), we always wipe and re-create the
+   492→  // demo user's trades. Cascade deletes handle TradeExecution,
+   493→  // TradeChecklistEvaluation, TradeMedia, etc. (per prisma schema's
+   494→  // onDelete: Cascade on Trade relations).
+   495→  const existingTrades = await db.trade.count({ where: { userId: user.id } });
+   496→  if (existingTrades > 0) {
+   497→    console.log(`Resetting ${existingTrades} existing demo trades (cascade-deletes evaluations, executions, media)...`);
+   498→    await db.trade.deleteMany({ where: { userId: user.id } });
+   499→  }
+   500→  {
+   501→    const seeds = generateTrades();
+   502→    const account = (await db.tradingAccount.findFirst({ where: { userId: user.id, isDefault: true } }))!;
+   503→    for (const s of seeds) {
+   504→      const instrument = await db.instrument.findFirst({ where: { userId: user.id, symbol: s.symbol } });
+   505→      const strategy = await db.strategy.findFirst({ where: { userId: user.id, name: s.strategyName } });
+   506→      const latestVersion = strategy ? await db.strategyVersion.findFirst({
+   507→        where: { strategyId: strategy.id },
+   508→        orderBy: { effectiveDate: "desc" },
+   509→      }) : null;
+   510→
+   511→      const entryTime = new Date(Date.now() - s.daysAgo * 24 * 60 * 60 * 1000);
+   512→      entryTime.setUTCHours(s.hour, s.minute, 0, 0);
+   513→      const exitTime = new Date(entryTime.getTime() + (1 + Math.floor(Math.random() * 4)) * 60 * 60 * 1000);
+   514→
+   515→      const calc = calculateTradePnl({
+   516→        direction: s.direction,
+   517→        plannedEntryPrice: s.entryPrice,
+   518→        plannedStopPrice: s.stopPrice,
+   519→        plannedTargetPrice: s.targetPrice,
+   520→        fills: [
+   521→          { kind: "entry", price: s.entryPrice, quantity: s.qty },
+   522→          { kind: "exit", price: s.exitPrice, quantity: s.qty },
+   523→        ],
+   524→        feesCents: s.feesCents,
+   525→        commissionCents: s.commissionCents,
+   526→        swapCents: s.swapCents,
+   527→        slippageCents: 0,
+   528→        contractSize: instrument?.contractSize ?? "1",
+   529→        pipSize: instrument?.pipSize ?? "0.0001",
+   530→        pointValueCents: 100, // 1.00 per 1.0 price per 1.0 qty
+   531→      });
+   532→
+   533→      // Generate plausible A+ checklist answers based on the trade's
+   534→      // intended grade, then evaluate them through the same domain module
+   535→      // the server uses. Use the strategy-specific checklist if available.
+   536→      const stratChecklistName = s.strategyName === "London Sweep" ? "London Sweep A+ Checklist"
+   537→        : s.strategyName === "NY AM Reversal" ? "NY AM A+ Checklist"
+   538→        : "Generic A+ Checklist";
+   539→      const stratChecklist = checklistMap.get(stratChecklistName);
+   540→      const stratChecklistItems = stratChecklist?.items ?? checklistItems;
+   541→      const stratChecklistThresholds = stratChecklist?.thresholds ?? checklistThresholds;
+   542→      const stratChecklistVersionId = stratChecklist?.versionId ?? checklistVersion?.id;
+   543→
+   544→      const answers = generateChecklistAnswers(s.grade, stratChecklistItems);
+   545→      const evaluation = evaluateChecklist(
+   546→        stratChecklistItems,
+   547→        answers,
+   548→        stratChecklistThresholds,
+   549→      );
+   550→      const setupGrade = stratChecklistVersionId ? evaluation.grade : s.grade;
+   551→      const setupScore = stratChecklistVersionId ? String(evaluation.score) : s.setupScore;
+   552→
+   553→      const trade = await db.trade.create({
+   554→        data: {
+   555→          userId: user.id,
+   556→          accountId: account.id,
+   557→          instrumentId: instrument?.id,
+   558→          instrumentSymbol: s.symbol,
+   559→          market: instrument?.market,
+   560→          direction: s.direction,
+   561→          status: calc.status,
+   562→          session: s.session,
+   563→          strategyId: strategy?.id,
+   564→          strategyVersionId: latestVersion?.id,
+   565→          // Authoritative grade/score from the strategy-specific A+ checklist evaluation.
+   566→          checklistVersionId: stratChecklistVersionId ?? null,
+   567→          setupGrade,
+   568→          setupScore,
+   569→          tagsJson: JSON.stringify(s.tags),
+   570→          plannedEntryPrice: s.entryPrice,
+   571→          plannedStopPrice: s.stopPrice,
+   572→          plannedTargetPrice: s.targetPrice,
+   573→          plannedRiskPct: "0.005",
+   574→          entryPriceAvg: calc.entryPriceAvg,
+   575→          exitPriceAvg: calc.exitPriceAvg,
+   576→          positionSize: s.qty,
+   577→          feesCents: s.feesCents,
+   578→          commissionCents: s.commissionCents,
+   579→          swapCents: s.swapCents,
+   580→          grossPnlCents: calc.grossPnlCents,
+   581→          netPnlCents: calc.netPnlCents,
+   582→          actualR: calc.actualR,
+   583→          entryTime,
+   584→          exitTime,
+   585→          tradingTimezone: "UTC",
+   586→          setupJson: JSON.stringify({
+   587→            htfContext: { weeklyBias: s.direction === "long" ? "bullish" : "bearish", dailyBias: s.direction === "long" ? "bullish" : "bearish" },
+   588→            liquidity: ["PDH", "equal highs"],
+   589→            structure: ["BOS", "MSS"],
+   590→            entryModel: "FVG",
+   591→            session: s.session,
+   592→          }),
+   593→          thesisJson: JSON.stringify({
+   594→            why: s.thesis,
+   595→            narrative: "Market reached defined liquidity zone and produced the expected reaction.",
+   596→            liquidityTarget: "Opposing session high/low",
+   597→            confirms: ["Displacement", "MSS"],
+   598→            invalidates: ["No displacement", "Stalled structure"],
+   599→            target: s.targetPrice,
+   600→            earlyExit: "If first mitigation fails to hold",
+   601→          }),
+   602→          notes: s.thesis,
+   603→          lessons: s.lessons,
+   604→          psychBeforeJson: JSON.stringify({ moodTags: s.psychBefore, confidence: s.confidence, energy: Math.max(1, s.confidence - 1), impact: "moderate" }),
+   605→          psychAfterJson: JSON.stringify({ moodTags: s.psychAfter, confidence: s.confidence, energy: s.confidence, impact: "moderate" }),
+   606→          behaviorFlagsJson: JSON.stringify(s.behaviorFlags),
+   607→        },
+   608→      });
+   609→
+   610→      await db.tradeExecution.createMany({
+   611→        data: [
+   612→          { tradeId: trade.id, kind: "entry", seq: 0, price: s.entryPrice, quantity: s.qty, timestamp: entryTime },
+   613→          { tradeId: trade.id, kind: "exit", seq: 0, price: s.exitPrice, quantity: s.qty, timestamp: exitTime },
+   614→        ],
+   615→      });
+   616→
+   617→      // Persist the TradeChecklistEvaluation snapshot (spec section 41)
+   618→      // — same shape as what POST /api/trades writes when a user submits
+   619→      // the A+ Setup Checklist on the trade form. Uses the strategy-specific checklist.
+   620→      if (stratChecklistVersionId) {
+   621→        await db.tradeChecklistEvaluation.create({
+   622→          data: {
+   623→            tradeId: trade.id,
+   624→            checklistVersionId: stratChecklistVersionId,
+   625→            rawAnswersJson: serializeAnswers(answers),
+   626→            weightedScore: String(evaluation.score),
+   627→            finalGrade: evaluation.grade,
+   628→          },
+   629→        });
+   630→      }
+   631→    }
+   632→    console.log(`Seeded ${seeds.length} trades (with checklist evaluations).`);
+   633→  }
+   634→
+   635→  // Sample daily plans for last 5 days
+   636→  for (let d = 0; d < 5; d++) {
+   637→    const date = new Date(Date.now() - d * 24 * 60 * 60 * 1000);
+   638→    date.setUTCHours(0, 0, 0, 0);
+   639→    const existing = await db.dailyPlan.findUnique({ where: { userId_date: { userId: user.id, date } } });
+   640→    if (existing) continue;
+   641→    await db.dailyPlan.create({
+   642→      data: {
+   643→        userId: user.id,
+   644→        date,
+   645→        weeklyBias: d % 2 === 0 ? "bullish" : "bearish",
+   646→        dailyBias: d % 2 === 0 ? "bullish" : "bearish",
+   647→        instruments: "XAUUSD, EURUSD, NQ",
+   648→        pwh: "2008.50",
+   649→        pwl: "1995.20",
+   650→        pdh: "2010.10",
+   651→        pdl: "1992.40",
+   652→        session: "ny_am",
+   653→        setupConditions: "Wait for liquidity sweep + MSS confirmation",
+   654→        invalidation: "Close below 1990 invalidates bullish bias",
+   655→        maxTrades: 2,
+   656→        maxDailyRiskPct: "0.01",
+   657→        notes: "Focus on quality over quantity. Patience is the edge.",
+   658→      },
+   659→    });
+   660→  }
+   661→
+   662→  // Sample action items
+   663→  const existingActions = await db.actionItem.count({ where: { userId: user.id } });
+   664→  if (existingActions === 0) {
+   665→    await db.actionItem.createMany({
+   666→      data: [
+   667→        { userId: user.id, title: "Wait for MSS confirmation before entry", description: "Multiple trades this week entered before MSS confirmed.", status: "open" },
+   668→        { userId: user.id, title: "Limit to 2 trades per session", description: "Overtrading observed in NY AM.", status: "open" },
+   669→        { userId: user.id, title: "Complete end-of-day review daily", description: "Build a consistent review habit.", status: "open" },
+   670→      ],
+   671→    });
+   672→  }
+   673→
+   674→  // Sample notifications
+   675→  const existingNotifs = await db.notification.count({ where: { userId: user.id } });
+   676→  if (existingNotifs === 0) {
+   677→    await db.notification.createMany({
+   678→      data: [
+   679→        { userId: user.id, category: "journal", title: "Incomplete trade", body: "A trade from yesterday is missing exit details." },
+   680→        { userId: user.id, category: "journal", title: "Weekly review", body: "Your weekly review is ready to start." },
+   681→        { userId: user.id, category: "system", title: "Welcome to DnD", body: "Your demo data is ready. Explore the dashboard, journal, and analytics." },
+   682→      ],
+   683→    });
+   684→  }
+   685→
+   686→  // Goals
+   687→  const existingGoals = await db.goal.count({ where: { userId: user.id } });
+   688→  if (existingGoals === 0) {
+   689→    await db.goal.createMany({
+   690→      data: [
+   691→        { userId: user.id, title: "Journal every trade", kind: "process", target: "100% adherence" },
+   692→        { userId: user.id, title: "Max 2 trades per day", kind: "process" },
+   693→        { userId: user.id, title: "Complete daily review", kind: "process" },
+   694→        { userId: user.id, title: "Maintain A+ only filter", kind: "performance", target: "Avg R > 0.5 over 30 trades" },
+   695→      ],
+   696→    });
+   697→  }
+   698→
+   699→  console.log("Seed complete.");
+   700→  console.log(`Demo user: ${DEMO_EMAIL} / ${DEMO_PASSWORD}`);
+   701→}
+   702→
+   703→seed()
+   704→  .catch((e) => {
+   705→    console.error(e);
+   706→    process.exit(1);
+   707→  })
+   708→  .finally(async () => {
+   709→    await db.$disconnect();
+   710→  });
+   711→

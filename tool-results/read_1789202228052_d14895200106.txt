@@ -1,0 +1,1552 @@
+     1→I need you to perform a COMPLETE, DEEP, NON-DESTRUCTIVE SYSTEM-WIDE QA AUDIT of the current DnD application.
+     2→
+     3→The purpose of this task is to find EVERY problem related to:
+     4→
+     5→1. Data not saving
+     6→2. Data saving incorrectly
+     7→3. Data being lost between steps
+     8→4. Data being transformed incorrectly
+     9→5. Data being saved to the wrong database field
+    10→6. Data being saved but not reloaded
+    11→7. Data being displayed differently from what was saved
+    12→8. Incorrect calculations
+    13→9. Incorrect financial formulas
+    14→10. Incorrect R/R calculations
+    15→11. Incorrect P&L calculations
+    16→12. Incorrect partial-exit calculations
+    17→13. Incorrect percentages
+    18→14. Incorrect dashboard/analytics aggregation
+    19→15. Incorrect date/time/session calculations
+    20→16. Incorrect strategy/checklist scoring
+    21→17. Incorrect account/instrument-specific calculations
+    22→18. State synchronization bugs
+    23→19. API/database mismatches
+    24→20. Neon/PostgreSQL persistence problems
+    25→21. Authentication/user isolation problems
+    26→22. Responsive/mobile regressions
+    27→23. Any other feature that appears functional but is actually broken
+    28→
+    29→This is NOT a superficial UI test.
+    30→
+    31→I want you to test the APPLICATION AS A REAL USER AND AS A DATABASE/API SYSTEM.
+    32→
+    33→==================================================
+    34→CRITICAL RULES
+    35→==================================================
+    36→
+    37→1. Use the CURRENT codebase exactly as it exists now.
+    38→2. Use the CURRENT Neon PostgreSQL database exactly as it exists now.
+    39→3. Do not assume old schema, old migrations, old components, old route names, or old behavior.
+    40→4. Inspect the actual current implementation before testing.
+    41→5. Do not blindly trust existing tests.
+    42→6. Do not assume that because an API returns 200 the feature is correct.
+    43→7. Do not assume that because a UI displays a value the value is persisted.
+    44→8. Verify actual database records whenever possible.
+    45→9. Verify the exact values before save and after reload.
+    46→10. Verify calculations independently using mathematically correct reference calculations.
+    47→11. Do not silently change expected product behavior.
+    48→12. Do not redesign the application.
+    49→13. Do not remove existing functionality.
+    50→14. Do not restore intentionally removed features.
+    51→15. Do not introduce Daily Plans, Reviews, Media Library, CSV Import UI, Notifications, Audit UI, or server-side backup restore UI.
+    52→16. Do not change unrelated architecture.
+    53→17. Do not repeatedly restart the server without diagnosing why it stopped.
+    54→18. Do not claim PASS without evidence.
+    55→19. If something cannot be tested because of the environment, mark it BLOCKED.
+    56→20. If you discover a real defect, reproduce it at least once before fixing it.
+    57→21. After fixing a defect, rerun the exact failing test and a regression test.
+    58→22. Keep a precise record of every defect found.
+    59→23. Prefer fixing root causes rather than patching symptoms.
+    60→24. Do NOT perform a destructive reset of the real database.
+    61→25. Create temporary test users/data only when necessary.
+    62→26. At the end, delete ONLY the temporary test users and test data created by this QA run.
+    63→27. Preserve existing real user data.
+    64→28. Do not create demo/test data that remains in Neon after the audit.
+    65→
+    66→==================================================
+    67→PHASE 1: CURRENT SYSTEM DISCOVERY
+    68→==================================================
+    69→
+    70→Before testing anything, inspect the current application.
+    71→
+    72→Determine and document:
+    73→
+    74→- Next.js version
+    75→- React version
+    76→- TypeScript version
+    77→- Tailwind version
+    78→- Prisma version
+    79→- Database provider
+    80→- Actual Neon connection target
+    81→- Current Prisma schema
+    82→- Current migrations/schema synchronization state
+    83→- Current API route structure
+    84→- Current server actions
+    85→- Current client state architecture
+    86→- Zustand stores
+    87→- React Query usage
+    88→- Form libraries/validation
+    89→- Calculation utilities
+    90→- Instrument catalog/resolver
+    91→- Strategy models
+    92→- Checklist models
+    93→- Trade models
+    94→- TradeTarget/partial-exit models
+    95→- Trading account models
+    96→- Settings models
+    97→- Analytics implementation
+    98→- Dashboard aggregation implementation
+    99→- Calendar implementation
+   100→- Authentication/session implementation
+   101→- Media storage implementation
+   102→- Market clock implementation
+   103→
+   104→Inspect the actual schema and actual API payloads.
+   105→
+   106→Create a mental map of:
+   107→
+   108→UI field
+   109→→ local state
+   110→→ form submission
+   111→→ request payload
+   112→→ API/server action
+   113→→ validation
+   114→→ calculation
+   115→→ Prisma write
+   116→→ database
+   117→→ Prisma read
+   118→→ API response
+   119→→ client state
+   120→→ rendered UI
+   121→
+   122→I specifically want you to identify places where any link in this chain can lose or mutate data.
+   123→
+   124→==================================================
+   125→PHASE 2: DATABASE SCHEMA INTEGRITY
+   126→==================================================
+   127→
+   128→Inspect the current Prisma schema and Neon database.
+   129→
+   130→Verify:
+   131→
+   132→- all expected tables exist
+   133→- expected columns exist
+   134→- column types are correct
+   135→- nullable vs required fields are correct
+   136→- default values are correct
+   137→- enum values are correct
+   138→- relationships are correct
+   139→- foreign keys are correct
+   140→- unique constraints are correct
+   141→- indexes are correct
+   142→- cascade behavior is correct
+   143→- decimal/numeric precision is appropriate
+   144→- integer/cents representation is correct
+   145→- timestamps are appropriate
+   146→- JSON fields are consistent
+   147→- strategy version relationships are correct
+   148→- checklist evaluation relationships are correct
+   149→- trade target relationships are correct
+   150→- account relationships are correct
+   151→- instrument relationships are correct
+   152→- settings relationships are correct
+   153→
+   154→Pay special attention to:
+   155→
+   156→- numeric vs integer values
+   157→- cents vs dollars
+   158→- points vs currency
+   159→- percentages vs decimal fractions
+   160→- nullable values
+   161→- Date vs DateTime
+   162→- timezone handling
+   163→- enum serialization
+   164→- arrays / JSON structures
+   165→- Prisma mapping names
+   166→- fields that exist in TypeScript but not DB
+   167→- fields that exist in DB but are no longer used
+   168→- stale or orphaned models
+   169→
+   170→Verify that the running application is using the same schema that the code assumes.
+   171→
+   172→==================================================
+   173→PHASE 3: FIELD-BY-FIELD PERSISTENCE AUDIT
+   174→==================================================
+   175→
+   176→This is one of the most important parts.
+   177→
+   178→For EVERY major form in the application, test each meaningful field individually.
+   179→
+   180→The principle is:
+   181→
+   182→ENTER VALUE
+   183→→ SAVE
+   184→→ DATABASE
+   185→→ RELOAD
+   186→→ VERIFY EXACT SAME VALUE
+   187→
+   188→Do not only test the form as a whole.
+   189→
+   190→Test at minimum:
+   191→
+   192→A. User profile
+   193→B. Settings
+   194→C. Trading account
+   195→D. Instruments
+   196→E. Strategy
+   197→F. Strategy version
+   198→G. Strategy rules/checklist
+   199→H. New trade
+   200→I. Trade execution
+   201→J. Partial exits
+   202→K. Trade close
+   203→L. Psychology fields
+   204→M. ICT/setup fields
+   205→N. Notes/journal fields that currently exist
+   206→O. Media metadata
+   207→P. Calendar-relevant dates
+   208→Q. Dashboard-relevant fields
+   209→
+   210→For every field verify:
+   211→
+   212→- field accepts input
+   213→- correct client state
+   214→- correct serialized value
+   215→- correct API payload
+   216→- correct server parsing
+   217→- correct validation
+   218→- correct DB field
+   219→- correct DB type
+   220→- correct DB value
+   221→- correct API response
+   222→- correct UI display
+   223→- correct value after page reload
+   224→- correct value after logout/login
+   225→- correct value after navigating away and back
+   226→
+   227→Look specifically for:
+   228→
+   229→- fields omitted from payload
+   230→- fields renamed between frontend/backend
+   231→- null replacing an actual value
+   232→- empty string replacing null
+   233→- number converted to string
+   234→- string converted incorrectly to number
+   235→- decimal truncation
+   236→- boolean conversion bugs
+   237→- unchecked checkbox values disappearing
+   238→- arrays being serialized incorrectly
+   239→- nested objects being dropped
+   240→- optional fields accidentally overwritten
+   241→- update endpoints resetting fields not included in the request
+   242→- PATCH behaving like PUT
+   243→- stale Zustand state
+   244→- stale React Query cache
+   245→- optimistic updates that are never persisted
+   246→- UI displaying temporary local state
+   247→- save returning success while some fields fail silently
+   248→
+   249→==================================================
+   250→PHASE 4: NEW TRADE WIZARD DEEP TEST
+   251→==================================================
+   252→
+   253→Test the complete current New Trade flow step by step.
+   254→
+   255→Current expected structure:
+   256→
+   257→1. Trade Info
+   258→2. Setup Checklist
+   259→3. Risk & Sizing
+   260→4. Partial Exits
+   261→5. Review & Save
+   262→
+   263→Do NOT assume these exact fields without inspecting the current implementation.
+   264→
+   265→For EVERY field:
+   266→
+   267→Enter a deliberately distinctive test value.
+   268→
+   269→Example:
+   270→
+   271→symbol = NQ
+   272→direction = LONG
+   273→entry = 20000
+   274→stop = 19950
+   275→target = 20100
+   276→risk = etc.
+   277→
+   278→Use distinctive values that make accidental substitutions obvious.
+   279→
+   280→After each step:
+   281→
+   282→- inspect form state
+   283→- inspect submitted payload where possible
+   284→- inspect server processing
+   285→- verify data is still present when moving to next step
+   286→
+   287→Especially test:
+   288→
+   289→- going backward and forward between steps
+   290→- refreshing during the form
+   291→- changing one field after entering another
+   292→- changing direction
+   293→- changing instrument
+   294→- changing account
+   295→- changing strategy
+   296→- changing risk
+   297→- changing partial targets
+   298→- editing checklist conditions
+   299→- clearing optional fields
+   300→- adding optional values
+   301→- saving with optional fields blank
+   302→- saving with all fields populated
+   303→
+   304→Verify that step transitions do not accidentally reset data.
+   305→
+   306→==================================================
+   307→PHASE 5: TRADE INFORMATION TEST
+   308→==================================================
+   309→
+   310→Test every trade-information field.
+   311→
+   312→Verify:
+   313→
+   314→- account
+   315→- instrument
+   316→- symbol
+   317→- direction
+   318→- trade date
+   319→- session
+   320→- timeframe
+   321→- strategy
+   322→- setup
+   323→- status
+   324→- entry price
+   325→- stop loss
+   326→- take profit
+   327→- planned risk
+   328→- notes
+   329→- any current metadata fields
+   330→
+   331→Test both LONG and SHORT.
+   332→
+   333→Test multiple instruments.
+   334→
+   335→Test FX, gold, indices, and any other currently supported instrument categories.
+   336→
+   337→Verify that the selected instrument is represented by the correct internal instrument ID when the backend expects one.
+   338→
+   339→Do not allow a displayed symbol to silently fall back to generic instrument metadata.
+   340→
+   341→==================================================
+   342→PHASE 6: FINANCIAL CALCULATION AUDIT
+   343→==================================================
+   344→
+   345→This is CRITICAL.
+   346→
+   347→Do not merely compare the application's output with another application.
+   348→
+   349→Independently calculate expected values from the actual input values.
+   350→
+   351→For each test case calculate:
+   352→
+   353→- price movement
+   354→- point/tick movement
+   355→- monetary movement
+   356→- gross P&L
+   357→- fees if supported
+   358→- net P&L
+   359→- risk amount
+   360→- R multiple
+   361→- reward amount
+   362→- risk/reward ratio
+   363→- position size
+   364→- percentage return where applicable
+   365→
+   366→Use exact arithmetic where appropriate.
+   367→
+   368→Avoid floating-point assumptions.
+   369→
+   370→Use the correct instrument metadata:
+   371→
+   372→- tick size
+   373→- tick value
+   374→- point value
+   375→- contract size
+   376→- pip value
+   377→- currency conversion where applicable
+   378→
+   379→Verify that the application uses the correct metadata for the selected account + instrument.
+   380→
+   381→==================================================
+   382→PHASE 7: CALCULATION TEST MATRIX
+   383→==================================================
+   384→
+   385→Create a deterministic matrix of test trades.
+   386→
+   387→At minimum test:
+   388→
+   389→CASE 1:
+   390→LONG
+   391→Entry 100
+   392→Stop 90
+   393→Target 120
+   394→
+   395→CASE 2:
+   396→SHORT
+   397→Entry 100
+   398→Stop 110
+   399→Target 80
+   400→
+   401→CASE 3:
+   402→LONG
+   403→Entry 100
+   404→Stop 99
+   405→Exit 101
+   406→
+   407→CASE 4:
+   408→SHORT
+   409→Entry 100
+   410→Stop 101
+   411→Exit 99
+   412→
+   413→CASE 5:
+   414→Zero movement
+   415→
+   416→CASE 6:
+   417→Very small movement
+   418→
+   419→CASE 7:
+   420→Large movement
+   421→
+   422→CASE 8:
+   423→Partial exit
+   424→
+   425→CASE 9:
+   426→Multiple partial exits
+   427→
+   428→CASE 10:
+   429→Different position size
+   430→
+   431→CASE 11:
+   432→Different account balance
+   433→
+   434→CASE 12:
+   435→Different risk percentage
+   436→
+   437→CASE 13:
+   438→Gold
+   439→
+   440→CASE 14:
+   441→NQ
+   442→
+   443→CASE 15:
+   444→ES
+   445→
+   446→CASE 16:
+   447→A supported FX pair
+   448→
+   449→Use realistic metadata from the CURRENT instrument catalog/database, not guessed constants.
+   450→
+   451→For every case produce:
+   452→
+   453→INPUTS
+   454→EXPECTED RESULT
+   455→APPLICATION RESULT
+   456→MATCH: YES/NO
+   457→
+   458→Do not hide discrepancies.
+   459→
+   460→==================================================
+   461→PHASE 8: RISK & POSITION SIZE AUDIT
+   462→==================================================
+   463→
+   464→Verify every risk-related calculation.
+   465→
+   466→Test:
+   467→
+   468→- risk amount
+   469→- risk percentage
+   470→- account balance
+   471→- position size
+   472→- stop distance
+   473→- point/tick distance
+   474→- monetary risk
+   475→- reward
+   476→- planned R
+   477→- actual R
+   478→
+   479→Test edge cases:
+   480→
+   481→- 0 risk
+   482→- negative risk
+   483→- zero stop distance
+   484→- extremely large stop
+   485→- very small stop
+   486→- fractional position size
+   487→- unsupported precision
+   488→- account balance changes
+   489→- risk percentage changes
+   490→- account selection changes
+   491→
+   492→Verify validation prevents mathematically invalid trades.
+   493→
+   494→Important:
+   495→
+   496→Never allow a UI value to look correct while the stored numeric value is different.
+   497→
+   498→==================================================
+   499→PHASE 9: PARTIAL EXIT AUDIT
+   500→==================================================
+   501→
+   502→Test partial exits deeply.
+   503→
+   504→Create a trade with:
+   505→
+   506→TP1
+   507→TP2
+   508→TP3
+   509→
+   510→Use different quantities/percentages.
+   511→
+   512→Verify:
+   513→
+   514→- every target saves
+   515→- target ordering saves
+   516→- prices save
+   517→- percentages save
+   518→- quantities save
+   519→- realized P&L is correct
+   520→- remaining quantity is correct
+   521→- remaining risk is correct where applicable
+   522→- actual R is correct
+   523→- aggregate realized P&L is correct
+   524→- reopening trade detail returns the same targets
+   525→- editing the trade does not erase targets
+   526→- closing the trade updates the correct target/execution fields
+   527→
+   528→Test:
+   529→
+   530→- one target
+   531→- two targets
+   532→- three targets
+   533→- all targets
+   534→- partial close
+   535→- full close
+   536→- uneven percentages
+   537→- exact 100%
+   538→- values totaling below 100%
+   539→- invalid values above 100%
+   540→
+   541→Check whether percentages and quantities are interpreted consistently.
+   542→
+   543→==================================================
+   544→PHASE 10: TRADE EXECUTION STATE MACHINE
+   545→==================================================
+   546→
+   547→Verify all current trade states.
+   548→
+   549→Test valid transitions such as:
+   550→
+   551→DRAFT → PLANNED
+   552→PLANNED → OPEN
+   553→OPEN → WIN
+   554→OPEN → LOSS
+   555→OPEN → BREAKEVEN
+   556→OPEN → PARTIAL_WIN
+   557→OPEN → PARTIAL_LOSS
+   558→
+   559→Verify invalid transitions are rejected.
+   560→
+   561→Verify:
+   562→
+   563→- status is persisted
+   564→- status survives reload
+   565→- status survives logout/login
+   566→- execution data is stored correctly
+   567→- close data is stored correctly
+   568→- partial execution does not corrupt planned data
+   569→- reopening detail shows the correct state
+   570→- Dashboard reflects the new state
+   571→- Calendar reflects the correct date
+   572→- Analytics reflects the correct result
+   573→
+   574→==================================================
+   575→PHASE 11: STRATEGY + CHECKLIST AUDIT
+   576→==================================================
+   577→
+   578→Test strategy creation.
+   579→
+   580→Test:
+   581→
+   582→- strategy name
+   583→- description
+   584→- active/inactive
+   585→- version
+   586→- version number
+   587→- rules
+   588→- conditions
+   589→- weights
+   590→- required conditions
+   591→- checklist values
+   592→
+   593→Verify immutable strategy version behavior.
+   594→
+   595→Then create a trade using that strategy.
+   596→
+   597→Verify:
+   598→
+   599→- correct strategy attached
+   600→- correct strategy version attached
+   601→- checklist generated from correct version
+   602→- actual checklist values save
+   603→- score is calculated server-side
+   604→- client cannot manipulate the final score
+   605→- snapshot stores the evaluated result
+   606→- snapshot references the correct strategy version
+   607→
+   608→Test anti-cheat:
+   609→
+   610→Send a deliberately false client score.
+   611→
+   612→Verify server ignores it and recomputes the correct score.
+   613→
+   614→==================================================
+   615→PHASE 12: PSYCHOLOGY / TRADE DOCUMENTATION AUDIT
+   616→==================================================
+   617→
+   618→Test every existing psychology/documentation field.
+   619→
+   620→For each:
+   621→
+   622→- enter value
+   623→- save
+   624→- reload
+   625→- verify exact value
+   626→- logout/login
+   627→- verify again
+   628→
+   629→Check for fields that appear in the UI but are not actually persisted.
+   630→
+   631→This is a likely source of the current user-reported saving problems.
+   632→
+   633→==================================================
+   634→PHASE 13: EDIT EXISTING TRADE AUDIT
+   635→==================================================
+   636→
+   637→This is critical.
+   638→
+   639→Create a trade with EVERY important field populated.
+   640→
+   641→Save it.
+   642→
+   643→Reload.
+   644→
+   645→Then edit ONLY ONE field.
+   646→
+   647→Save.
+   648→
+   649→Verify that:
+   650→
+   651→- changed field changed
+   652→- unchanged fields remained unchanged
+   653→- optional fields remained intact
+   654→- targets remained intact
+   655→- checklist remained intact
+   656→- strategy/version remained intact
+   657→- media remained intact
+   658→- calculations remained correct
+   659→
+   660→Repeat by editing different fields individually.
+   661→
+   662→Look specifically for PATCH requests that unintentionally overwrite unrelated fields.
+   663→
+   664→==================================================
+   665→PHASE 14: NAVIGATION / CACHE / STATE AUDIT
+   666→==================================================
+   667→
+   668→Test:
+   669→
+   670→1. Create data.
+   671→2. Navigate away.
+   672→3. Return.
+   673→4. Reload.
+   674→5. Open another view.
+   675→6. Return.
+   676→7. Sign out.
+   677→8. Sign back in.
+   678→9. Check the data again.
+   679→
+   680→Test:
+   681→
+   682→- Zustand persistence
+   683→- React Query cache
+   684→- invalidation
+   685→- refetch
+   686→- stale data
+   687→- optimistic updates
+   688→- server response synchronization
+   689→
+   690→The UI must never display data that exists only in client memory.
+   691→
+   692→==================================================
+   693→PHASE 15: DASHBOARD AUDIT
+   694→==================================================
+   695→
+   696→Create a controlled dataset.
+   697→
+   698→Example:
+   699→
+   700→Trade 1 = +$100
+   701→Trade 2 = -$50
+   702→Trade 3 = +$200
+   703→Trade 4 = breakeven
+   704→
+   705→Then independently calculate:
+   706→
+   707→- total trades
+   708→- wins
+   709→- losses
+   710→- breakevens
+   711→- win rate
+   712→- total P&L
+   713→- average win
+   714→- average loss
+   715→- profit factor
+   716→- average R
+   717→- best trade
+   718→- worst trade
+   719→- other currently displayed metrics
+   720→
+   721→Compare dashboard output against independently calculated expected values.
+   722→
+   723→Check filtering by:
+   724→
+   725→- account
+   726→- instrument
+   727→- date
+   728→- strategy
+   729→- status
+   730→
+   731→Ensure filters modify calculations correctly.
+   732→
+   733→==================================================
+   734→PHASE 16: ANALYTICS AUDIT
+   735→==================================================
+   736→
+   737→Perform the same controlled-dataset approach.
+   738→
+   739→Verify all currently displayed analytics.
+   740→
+   741→Check:
+   742→
+   743→- aggregation
+   744→- grouping
+   745→- date boundaries
+   746→- strategy grouping
+   747→- instrument grouping
+   748→- account grouping
+   749→- session grouping
+   750→- win rate
+   751→- R multiple
+   752→- P&L
+   753→- drawdown if currently implemented
+   754→- equity metrics if currently implemented
+   755→
+   756→Every chart/table number must be traceable to real database data.
+   757→
+   758→==================================================
+   759→PHASE 17: CALENDAR AUDIT
+   760→==================================================
+   761→
+   762→Create trades on known dates.
+   763→
+   764→Verify:
+   765→
+   766→- correct date placement
+   767→- correct timezone
+   768→- correct month boundaries
+   769→- correct week boundaries
+   770→- correct session/date conversion
+   771→- trade counts
+   772→- P&L values
+   773→- selected-date detail
+   774→
+   775→Test around midnight and timezone boundaries where possible.
+   776→
+   777→==================================================
+   778→PHASE 18: ACCOUNT AUDIT
+   779→==================================================
+   780→
+   781→Test account CRUD.
+   782→
+   783→For each account verify:
+   784→
+   785→- create
+   786→- read
+   787→- update
+   788→- delete if supported
+   789→
+   790→Then create trades tied to different accounts.
+   791→
+   792→Verify account filtering affects:
+   793→
+   794→- trade list
+   795→- dashboard
+   796→- analytics
+   797→- calendar
+   798→- metrics
+   799→
+   800→Verify changing account does not modify previously stored trades.
+   801→
+   802→==================================================
+   803→PHASE 19: SETTINGS PERSISTENCE AUDIT
+   804→==================================================
+   805→
+   806→Test every currently available Settings field.
+   807→
+   808→For each:
+   809→
+   810→SET VALUE
+   811→→ SAVE
+   812→→ RELOAD
+   813→→ LOGOUT
+   814→→ LOGIN
+   815→→ VERIFY
+   816→
+   817→Test:
+   818→
+   819→- profile fields
+   820→- timezone
+   821→- date format
+   822→- time format
+   823→- week start
+   824→- theme
+   825→- density
+   826→- larger text
+   827→- reduced motion
+   828→- trading defaults
+   829→- risk defaults
+   830→- instrument preferences
+   831→- any current settings fields
+   832→
+   833→Do not test removed settings as if they still belong in the product.
+   834→
+   835→==================================================
+   836→PHASE 20: MARKET CLOCK AUDIT
+   837→==================================================
+   838→
+   839→Verify that market clock uses America/New_York correctly.
+   840→
+   841→Test:
+   842→
+   843→- current date
+   844→- current time
+   845→- UTC offset
+   846→- DST
+   847→- session classification
+   848→- session boundaries
+   849→- daylight-saving transition dates
+   850→
+   851→Verify displayed values match New York wall-clock time.
+   852→
+   853→Do not reintroduce a manual UTC-4 / UTC-5 selector.
+   854→
+   855→==================================================
+   856→PHASE 21: AUTHENTICATION AND DATA ISOLATION
+   857→==================================================
+   858→
+   859→Create TWO temporary users.
+   860→
+   861→User A creates:
+   862→
+   863→- account
+   864→- strategy
+   865→- trade
+   866→- media if possible
+   867→- settings
+   868→
+   869→User B logs in.
+   870→
+   871→Verify User B cannot see:
+   872→
+   873→- User A trades
+   874→- User A strategies
+   875→- User A accounts
+   876→- User A settings
+   877→- User A media
+   878→- User A checklist evaluations
+   879→- User A targets
+   880→- any other user-owned records
+   881→
+   882→Then verify direct API access attempts return proper authorization failures.
+   883→
+   884→Also test:
+   885→
+   886→- unauthenticated access
+   887→- expired/invalid session
+   888→- protected route access
+   889→
+   890→==================================================
+   891→PHASE 22: MEDIA PERSISTENCE
+   892→==================================================
+   893→
+   894→Test current media implementation.
+   895→
+   896→Verify:
+   897→
+   898→upload
+   899→→ progress
+   900→→ storage
+   901→→ DB metadata
+   902→→ trade association
+   903→→ display
+   904→→ reload
+   905→→ logout/login
+   906→→ display again
+   907→
+   908→Then test deletion where supported.
+   909→
+   910→Confirm no orphan records/files remain.
+   911→
+   912→==================================================
+   913→PHASE 23: MOBILE / RESPONSIVE TEST
+   914→==================================================
+   915→
+   916→Test the application at realistic mobile viewport sizes.
+   917→
+   918→Verify:
+   919→
+   920→- login
+   921→- signup
+   922→- onboarding
+   923→- dashboard
+   924→- trade list
+   925→- new trade
+   926→- trade detail
+   927→- trade editing
+   928→- calendar
+   929→- analytics
+   930→- settings
+   931→- profile
+   932→- bottom navigation
+   933→- modals
+   934→- dropdowns
+   935→- forms
+   936→
+   937→Look for:
+   938→
+   939→- clipped values
+   940→- hidden fields
+   941→- broken scrolling
+   942→- fixed navigation covering inputs
+   943→- calculations wrapping incorrectly
+   944→- unusable dialogs
+   945→- input reset
+   946→- accidental horizontal overflow
+   947→
+   948→==================================================
+   949→PHASE 24: API CONTRACT AUDIT
+   950→==================================================
+   951→
+   952→For every major API endpoint:
+   953→
+   954→Verify:
+   955→
+   956→REQUEST
+   957→→ VALIDATION
+   958→→ SERVER LOGIC
+   959→→ DATABASE WRITE
+   960→→ DATABASE READ
+   961→→ RESPONSE
+   962→
+   963→Compare:
+   964→
+   965→TypeScript request types
+   966→against
+   967→actual payload
+   968→
+   969→and
+   970→
+   971→Prisma model fields
+   972→against
+   973→API response fields
+   974→
+   975→Look for naming mismatches such as:
+   976→
+   977→symbol vs instrumentId
+   978→strategyId vs strategyVersionId
+   979→score vs calculatedScore
+   980→amount vs amountCents
+   981→price vs entryPrice
+   982→percentage vs decimal
+   983→etc.
+   984→
+   985→Do not assume these exact mismatches exist. Find the actual ones.
+   986→
+   987→==================================================
+   988→PHASE 25: NUMBER REPRESENTATION AUDIT
+   989→==================================================
+   990→
+   991→This is extremely important.
+   992→
+   993→Search the entire application for:
+   994→
+   995→- parseFloat
+   996→- Number(...)
+   997→- unary +
+   998→- toFixed
+   999→- Math.round
+  1000→- Math.floor
+  1001→- Math.ceil
+  1002→- floating-point arithmetic
+  1003→- dollars/cents conversions
+  1004→- price/tick conversions
+  1005→- percentage conversions
+  1006→- R calculations
+  1007→
+  1008→Identify places where precision may be lost.
+  1009→
+  1010→For every monetary calculation determine:
+  1011→
+  1012→- source unit
+  1013→- intermediate unit
+  1014→- final unit
+  1015→
+  1016→Example:
+  1017→
+  1018→$100
+  1019→10000 cents
+  1020→
+  1021→Make sure conversions are deliberate and consistent.
+  1022→
+  1023→Do the same for:
+  1024→
+  1025→- percentage
+  1026→- ratio
+  1027→- price
+  1028→- points
+  1029→- ticks
+  1030→- quantity
+  1031→
+  1032→==================================================
+  1033→PHASE 26: EDGE CASE TESTING
+  1034→==================================================
+  1035→
+  1036→Test:
+  1037→
+  1038→- zero
+  1039→- negative values
+  1040→- extremely large values
+  1041→- very small decimals
+  1042→- decimal prices
+  1043→- integer prices
+  1044→- blank values
+  1045→- null values
+  1046→- undefined values
+  1047→- optional fields
+  1048→- maximum lengths
+  1049→- invalid enums
+  1050→- invalid IDs
+  1051→- duplicate records
+  1052→- duplicate names
+  1053→- invalid account
+  1054→- invalid strategy
+  1055→- invalid instrument
+  1056→- invalid target
+  1057→- invalid percentage
+  1058→- invalid risk
+  1059→- equal entry/stop
+  1060→- negative stop distance
+  1061→- negative reward
+  1062→- 0R
+  1063→- fractional R
+  1064→- large R
+  1065→- partial percentages summing to 100%
+  1066→- percentages below 100%
+  1067→- percentages above 100%
+  1068→
+  1069→Verify the application handles these intentionally.
+  1070→
+  1071→==================================================
+  1072→PHASE 27: SAVE/RELOAD CONSISTENCY TEST
+  1073→==================================================
+  1074→
+  1075→For the most important objects perform this exact sequence:
+  1076→
+  1077→CREATE
+  1078→→ SAVE
+  1079→→ READ FROM DATABASE
+  1080→→ RELOAD PAGE
+  1081→→ READ FROM API
+  1082→→ RENDER UI
+  1083→→ LOGOUT
+  1084→→ LOGIN
+  1085→→ RENDER UI
+  1086→→ EDIT
+  1087→→ SAVE
+  1088→→ READ DATABASE
+  1089→→ RELOAD
+  1090→→ VERIFY AGAIN
+  1091→
+  1092→Perform this independently for:
+  1093→
+  1094→- user settings
+  1095→- account
+  1096→- strategy
+  1097→- strategy version
+  1098→- trade
+  1099→- checklist
+  1100→- psychology data
+  1101→- targets
+  1102→- execution/close data
+  1103→- media metadata
+  1104→
+  1105→This test should expose most persistence bugs.
+  1106→
+  1107→==================================================
+  1108→PHASE 28: CONTROLLED GOLDEN TEST DATASET
+  1109→==================================================
+  1110→
+  1111→Create a temporary test dataset specifically for mathematical verification.
+  1112→
+  1113→Choose values whose expected results are easy to calculate manually.
+  1114→
+  1115→For example:
+  1116→
+  1117→Account balance:
+  1118→$10,000
+  1119→
+  1120→Risk:
+  1121→1%
+  1122→
+  1123→Risk amount:
+  1124→$100
+  1125→
+  1126→Trade:
+  1127→NQ LONG
+  1128→
+  1129→Entry:
+  1130→20,000
+  1131→
+  1132→Stop:
+  1133→19,950
+  1134→
+  1135→Exit:
+  1136→20,100
+  1137→
+  1138→Use the CURRENT actual NQ instrument metadata.
+  1139→
+  1140→Independently calculate:
+  1141→
+  1142→stop distance
+  1143→point movement
+  1144→tick movement
+  1145→money per point
+  1146→gross P&L
+  1147→risk
+  1148→R multiple
+  1149→reward/risk
+  1150→
+  1151→Then compare every corresponding DnD value.
+  1152→
+  1153→Repeat for:
+  1154→
+  1155→- NQ LONG
+  1156→- NQ SHORT
+  1157→- ES LONG
+  1158→- ES SHORT
+  1159→- Gold LONG
+  1160→- Gold SHORT
+  1161→- one FX pair LONG
+  1162→- one FX pair SHORT
+  1163→
+  1164→==================================================
+  1165→PHASE 29: CROSS-SCREEN CONSISTENCY
+  1166→==================================================
+  1167→
+  1168→A trade's values must remain consistent everywhere.
+  1169→
+  1170→Take one known trade and compare:
+  1171→
+  1172→Trade Detail
+  1173→Trade List
+  1174→Dashboard
+  1175→Analytics
+  1176→Calendar
+  1177→Edit form
+  1178→
+  1179→Check:
+  1180→
+  1181→- symbol
+  1182→- direction
+  1183→- entry
+  1184→- stop
+  1185→- exit
+  1186→- risk
+  1187→- reward
+  1188→- P&L
+  1189→- R
+  1190→- status
+  1191→- date
+  1192→- account
+  1193→- strategy
+  1194→
+  1195→There must be exactly one source of truth.
+  1196→
+  1197→If one screen says:
+  1198→
+  1199→+$1,000
+  1200→
+  1201→and another says:
+  1202→
+  1203→+$999.99
+  1204→
+  1205→that is a defect.
+  1206→
+  1207→==================================================
+  1208→PHASE 30: ERROR HANDLING
+  1209→==================================================
+  1210→
+  1211→Test failed saves intentionally.
+  1212→
+  1213→Examples:
+  1214→
+  1215→- invalid price
+  1216→- invalid account
+  1217→- invalid strategy
+  1218→- missing required field
+  1219→- invalid target
+  1220→- unauthorized request
+  1221→- malformed API body
+  1222→- database constraint failure
+  1223→
+  1224→Verify:
+  1225→
+  1226→- meaningful error shown
+  1227→- no false success toast
+  1228→- no partially corrupted record
+  1229→- failed transactions roll back where required
+  1230→- UI state does not pretend the data was saved
+  1231→
+  1232→==================================================
+  1233→PHASE 31: TRANSACTIONAL INTEGRITY
+  1234→==================================================
+  1235→
+  1236→For multi-record operations verify atomicity.
+  1237→
+  1238→Example:
+  1239→
+  1240→Trade creation may involve:
+  1241→
+  1242→Trade
+  1243→+ checklist
+  1244→+ checklist evaluation
+  1245→+ targets
+  1246→+ execution-related records
+  1247→+ media metadata
+  1248→
+  1249→Simulate a failure during one component.
+  1250→
+  1251→Verify the system does not leave half-created orphan records unless intentionally designed to do so.
+  1252→
+  1253→Use database transactions where required.
+  1254→
+  1255→==================================================
+  1256→PHASE 32: CODE-LEVEL STATIC AUDIT
+  1257→==================================================
+  1258→
+  1259→Search for:
+  1260→
+  1261→- TODO
+  1262→- FIXME
+  1263→- temporary hacks
+  1264→- hardcoded values
+  1265→- stale model names
+  1266→- dead API fields
+  1267→- unused calculations
+  1268→- duplicate calculation logic
+  1269→- duplicate instrument metadata
+  1270→- duplicated conversion formulas
+  1271→- silent catch blocks
+  1272→- swallowed errors
+  1273→- console-only error handling
+  1274→- ignored TypeScript errors
+  1275→- `any`
+  1276→- build-error suppression
+  1277→- fallback values that hide missing data
+  1278→- hardcoded database assumptions
+  1279→- hardcoded user IDs
+  1280→- hardcoded demo/test data
+  1281→
+  1282→Pay special attention to calculation duplication.
+  1283→
+  1284→There should ideally be one authoritative financial calculation engine.
+  1285→
+  1286→==================================================
+  1287→PHASE 33: BROWSER CONSOLE / NETWORK AUDIT
+  1288→==================================================
+  1289→
+  1290→During browser testing inspect:
+  1291→
+  1292→- console errors
+  1293→- failed requests
+  1294→- 4xx
+  1295→- 5xx
+  1296→- hydration errors
+  1297→- serialization errors
+  1298→- React warnings
+  1299→- stale requests
+  1300→- duplicate requests
+  1301→- aborted requests
+  1302→- failed media requests
+  1303→- failed API responses
+  1304→
+  1305→A UI that appears to save successfully while the network request fails must be treated as FAIL.
+  1306→
+  1307→==================================================
+  1308→PHASE 34: NEON DATABASE VERIFICATION
+  1309→==================================================
+  1310→
+  1311→For every major test object:
+  1312→
+  1313→Compare UI
+  1314→against API
+  1315→against actual Neon database.
+  1316→
+  1317→Do not use only one source.
+  1318→
+  1319→Example:
+  1320→
+  1321→UI says:
+  1322→
+  1323→gross P&L = 10000
+  1324→
+  1325→API says:
+  1326→
+  1327→grossPnlCents = 1000000
+  1328→
+  1329→Neon says:
+  1330→
+  1331→grossPnlCents = 1000000
+  1332→
+  1333→That is consistent.
+  1334→
+  1335→If the UI says 10,000 but Neon contains 9,999.99, FAIL.
+  1336→
+  1337→==================================================
+  1338→PHASE 35: FIXING DEFECTS
+  1339→==================================================
+  1340→
+  1341→When a defect is found:
+  1342→
+  1343→1. Document the exact reproduction.
+  1344→2. Identify root cause.
+  1345→3. Fix only the necessary code.
+  1346→4. Run the failing test again.
+  1347→5. Run relevant regression tests.
+  1348→6. Check related screens.
+  1349→7. Confirm database value.
+  1350→8. Confirm reload value.
+  1351→9. Confirm logout/login value.
+  1352→10. Confirm no unrelated behavior changed.
+  1353→
+  1354→Do not just patch the displayed number.
+  1355→
+  1356→Fix the underlying data/calc/persistence flow.
+  1357→
+  1358→==================================================
+  1359→PHASE 36: FINAL CLEANUP
+  1360→==================================================
+  1361→
+  1362→After all tests:
+  1363→
+  1364→1. Delete all temporary users.
+  1365→2. Delete all temporary accounts.
+  1366→3. Delete all temporary strategies.
+  1367→4. Delete all temporary versions.
+  1368→5. Delete all temporary trades.
+  1369→6. Delete all temporary checklist records.
+  1370→7. Delete all temporary targets.
+  1371→8. Delete all temporary media metadata.
+  1372→9. Delete all temporary media files.
+  1373→10. Remove all other temporary test records.
+  1374→
+  1375→DO NOT delete real user data.
+  1376→
+  1377→Then verify no temporary records remain.
+  1378→
+  1379→==================================================
+  1380→PHASE 37: FINAL REPORT
+  1381→==================================================
+  1382→
+  1383→Produce a detailed but factual report.
+  1384→
+  1385→Do NOT say "everything works" unless everything was actually tested.
+  1386→
+  1387→Use this structure:
+  1388→
+  1389→# DnD Full System QA Report
+  1390→
+  1391→## A. Environment
+  1392→- Next.js
+  1393→- React
+  1394→- TypeScript
+  1395→- Prisma
+  1396→- Database provider
+  1397→- Neon database
+  1398→- Environment
+  1399→- Server status
+  1400→
+  1401→## B. Executive Result
+  1402→- PASS count
+  1403→- FAIL count
+  1404→- BLOCKED count
+  1405→- Critical defects
+  1406→- Major defects
+  1407→- Minor defects
+  1408→
+  1409→## C. Persistence Audit
+  1410→For every major feature:
+  1411→
+  1412→Feature
+  1413→→ Save
+  1414→→ DB
+  1415→→ Reload
+  1416→→ Login/reload
+  1417→→ Result
+  1418→
+  1419→## D. Calculation Audit
+  1420→
+  1421→For every calculation test:
+  1422→
+  1423→Test Case
+  1424→Inputs
+  1425→Expected
+  1426→Actual
+  1427→Difference
+  1428→PASS/FAIL
+  1429→
+  1430→## E. Trade Lifecycle Audit
+  1431→
+  1432→List tested states and transitions.
+  1433→
+  1434→## F. Strategy/Checklist Audit
+  1435→
+  1436→Include server-side score verification.
+  1437→
+  1438→## G. Dashboard Audit
+  1439→
+  1440→Expected vs actual metrics.
+  1441→
+  1442→## H. Analytics Audit
+  1443→
+  1444→Expected vs actual metrics.
+  1445→
+  1446→## I. Calendar Audit
+  1447→
+  1448→Expected vs actual values.
+  1449→
+  1450→## J. Settings Audit
+  1451→
+  1452→Every setting tested.
+  1453→
+  1454→## K. Account Audit
+  1455→
+  1456→CRUD and filtering.
+  1457→
+  1458→## L. Authentication/Data Isolation
+  1459→
+  1460→User A vs User B.
+  1461→
+  1462→## M. Media
+  1463→
+  1464→Upload/save/reload/delete result.
+  1465→
+  1466→## N. Mobile
+  1467→
+  1468→Responsive results.
+  1469→
+  1470→## O. API Contract Problems
+  1471→
+  1472→List any mismatches.
+  1473→
+  1474→## P. Database Problems
+  1475→
+  1476→List any schema/persistence problems.
+  1477→
+  1478→## Q. Calculation Problems
+  1479→
+  1480→List every mathematical discrepancy.
+  1481→
+  1482→## R. Code Problems
+  1483→
+  1484→List relevant implementation defects.
+  1485→
+  1486→## S. Fixes Applied
+  1487→
+  1488→For every fix:
+  1489→
+  1490→Problem
+  1491→Root Cause
+  1492→File(s) Changed
+  1493→Fix
+  1494→Regression Test
+  1495→
+  1496→## T. Remaining Problems
+  1497→
+  1498→Only real unresolved issues.
+  1499→
+  1500→## U. Final Data State
+  1501→
+  1502→- temporary users remaining
+  1503→- temporary records remaining
+  1504→- orphan media remaining
+  1505→- real user data preserved
+  1506→
+  1507→==================================================
+  1508→FINAL REQUIREMENT
+  1509→==================================================
+  1510→
+  1511→I am specifically concerned that:
+  1512→
+  1513→1. some fields are not being saved
+  1514→2. some saved values disappear after reload
+  1515→3. some numbers are being calculated incorrectly
+  1516→
+  1517→Therefore, prioritize those three areas above visual polish.
+  1518→
+  1519→DO NOT stop after checking that buttons work.
+  1520→
+  1521→I want proof that:
+  1522→
+  1523→UI INPUT
+  1524→=
+  1525→REQUEST PAYLOAD
+  1526→=
+  1527→SERVER VALUE
+  1528→=
+  1529→DATABASE VALUE
+  1530→=
+  1531→RELOADED VALUE
+  1532→=
+  1533→DISPLAYED VALUE
+  1534→
+  1535→and:
+  1536→
+  1537→INPUTS
+  1538→→ AUTHORITATIVE CALCULATION ENGINE
+  1539→→ DATABASE RESULT
+  1540→→ DISPLAYED RESULT
+  1541→
+  1542→must all agree.
+  1543→
+  1544→If they do not agree, find exactly where the value changes and fix that layer.
+  1545→
+  1546→Do not hide discrepancies.
+  1547→
+  1548→Do not fabricate successful tests.
+  1549→
+  1550→Do not reset the Neon database.
+  1551→
+  1552→Perform the audit systematically from start to finish.

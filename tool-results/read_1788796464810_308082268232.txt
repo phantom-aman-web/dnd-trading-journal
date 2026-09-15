@@ -1,0 +1,889 @@
+     1→"use client";
+     2→
+     3→import { useEffect, useState } from "react";
+     4→import { Button } from "@/components/ui/button";
+     5→import { Input } from "@/components/ui/input";
+     6→import { Textarea } from "@/components/ui/textarea";
+     7→import { Badge } from "@/components/ui/badge";
+     8→import { Progress } from "@/components/ui/progress";
+     9→import {
+    10→  Select,
+    11→  SelectContent,
+    12→  SelectItem,
+    13→  SelectTrigger,
+    14→  SelectValue,
+    15→} from "@/components/ui/select";
+    16→import {
+    17→  ArrowLeft,
+    18→  ArrowRight,
+    19→  Check,
+    20→  Loader2,
+    21→  SkipForward,
+    22→  X,
+    23→  Wallet,
+    24→  CandlestickChart,
+    25→  BookMarked,
+    26→  ListChecks,
+    27→  ClipboardList,
+    28→  PencilLine,
+    29→} from "lucide-react";
+    30→import { toast } from "sonner";
+    31→import { FieldLabel } from "@/components/common/field-label";
+    32→import { useNav } from "@/lib/nav-store";
+    33→import { useQueryClient } from "@tanstack/react-query";
+    34→import {
+    35→  useOnboarding,
+    36→  TOTAL_SETUP_STEPS,
+    37→  type SetupStep,
+    38→} from "@/lib/onboarding-store";
+    39→
+    40→const CURRENCIES = ["USD", "EUR", "GBP", "JPY", "AUD", "CAD", "CHF", "NZD"];
+    41→const MARKETS = [
+    42→  { value: "forex", label: "Forex" },
+    43→  { value: "gold", label: "Gold" },
+    44→  { value: "indices", label: "Indices" },
+    45→  { value: "futures", label: "Futures" },
+    46→  { value: "crypto", label: "Crypto" },
+    47→  { value: "stocks", label: "Stocks" },
+    48→  { value: "custom", label: "Custom" },
+    49→];
+    50→const SESSIONS = [
+    51→  { value: "asia", label: "Asia" },
+    52→  { value: "london", label: "London" },
+    53→  { value: "ny_am", label: "New York AM" },
+    54→  { value: "ny_pm", label: "New York PM" },
+    55→  { value: "mixed", label: "Mixed" },
+    56→];
+    57→
+    58→const STEP_META = [
+    59→  {
+    60→    key: "account" as const,
+    61→    title: "Trading Account",
+    62→    description:
+    63→      "Your account stores the balance and settings used to measure your performance.",
+    64→    icon: Wallet,
+    65→  },
+    66→  {
+    67→    key: "instrument" as const,
+    68→    title: "Instruments",
+    69→    description: "Tell DnD what markets you trade.",
+    70→    icon: CandlestickChart,
+    71→  },
+    72→  {
+    73→    key: "strategy" as const,
+    74→    title: "Strategy",
+    75→    description:
+    76→      "A Strategy defines how you trade. Create your first one — you will refine its rules next.",
+    77→    icon: BookMarked,
+    78→  },
+    79→  {
+    80→    key: "strategy" as const,
+    81→    title: "Strategy Rules",
+    82→    description:
+    83→      "These are the conditions your strategy requires. They become the setup-quality checklist used during trades.",
+    84→    icon: ListChecks,
+    85→  },
+    86→  {
+    87→    key: "plan" as const,
+    88→    title: "Daily Plan",
+    89→    description: "Before you trade, define what you expect.",
+    90→    icon: ClipboardList,
+    91→  },
+    92→  {
+    93→    key: "trade" as const,
+    94→    title: "First Trade",
+    95→    description: "Now record what actually happened.",
+    96→    icon: PencilLine,
+    97→  },
+    98→];
+    99→
+   100→export function SetupWizard() {
+   101→  const {
+   102→    state,
+   103→    setupStep,
+   104→    nextSetupStep,
+   105→    prevSetupStep,
+   106→    completeStep,
+   107→    setState,
+   108→  } = useOnboarding();
+   109→  const visible = state === "setup";
+   110→
+   111→  // Escape key skips the wizard.
+   112→  useEffect(() => {
+   113→    if (!visible) return;
+   114→    const handler = (e: KeyboardEvent) => {
+   115→      if (e.key === "Escape") {
+   116→        e.preventDefault();
+   117→        setState("skipped");
+   118→      }
+   119→    };
+   120→    window.addEventListener("keydown", handler);
+   121→    return () => window.removeEventListener("keydown", handler);
+   122→  }, [visible, setState]);
+   123→
+   124→  if (!visible) return null;
+   125→
+   126→  const step = STEP_META[setupStep];
+   127→  const Icon = step.icon;
+   128→  const progress = ((setupStep + 1) / TOTAL_SETUP_STEPS) * 100;
+   129→
+   130→  function handleSkip() {
+   131→    completeStep(step.key);
+   132→    if (setupStep === TOTAL_SETUP_STEPS - 1) {
+   133→      setState("tour");
+   134→    } else {
+   135→      nextSetupStep();
+   136→    }
+   137→  }
+   138→
+   139→  return (
+   140→    <div
+   141→      role="dialog"
+   142→      aria-modal="true"
+   143→      aria-labelledby="setup-title"
+   144→      className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-in fade-in duration-200"
+   145→    >
+   146→      <div className="w-full max-w-2xl max-h-[92vh] flex flex-col rounded-xl border border-border bg-card text-card-foreground shadow-xl animate-in zoom-in-95 duration-200">
+   147→        {/* Header */}
+   148→        <div className="flex items-start justify-between gap-3 border-b border-border p-5 sm:p-6">
+   149→          <div className="flex items-start gap-3 min-w-0">
+   150→            <div className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-primary/10 text-primary">
+   151→              <Icon className="h-5 w-5" />
+   152→            </div>
+   153→            <div className="min-w-0">
+   154→              <div className="flex items-center gap-2">
+   155→                <Badge variant="outline" className="text-[10px] uppercase tracking-wider">
+   156→                  Step {setupStep + 1} of {TOTAL_SETUP_STEPS}
+   157→                </Badge>
+   158→              </div>
+   159→              <h2 id="setup-title" className="mt-1 text-lg font-semibold tracking-tight">
+   160→                {step.title}
+   161→              </h2>
+   162→              <p className="mt-1 text-sm text-muted-foreground">
+   163→                {step.description}
+   164→              </p>
+   165→            </div>
+   166→          </div>
+   167→          <button
+   168→            aria-label="Close setup wizard"
+   169→            onClick={() => setState("skipped")}
+   170→            className="inline-flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+   171→          >
+   172→            <X className="h-4 w-4" />
+   173→          </button>
+   174→        </div>
+   175→
+   176→        {/* Progress */}
+   177→        <div className="px-5 sm:px-6 pt-4">
+   178→          <Progress value={progress} className="h-1.5" />
+   179→        </div>
+   180→
+   181→        {/* Step body */}
+   182→        <div className="flex-1 overflow-y-auto scroll-thin px-5 sm:px-6 py-5">
+   183→          {setupStep === 0 && <AccountStep onDone={() => advance(setupStep, nextSetupStep, completeStep, step.key, setState)} />}
+   184→          {setupStep === 1 && <InstrumentStep onDone={() => advance(setupStep, nextSetupStep, completeStep, step.key, setState)} />}
+   185→          {setupStep === 2 && <StrategyStep onDone={() => advance(setupStep, nextSetupStep, completeStep, step.key, setState)} />}
+   186→          {setupStep === 3 && <StrategyRulesStep onDone={() => advance(setupStep, nextSetupStep, completeStep, step.key, setState)} />}
+   187→          {setupStep === 4 && <PlanStep onDone={() => advance(setupStep, nextSetupStep, completeStep, step.key, setState)} />}
+   188→          {setupStep === 5 && <TradeStep onDone={() => advance(setupStep, nextSetupStep, completeStep, step.key, setState)} />}
+   189→        </div>
+   190→
+   191→        {/* Footer */}
+   192→        <div className="flex items-center justify-between gap-2 border-t border-border p-4 sm:px-6">
+   193→          <Button
+   194→            variant="ghost"
+   195→            size="sm"
+   196→            onClick={() => prevSetupStep()}
+   197→            disabled={setupStep === 0}
+   198→            className="text-muted-foreground"
+   199→          >
+   200→            <ArrowLeft className="h-4 w-4" /> Back
+   201→          </Button>
+   202→          <Button
+   203→            variant="ghost"
+   204→            size="sm"
+   205→            onClick={handleSkip}
+   206→            className="text-muted-foreground"
+   207→          >
+   208→            Skip <SkipForward className="h-4 w-4" />
+   209→          </Button>
+   210→        </div>
+   211→      </div>
+   212→    </div>
+   213→  );
+   214→}
+   215→
+   216→function advance(
+   217→  currentStep: number,
+   218→  next: () => void,
+   219→  complete: (s: SetupStep) => void,
+   220→  key: SetupStep,
+   221→  setState: (s: "tour" | "skipped") => void,
+   222→) {
+   223→  complete(key);
+   224→  if (currentStep === TOTAL_SETUP_STEPS - 1) {
+   225→    setState("tour");
+   226→  } else {
+   227→    next();
+   228→  }
+   229→}
+   230→
+   231→// ---------------------------------------------------------------------------
+   232→// Step components
+   233→// ---------------------------------------------------------------------------
+   234→
+   235→function AccountStep({ onDone }: { onDone: () => void }) {
+   236→  const qc = useQueryClient();
+   237→  const [name, setName] = useState("Primary");
+   238→  const [currency, setCurrency] = useState("USD");
+   239→  const [balance, setBalance] = useState("10000");
+   240→  const [loading, setLoading] = useState(false);
+   241→
+   242→  async function submit() {
+   243→    if (!name.trim()) {
+   244→      toast.error("Account name is required");
+   245→      return;
+   246→    }
+   247→    setLoading(true);
+   248→    try {
+   249→      const bal = parseFloat(balance);
+   250→      const startingBalanceCents = Number.isFinite(bal)
+   251→        ? Math.round(bal * 100)
+   252→        : 0;
+   253→      const res = await fetch("/api/accounts", {
+   254→        method: "POST",
+   255→        headers: { "Content-Type": "application/json" },
+   256→        body: JSON.stringify({
+   257→          name: name.trim(),
+   258→          currency,
+   259→          startingBalanceCents,
+   260→          isDefault: true,
+   261→        }),
+   262→      });
+   263→      if (!res.ok) {
+   264→        const data = await res.json().catch(() => null);
+   265→        toast.error(data?.error ?? "Failed to create account");
+   266→        setLoading(false);
+   267→        return;
+   268→      }
+   269→      qc.invalidateQueries({ queryKey: ["accounts"] });
+   270→      qc.invalidateQueries({ queryKey: ["me"] });
+   271→      toast.success("Trading account created.");
+   272→      onDone();
+   273→    } catch {
+   274→      toast.error("Network error");
+   275→      setLoading(false);
+   276→    }
+   277→  }
+   278→
+   279→  return (
+   280→    <form
+   281→      className="space-y-4"
+   282→      onSubmit={(e) => {
+   283→        e.preventDefault();
+   284→        submit();
+   285→      }}
+   286→    >
+   287→      <div className="space-y-2">
+   288→        <FieldLabel required>Account Name</FieldLabel>
+   289→        <Input
+   290→          value={name}
+   291→          onChange={(e) => setName(e.target.value)}
+   292→          placeholder="e.g. Primary, FTMO 100k"
+   293→          autoFocus
+   294→        />
+   295→      </div>
+   296→      <div className="grid grid-cols-2 gap-3">
+   297→        <div className="space-y-2">
+   298→          <FieldLabel>Currency</FieldLabel>
+   299→          <Select value={currency} onValueChange={setCurrency}>
+   300→            <SelectTrigger className="w-full">
+   301→              <SelectValue />
+   302→            </SelectTrigger>
+   303→            <SelectContent>
+   304→              {CURRENCIES.map((c) => (
+   305→                <SelectItem key={c} value={c}>
+   306→                  {c}
+   307→                </SelectItem>
+   308→              ))}
+   309→            </SelectContent>
+   310→          </Select>
+   311→        </div>
+   312→        <div className="space-y-2">
+   313→          <FieldLabel required>Starting Balance</FieldLabel>
+   314→          <Input
+   315→            type="number"
+   316→            min="0"
+   317→            step="0.01"
+   318→            value={balance}
+   319→            onChange={(e) => setBalance(e.target.value)}
+   320→          />
+   321→        </div>
+   322→      </div>
+   323→      <StepFooter>
+   324→        <Button type="submit" disabled={loading}>
+   325→          {loading ? (
+   326→            <Loader2 className="h-4 w-4 animate-spin" />
+   327→          ) : (
+   328→            <Check className="h-4 w-4" />
+   329→          )}
+   330→          Create Account
+   331→        </Button>
+   332→      </StepFooter>
+   333→    </form>
+   334→  );
+   335→}
+   336→
+   337→function InstrumentStep({ onDone }: { onDone: () => void }) {
+   338→  const qc = useQueryClient();
+   339→  const [symbol, setSymbol] = useState("EURUSD");
+   340→  const [market, setMarket] = useState("forex");
+   341→  const [loading, setLoading] = useState(false);
+   342→
+   343→  async function submit() {
+   344→    if (!symbol.trim()) {
+   345→      toast.error("Symbol is required");
+   346→      return;
+   347→    }
+   348→    setLoading(true);
+   349→    try {
+   350→      const res = await fetch("/api/instruments", {
+   351→        method: "POST",
+   352→        headers: { "Content-Type": "application/json" },
+   353→        body: JSON.stringify({
+   354→          symbol: symbol.trim().toUpperCase(),
+   355→          market,
+   356→        }),
+   357→      });
+   358→      if (!res.ok) {
+   359→        const data = await res.json().catch(() => null);
+   360→        toast.error(data?.error ?? "Failed to create instrument");
+   361→        setLoading(false);
+   362→        return;
+   363→      }
+   364→      qc.invalidateQueries({ queryKey: ["instruments"] });
+   365→      qc.invalidateQueries({ queryKey: ["me"] });
+   366→      toast.success("Instrument added.");
+   367→      onDone();
+   368→    } catch {
+   369→      toast.error("Network error");
+   370→      setLoading(false);
+   371→    }
+   372→  }
+   373→
+   374→  return (
+   375→    <form
+   376→      className="space-y-4"
+   377→      onSubmit={(e) => {
+   378→        e.preventDefault();
+   379→        submit();
+   380→      }}
+   381→    >
+   382→      <div className="grid grid-cols-2 gap-3">
+   383→        <div className="space-y-2">
+   384→          <FieldLabel required hint="Trading symbol, e.g. EURUSD, XAUUSD, ES">
+   385→            Symbol
+   386→          </FieldLabel>
+   387→          <Input
+   388→            value={symbol}
+   389→            onChange={(e) => setSymbol(e.target.value)}
+   390→            placeholder="EURUSD"
+   391→            autoFocus
+   392→          />
+   393→        </div>
+   394→        <div className="space-y-2">
+   395→          <FieldLabel>Market</FieldLabel>
+   396→          <Select value={market} onValueChange={setMarket}>
+   397→            <SelectTrigger className="w-full">
+   398→              <SelectValue />
+   399→            </SelectTrigger>
+   400→            <SelectContent>
+   401→              {MARKETS.map((m) => (
+   402→                <SelectItem key={m.value} value={m.value}>
+   403→                  {m.label}
+   404→                </SelectItem>
+   405→              ))}
+   406→            </SelectContent>
+   407→          </Select>
+   408→        </div>
+   409→      </div>
+   410→      <p className="text-xs text-muted-foreground">
+   411→        You can add more instruments later from Settings.
+   412→      </p>
+   413→      <StepFooter>
+   414→        <Button type="submit" disabled={loading}>
+   415→          {loading ? (
+   416→            <Loader2 className="h-4 w-4 animate-spin" />
+   417→          ) : (
+   418→            <Check className="h-4 w-4" />
+   419→          )}
+   420→          Add Instrument
+   421→        </Button>
+   422→      </StepFooter>
+   423→    </form>
+   424→  );
+   425→}
+   426→
+   427→function StrategyStep({ onDone }: { onDone: () => void }) {
+   428→  const qc = useQueryClient();
+   429→  const { setLastStrategyId } = useOnboarding();
+   430→  const [name, setName] = useState("");
+   431→  const [description, setDescription] = useState("");
+   432→  const [market, setMarket] = useState("forex");
+   433→  const [session, setSession] = useState("london");
+   434→  const [loading, setLoading] = useState(false);
+   435→
+   436→  async function submit() {
+   437→    if (!name.trim()) {
+   438→      toast.error("Strategy name is required");
+   439→      return;
+   440→    }
+   441→    setLoading(true);
+   442→    try {
+   443→      const res = await fetch("/api/strategies", {
+   444→        method: "POST",
+   445→        headers: { "Content-Type": "application/json" },
+   446→        body: JSON.stringify({
+   447→          name: name.trim(),
+   448→          description: description.trim() || undefined,
+   449→          market,
+   450→          session,
+   451→          rules: {
+   452→            entry: [],
+   453→            stop: [],
+   454→            target: [],
+   455→            management: [],
+   456→            invalidation: [],
+   457→            gradingThresholds: {
+   458→              "A+": 0.9,
+   459→              A: 0.75,
+   460→              B: 0.6,
+   461→              C: 0.4,
+   462→            },
+   463→          },
+   464→        }),
+   465→      });
+   466→      if (!res.ok) {
+   467→        const data = await res.json().catch(() => null);
+   468→        toast.error(data?.error ?? "Failed to create strategy");
+   469→        setLoading(false);
+   470→        return;
+   471→      }
+   472→      const strat = await res.json();
+   473→      setLastStrategyId(strat.id);
+   474→      qc.invalidateQueries({ queryKey: ["strategies"] });
+   475→      qc.invalidateQueries({ queryKey: ["me"] });
+   476→      toast.success("Strategy created (v1.0).");
+   477→      onDone();
+   478→    } catch {
+   479→      toast.error("Network error");
+   480→      setLoading(false);
+   481→    }
+   482→  }
+   483→
+   484→  return (
+   485→    <form
+   486→      className="space-y-4"
+   487→      onSubmit={(e) => {
+   488→        e.preventDefault();
+   489→        submit();
+   490→      }}
+   491→    >
+   492→      <div className="space-y-2">
+   493→        <FieldLabel required>Strategy Name</FieldLabel>
+   494→        <Input
+   495→          value={name}
+   496→          onChange={(e) => setName(e.target.value)}
+   497→          placeholder="e.g. London Breakout"
+   498→          autoFocus
+   499→        />
+   500→      </div>
+   501→      <div className="space-y-2">
+   502→        <FieldLabel>Description</FieldLabel>
+   503→        <Textarea
+   504→          value={description}
+   505→          onChange={(e) => setDescription(e.target.value)}
+   506→          rows={2}
+   507→          placeholder="What does this strategy do?"
+   508→        />
+   509→      </div>
+   510→      <div className="grid grid-cols-2 gap-3">
+   511→        <div className="space-y-2">
+   512→          <FieldLabel>Market</FieldLabel>
+   513→          <Select value={market} onValueChange={setMarket}>
+   514→            <SelectTrigger className="w-full">
+   515→              <SelectValue />
+   516→            </SelectTrigger>
+   517→            <SelectContent>
+   518→              {MARKETS.map((m) => (
+   519→                <SelectItem key={m.value} value={m.value}>
+   520→                  {m.label}
+   521→                </SelectItem>
+   522→              ))}
+   523→            </SelectContent>
+   524→          </Select>
+   525→        </div>
+   526→        <div className="space-y-2">
+   527→          <FieldLabel>Session</FieldLabel>
+   528→          <Select value={session} onValueChange={setSession}>
+   529→            <SelectTrigger className="w-full">
+   530→              <SelectValue />
+   531→            </SelectTrigger>
+   532→            <SelectContent>
+   533→              {SESSIONS.map((s) => (
+   534→                <SelectItem key={s.value} value={s.value}>
+   535→                  {s.label}
+   536→                </SelectItem>
+   537→              ))}
+   538→            </SelectContent>
+   539→          </Select>
+   540→        </div>
+   541→      </div>
+   542→      <StepFooter>
+   543→        <Button type="submit" disabled={loading}>
+   544→          {loading ? (
+   545→            <Loader2 className="h-4 w-4 animate-spin" />
+   546→          ) : (
+   547→            <Check className="h-4 w-4" />
+   548→          )}
+   549→          Create Strategy
+   550→        </Button>
+   551→      </StepFooter>
+   552→    </form>
+   553→  );
+   554→}
+   555→
+   556→function StrategyRulesStep({ onDone }: { onDone: () => void }) {
+   557→  const qc = useQueryClient();
+   558→  const { lastStrategyId, setLastStrategyId } = useOnboarding();
+   559→  const [entryRules, setEntryRules] = useState("");
+   560→  const [ruleConfig, setRuleConfig] = useState("");
+   561→  const [loading, setLoading] = useState(false);
+   562→
+   563→  async function submit() {
+   564→    if (!lastStrategyId) {
+   565→      toast.error("No strategy to attach rules to. Go back to step 3.");
+   566→      return;
+   567→    }
+   568→    setLoading(true);
+   569→    try {
+   570→      const rules = buildRulesJson(entryRules, ruleConfig);
+   571→      const res = await fetch(`/api/strategies/${lastStrategyId}`, {
+   572→        method: "PUT",
+   573→        headers: { "Content-Type": "application/json" },
+   574→        body: JSON.stringify({
+   575→          versionLabel: "1.1",
+   576→          changeReason: "Refined entry rules from setup wizard",
+   577→          changeSummary: "Initial entry rule set with weights and required flags.",
+   578→          rules,
+   579→        }),
+   580→      });
+   581→      if (!res.ok) {
+   582→        const data = await res.json().catch(() => null);
+   583→        toast.error(data?.error ?? "Failed to update strategy rules");
+   584→        setLoading(false);
+   585→        return;
+   586→      }
+   587→      qc.invalidateQueries({ queryKey: ["strategies"] });
+   588→      qc.invalidateQueries({ queryKey: ["strategy", lastStrategyId] });
+   589→      setLastStrategyId(null);
+   590→      toast.success("Strategy rules saved (v1.1).");
+   591→      onDone();
+   592→    } catch {
+   593→      toast.error("Network error");
+   594→      setLoading(false);
+   595→    }
+   596→  }
+   597→
+   598→  return (
+   599→    <form
+   600→      className="space-y-4"
+   601→      onSubmit={(e) => {
+   602→        e.preventDefault();
+   603→        submit();
+   604→      }}
+   605→    >
+   606→      {/* Visual flow */}
+   607→      <div className="flex items-center gap-2 text-xs text-muted-foreground overflow-x-auto pb-1">
+   608→        <FlowChip label="Strategy" />
+   609→        <Arrow />
+   610→        <FlowChip label="Rules" />
+   611→        <Arrow />
+   612→        <FlowChip label="Checklist" />
+   613→        <Arrow />
+   614→        <FlowChip label="Trade Score" />
+   615→      </div>
+   616→
+   617→      <div className="space-y-2">
+   618→        <FieldLabel required hint="One rule per line">
+   619→          Entry Rules
+   620→        </FieldLabel>
+   621→        <Textarea
+   622→          value={entryRules}
+   623→          onChange={(e) => setEntryRules(e.target.value)}
+   624→          rows={5}
+   625→          placeholder={
+   626→            "Price above 200 EMA\nPullback to 50 EMA\nHigher low on 5m"
+   627→          }
+   628→          autoFocus
+   629→        />
+   630→        <p className="text-xs text-muted-foreground">
+   631→          Each line becomes a checklist item that DnD scores during a trade.
+   632→        </p>
+   633→      </div>
+   634→
+   635→      <div className="space-y-2">
+   636→        <FieldLabel
+   637→          hint='Format: rule | weight | required  (e.g. "Price above 200 EMA | 2 | required")'
+   638→        >
+   639→          Rule Weights Config
+   640→        </FieldLabel>
+   641→        <Textarea
+   642→          value={ruleConfig}
+   643→          onChange={(e) => setRuleConfig(e.target.value)}
+   644→          rows={4}
+   645→          placeholder={"Price above 200 EMA | 2 | required\nPullback to 50 EMA | 1 | optional"}
+   646→          className="font-mono text-xs"
+   647→        />
+   648→        <p className="text-xs text-muted-foreground">
+   649→          Rules without an entry here default to weight 1, required.
+   650→        </p>
+   651→      </div>
+   652→
+   653→      <StepFooter>
+   654→        <Button type="submit" disabled={loading}>
+   655→          {loading ? (
+   656→            <Loader2 className="h-4 w-4 animate-spin" />
+   657→          ) : (
+   658→            <Check className="h-4 w-4" />
+   659→          )}
+   660→          Save Rules (v1.1)
+   661→        </Button>
+   662→      </StepFooter>
+   663→    </form>
+   664→  );
+   665→}
+   666→
+   667→function PlanStep({ onDone }: { onDone: () => void }) {
+   668→  const qc = useQueryClient();
+   669→  const today = new Date().toISOString().slice(0, 10);
+   670→  const [date, setDate] = useState(today);
+   671→  const [weeklyBias, setWeeklyBias] = useState("neutral");
+   672→  const [dailyBias, setDailyBias] = useState("neutral");
+   673→  const [session, setSession] = useState("london");
+   674→  const [maxTrades, setMaxTrades] = useState("3");
+   675→  const [loading, setLoading] = useState(false);
+   676→
+   677→  async function submit() {
+   678→    if (!date) {
+   679→      toast.error("Date is required");
+   680→      return;
+   681→    }
+   682→    setLoading(true);
+   683→    try {
+   684→      const res = await fetch("/api/daily-plans", {
+   685→        method: "POST",
+   686→        headers: { "Content-Type": "application/json" },
+   687→        body: JSON.stringify({
+   688→          date,
+   689→          weeklyBias,
+   690→          dailyBias,
+   691→          session,
+   692→          maxTrades: maxTrades ? parseInt(maxTrades, 10) : null,
+   693→        }),
+   694→      });
+   695→      if (!res.ok) {
+   696→        const data = await res.json().catch(() => null);
+   697→        toast.error(data?.error ?? "Failed to create daily plan");
+   698→        setLoading(false);
+   699→        return;
+   700→      }
+   701→      qc.invalidateQueries({ queryKey: ["daily-plans"] });
+   702→      toast.success("Daily plan saved.");
+   703→      onDone();
+   704→    } catch {
+   705→      toast.error("Network error");
+   706→      setLoading(false);
+   707→    }
+   708→  }
+   709→
+   710→  return (
+   711→    <form
+   712→      className="space-y-4"
+   713→      onSubmit={(e) => {
+   714→        e.preventDefault();
+   715→        submit();
+   716→      }}
+   717→    >
+   718→      <div className="grid grid-cols-2 gap-3">
+   719→        <div className="space-y-2">
+   720→          <FieldLabel required>Date</FieldLabel>
+   721→          <Input
+   722→            type="date"
+   723→            value={date}
+   724→            onChange={(e) => setDate(e.target.value)}
+   725→            autoFocus
+   726→          />
+   727→        </div>
+   728→        <div className="space-y-2">
+   729→          <FieldLabel>Session</FieldLabel>
+   730→          <Select value={session} onValueChange={setSession}>
+   731→            <SelectTrigger className="w-full">
+   732→              <SelectValue />
+   733→            </SelectTrigger>
+   734→            <SelectContent>
+   735→              {SESSIONS.map((s) => (
+   736→                <SelectItem key={s.value} value={s.value}>
+   737→                  {s.label}
+   738→                </SelectItem>
+   739→              ))}
+   740→            </SelectContent>
+   741→          </Select>
+   742→        </div>
+   743→      </div>
+   744→      <div className="grid grid-cols-2 gap-3">
+   745→        <div className="space-y-2">
+   746→          <FieldLabel hint="Bias for the week: bullish, bearish, or neutral">
+   747→            Weekly Bias
+   748→          </FieldLabel>
+   749→          <Select value={weeklyBias} onValueChange={setWeeklyBias}>
+   750→            <SelectTrigger className="w-full">
+   751→              <SelectValue />
+   752→            </SelectTrigger>
+   753→            <SelectContent>
+   754→              <SelectItem value="bullish">Bullish</SelectItem>
+   755→              <SelectItem value="bearish">Bearish</SelectItem>
+   756→              <SelectItem value="neutral">Neutral</SelectItem>
+   757→            </SelectContent>
+   758→          </Select>
+   759→        </div>
+   760→        <div className="space-y-2">
+   761→          <FieldLabel hint="Bias for today">Daily Bias</FieldLabel>
+   762→          <Select value={dailyBias} onValueChange={setDailyBias}>
+   763→            <SelectTrigger className="w-full">
+   764→              <SelectValue />
+   765→            </SelectTrigger>
+   766→            <SelectContent>
+   767→              <SelectItem value="bullish">Bullish</SelectItem>
+   768→              <SelectItem value="bearish">Bearish</SelectItem>
+   769→              <SelectItem value="neutral">Neutral</SelectItem>
+   770→            </SelectContent>
+   771→          </Select>
+   772→        </div>
+   773→      </div>
+   774→      <div className="space-y-2">
+   775→        <FieldLabel hint="Maximum trades you will take today">
+   776→          Max Trades
+   777→        </FieldLabel>
+   778→        <Input
+   779→          type="number"
+   780→          min="0"
+   781→          step="1"
+   782→          value={maxTrades}
+   783→          onChange={(e) => setMaxTrades(e.target.value)}
+   784→        />
+   785→      </div>
+   786→      <StepFooter>
+   787→        <Button type="submit" disabled={loading}>
+   788→          {loading ? (
+   789→            <Loader2 className="h-4 w-4 animate-spin" />
+   790→          ) : (
+   791→            <Check className="h-4 w-4" />
+   792→          )}
+   793→          Save Daily Plan
+   794→        </Button>
+   795→      </StepFooter>
+   796→    </form>
+   797→  );
+   798→}
+   799→
+   800→function TradeStep({ onDone }: { onDone: () => void }) {
+   801→  const { navigate } = useNav();
+   802→  return (
+   803→    <div className="space-y-4">
+   804→      <p className="text-sm text-muted-foreground">
+   805→        You have an account, an instrument, a strategy with rules, and a daily
+   806→        plan. The only thing left is to put it to work — open the trade form
+   807→        and document your first trade.
+   808→      </p>
+   809→      <div className="rounded-md border border-border bg-muted/30 p-4 text-sm">
+   810→        <div className="font-medium">What you will see</div>
+   811→        <ul className="mt-2 space-y-1 text-muted-foreground list-disc pl-4">
+   812→          <li>Setup checklist (DnD measures setup quality automatically)</li>
+   813→          <li>Entry / stop / target fields with auto-R calculation</li>
+   814→          <li>Evidence capture (screenshots, notes)</li>
+   815→          <li>Pre/post psychology tags and behavior flags</li>
+   816→        </ul>
+   817→      </div>
+   818→      <StepFooter>
+   819→        <Button
+   820→          onClick={() => {
+   821→            navigate("tradeNew");
+   822→            onDone();
+   823→          }}
+   824→        >
+   825→          <PencilLine className="h-4 w-4" />
+   826→          Open Trade Form
+   827→        </Button>
+   828→      </StepFooter>
+   829→    </div>
+   830→  );
+   831→}
+   832→
+   833→// ---------------------------------------------------------------------------
+   834→// Helpers & small components
+   835→// ---------------------------------------------------------------------------
+   836→
+   837→function StepFooter({ children }: { children: React.ReactNode }) {
+   838→  return <div className="flex justify-end pt-2">{children}</div>;
+   839→}
+   840→
+   841→function FlowChip({ label }: { label: string }) {
+   842→  return (
+   843→    <div className="rounded-md border border-border bg-background px-2.5 py-1 text-xs font-medium whitespace-nowrap">
+   844→      {label}
+   845→    </div>
+   846→  );
+   847→}
+   848→
+   849→function Arrow() {
+   850→  return <ArrowRight className="h-3 w-3 text-muted-foreground shrink-0" />;
+   851→}
+   852→
+   853→function buildRulesJson(entryRules: string, ruleConfig: string) {
+   854→  const lines = entryRules
+   855→    .split("\n")
+   856→    .map((l) => l.trim())
+   857→    .filter((l) => l.length > 0);
+   858→
+   859→  const cfg = new Map<string, { weight: number; required: boolean }>();
+   860→  for (const line of ruleConfig.split("\n")) {
+   861→    const parts = line.split("|").map((p) => p.trim());
+   862→    if (parts.length >= 1 && parts[0]) {
+   863→      const ruleText = parts[0];
+   864→      const weight = parts[1] ? parseFloat(parts[1]) || 1 : 1;
+   865→      const required = parts[2] ? parts[2].toLowerCase() === "required" : true;
+   866→      cfg.set(ruleText, { weight, required });
+   867→    }
+   868→  }
+   869→
+   870→  const entry = lines.map((rule) => {
+   871→    const c = cfg.get(rule) ?? { weight: 1, required: true };
+   872→    return { text: rule, weight: c.weight, required: c.required };
+   873→  });
+   874→
+   875→  return {
+   876→    entry,
+   877→    stop: [],
+   878→    target: [],
+   879→    management: [],
+   880→    invalidation: [],
+   881→    gradingThresholds: {
+   882→      "A+": 0.9,
+   883→      A: 0.75,
+   884→      B: 0.6,
+   885→      C: 0.4,
+   886→    },
+   887→  };
+   888→}
+   889→

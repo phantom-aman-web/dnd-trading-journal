@@ -1,0 +1,502 @@
+    33→[security] STORAGE_SECRET is using its insecure default value. Set the STORAGE_SECRET environment variable to a string of at least 32 random characters before deploying to production. See .env.example.
+    34→ GET /api/strategies 200 in 20ms (compile: 3ms, render: 17ms)
+    35→ GET /api/accounts 200 in 36ms (compile: 5ms, render: 31ms)
+    36→ GET /api/me 200 in 448ms (compile: 219ms, render: 230ms)
+    37→ GET /api/accounts 200 in 11ms (compile: 2ms, render: 9ms)
+    38→[security] SESSION_SECRET is using its insecure default value. Set the SESSION_SECRET environment variable to a string of at least 32 random characters before deploying to production. See .env.example.
+    39→[security] STORAGE_SECRET is using its insecure default value. Set the STORAGE_SECRET environment variable to a string of at least 32 random characters before deploying to production. See .env.example.
+    40→ GET /api/media/cmtr04687000hqpdok4zzyq73 200 in 1045ms (compile: 965ms, render: 79ms)
+    41→ GET /api/media/cmtr03qsj000dqpdozfa10snm 200 in 1064ms (compile: 983ms, render: 81ms)
+    42→[security] SESSION_SECRET is using its insecure default value. Set the SESSION_SECRET environment variable to a string of at least 32 random characters before deploying to production. See .env.example.
+    43→ GET /api/strategies/cmtquxyo80007qpvxc6j8h9z2 200 in 1112ms (compile: 1091ms, render: 21ms)
+    44→ GET /api/media/file?token=eyJwIjoiY210bXExcDJ5MDAwMHFkYnlkbTV3czB0MC92aWRlb3MvZTZmOTkwMzUtN2FlNS00N2Y2LTkyM2EtYWRiMDQyN2RjNzdlLVJlc3RhdXJhbnRfTWFuYWdlbWVudF9EYXNoYm9hcmQubXA0IiwiZXhwIjoxNzg5MDQ3NTE4fQ.rpnnbTebXTLApzFFy5_xmTbPtgtFzvbT98XveqkVMaE 200 in 133ms (compile: 117ms, render: 17ms)
+    45→ GET /api/media/file?token=eyJwIjoiY210bXExcDJ5MDAwMHFkYnlkbTV3czB0MC9pbWFnZXMvMjZmZDhhOTItZmI4NS00ZDcxLWE2ZDQtMTMzODdkYWMzMjdmLVNjcmVlbnNob3RfMjAyNjA4MTlfMjAzMTA0X0Nocm9tZS5qcGciLCJleHAiOjE3ODkwNDc1MTh9.zNgr8zKiKvzNbGCHzuyH1PxtP4j-P-6OKYHJsJyQ1Oo 200 in 83ms (compile: 62ms, render: 21ms)
+    46→prisma:error 
+    47→Invalid `__TURBOPACK__imported__module__$5b$project$5d2f$src$2f$lib$2f$db$2e$ts__$5b$app$2d$route$5d$__$28$ecmascript$29$__["db"].trade.update()` invocation in
+    48→/home/z/my-project/.next/dev/server/chunks/[root-of-the-server]__48772448._.js:1945:154
+    49→
+    50→  1942         }
+    51→  1943     }
+    52→  1944 }
+    53→→ 1945 const updated = await __TURBOPACK__imported__module__$5b$project$5d2f$src$2f$lib$2f$db$2e$ts__$5b$app$2d$route$5d$__$28$ecmascript$29$__["db"].trade.update(
+    54→Foreign key constraint violated on the foreign key
+    55→⨯ Error [PrismaClientKnownRequestError]: 
+    56→Invalid `{imported module ./src/lib/db.ts}["db"].trade.update()` invocation in
+    57→/home/z/my-project/.next/dev/server/chunks/[root-of-the-server]__48772448._.js:1945:154
+    58→
+    59→  1942         }
+    60→  1943     }
+    61→  1944 }
+    62→→ 1945 const updated = await {imported module ./src/lib/db.ts}["db"].trade.update(
+    63→Foreign key constraint violated on the foreign key
+    64→    at <unknown> (src/app/api/trades/[id]/route.ts:227:34)
+    65→    at async PATCH (src/app/api/trades/[id]/route.ts:227:19)
+    66→  225 |   }
+    67→  226 |
+    68→> 227 |   const updated = await db.trade.update({
+    69→      |                                  ^
+    70→  228 |     where: { id },
+    71→  229 |     data: allowed,
+    72→  230 |     include: { executions: { orderBy: { seq: "asc" } } }, {
+    73→  code: 'P2003',
+    74→  meta: [Object],
+    75→  clientVersion: '6.19.2'
+    76→}
+    77→ PATCH /api/trades/cmtr02wfi0007qpdoqei4ty36 500 in 536ms (compile: 18ms, render: 517ms)
+    78→[security] SESSION_SECRET is using its insecure default value. Set the SESSION_SECRET environment variable to a string of at least 32 random characters before deploying to production. See .env.example.
+    79→[security] STORAGE_SECRET is using its insecure default value. Set the STORAGE_SECRET environment variable to a string of at least 32 random characters before deploying to production. See .env.example.
+    80→prisma:error 
+    81→Invalid `__TURBOPACK__imported__module__$5b$project$5d2f$src$2f$lib$2f$db$2e$ts__$5b$app$2d$route$5d$__$28$ecmascript$29$__["db"].trade.update()` invocation in
+    82→/home/z/my-project/.next/dev/server/chunks/[root-of-the-server]__48772448._.js:1945:154
+    83→
+    84→  1942         }
+    85→  1943     }
+    86→  1944 }
+    87→→ 1945 const updated = await __TURBOPACK__imported__module__$5b$project$5d2f$src$2f$lib$2f$db$2e$ts__$5b$app$2d$route$5d$__$28$ecmascript$29$__["db"].trade.update(
+    88→Foreign key constraint violated on the foreign key
+    89→⨯ Error [PrismaClientKnownRequestError]: 
+    90→Invalid `{imported module ./src/lib/db.ts}["db"].trade.update()` invocation in
+    91→/home/z/my-project/.next/dev/server/chunks/[root-of-the-server]__48772448._.js:1945:154
+    92→
+    93→  1942         }
+    94→  1943     }
+    95→  1944 }
+    96→→ 1945 const updated = await {imported module ./src/lib/db.ts}["db"].trade.update(
+    97→Foreign key constraint violated on the foreign key
+    98→    at <unknown> (src/app/api/trades/[id]/route.ts:227:34)
+    99→    at async PATCH (src/app/api/trades/[id]/route.ts:227:19)
+   100→  225 |   }
+   101→  226 |
+   102→> 227 |   const updated = await db.trade.update({
+   103→      |                                  ^
+   104→  228 |     where: { id },
+   105→  229 |     data: allowed,
+   106→  230 |     include: { executions: { orderBy: { seq: "asc" } } }, {
+   107→  code: 'P2003',
+   108→  meta: [Object],
+   109→  clientVersion: '6.19.2'
+   110→}
+   111→ PATCH /api/trades/cmtr02wfi0007qpdoqei4ty36 500 in 295ms (compile: 20ms, render: 275ms)
+   112→[security] SESSION_SECRET is using its insecure default value. Set the SESSION_SECRET environment variable to a string of at least 32 random characters before deploying to production. See .env.example.
+   113→[security] STORAGE_SECRET is using its insecure default value. Set the STORAGE_SECRET environment variable to a string of at least 32 random characters before deploying to production. See .env.example.
+   114→ GET /api/strategies 200 in 17ms (compile: 3ms, render: 14ms)
+   115→ GET /api/accounts 200 in 11ms (compile: 5ms, render: 6ms)
+   116→ GET /api/trades?limit=200&sortBy=entryTime&sortDir=desc 200 in 28ms (compile: 6ms, render: 22ms)
+   117→ GET /api/accounts 200 in 11ms (compile: 3ms, render: 8ms)
+   118→ GET /api/me 200 in 44ms (compile: 1622µs, render: 42ms)
+   119→ GET /api/strategies 200 in 21ms (compile: 14ms, render: 7ms)
+   120→ GET /api/strategies/cmtquxyo80007qpvxc6j8h9z2 200 in 97ms (compile: 15ms, render: 82ms)
+   121→ GET /api/media/file?token=eyJwIjoiY210bXExcDJ5MDAwMHFkYnlkbTV3czB0MC92aWRlb3MvZGY5NGRkODctODhmMS00ZmU3LWFjN2MtNTk1MjM4MzEyY2Y1LTIwMjYtMDktMDlfMTYtMzMtMjgubXA0IiwiZXhwIjoxNzg4OTY0MTk5fQ.QHZp16sYFh1_nmZnNQtbJ88tUyBcSH8bA6hcf1HAhM0 403 in 6ms (compile: 3ms, render: 4ms)
+   122→[security] SESSION_SECRET is using its insecure default value. Set the SESSION_SECRET environment variable to a string of at least 32 random characters before deploying to production. See .env.example.
+   123→ POST /api/media 200 in 362ms (compile: 139ms, render: 222ms)
+   124→ GET /api/media/cmtvkcqyf0001ot4gd00s7bq6 200 in 30ms (compile: 19ms, render: 11ms)
+   125→[security] SESSION_SECRET is using its insecure default value. Set the SESSION_SECRET environment variable to a string of at least 32 random characters before deploying to production. See .env.example.
+   126→[security] STORAGE_SECRET is using its insecure default value. Set the STORAGE_SECRET environment variable to a string of at least 32 random characters before deploying to production. See .env.example.
+   127→ GET /api/trades?limit=10&sortBy=entryTime&sortDir=desc 200 in 13ms (compile: 3ms, render: 10ms)
+   128→ GET /api/dashboard?preset=thisMonth 200 in 17ms (compile: 2ms, render: 15ms)
+   129→ GET /api/media/file?token=eyJwIjoiY210bXExcDJ5MDAwMHFkYnlkbTV3czB0MC92aWRlb3MvZGY5NGRkODctODhmMS00ZmU3LWFjN2MtNTk1MjM4MzEyY2Y1LTIwMjYtMDktMDlfMTYtMzMtMjgubXA0IiwiZXhwIjoxNzg4OTY0MTk5fQ.QHZp16sYFh1_nmZnNQtbJ88tUyBcSH8bA6hcf1HAhM0 403 in 6ms (compile: 2ms, render: 4ms)
+   130→ POST /api/media 200 in 378ms (compile: 2ms, render: 375ms)
+   131→ GET /api/media/cmtvkdsv80005ot4gyf47sulf 200 in 32ms (compile: 21ms, render: 11ms)
+   132→[security] SESSION_SECRET is using its insecure default value. Set the SESSION_SECRET environment variable to a string of at least 32 random characters before deploying to production. See .env.example.
+   133→[security] STORAGE_SECRET is using its insecure default value. Set the STORAGE_SECRET environment variable to a string of at least 32 random characters before deploying to production. See .env.example.
+   134→ GET /api/media/file?token=eyJwIjoiY210bXExcDJ5MDAwMHFkYnlkbTV3czB0MC92aWRlb3MvNjFhYjIzMWQtMWZjYi00MjU2LWI2YzMtNzkxNzhlZmIxY2RmLTIwMjYtMDktMDlfMTYtMjctMDQubXA0IiwiZXhwIjoxNzg5MDQ3ODg1fQ.vxNE8JeyxZTH3BY966DA9Xyn6tc6-jh_sexivqEZ5RA 200 in 287ms (compile: 3ms, render: 284ms)
+   135→ GET /api/media/file?token=eyJwIjoiY210bXExcDJ5MDAwMHFkYnlkbTV3czB0MC92aWRlb3MvNjFhYjIzMWQtMWZjYi00MjU2LWI2YzMtNzkxNzhlZmIxY2RmLTIwMjYtMDktMDlfMTYtMjctMDQubXA0IiwiZXhwIjoxNzg5MDQ3ODg1fQ.vxNE8JeyxZTH3BY966DA9Xyn6tc6-jh_sexivqEZ5RA 200 in 233ms (compile: 3ms, render: 230ms)
+   136→ GET / 200 in 87ms (compile: 4ms, render: 83ms)
+   137→ GET / 200 in 49ms (compile: 3ms, render: 45ms)
+   138→ POST /api/trades 401 in 7ms (compile: 3ms, render: 5ms)
+   139→ GET / 200 in 47ms (compile: 4ms, render: 43ms)
+   140→ GET / 200 in 47ms (compile: 3ms, render: 45ms)
+   141→✓ Compiled in 374ms
+   142→ GET /api/accounts 200 in 12ms (compile: 2ms, render: 10ms)
+   143→ GET /api/strategies 200 in 8ms (compile: 1585µs, render: 7ms)
+   144→ GET /api/strategies/cmtquxyo80007qpvxc6j8h9z2 200 in 41ms (compile: 23ms, render: 19ms)
+   145→ GET /api/me 200 in 52ms (compile: 4ms, render: 48ms)
+   146→[security] SESSION_SECRET is using its insecure default value. Set the SESSION_SECRET environment variable to a string of at least 32 random characters before deploying to production. See .env.example.
+   147→ GET / 200 in 384ms (compile: 56ms, render: 328ms)
+   148→ GET / 200 in 85ms (compile: 4ms, render: 81ms)
+   149→ GET / 200 in 59ms (compile: 3ms, render: 56ms)
+   150→ GET / 200 in 44ms (compile: 3ms, render: 41ms)
+   151→ GET / 200 in 56ms (compile: 3ms, render: 53ms)
+   152→ GET / 200 in 47ms (compile: 4ms, render: 43ms)
+   153→ GET / 200 in 46ms (compile: 2ms, render: 44ms)
+   154→ GET /api/auth 200 in 19ms (compile: 4ms, render: 15ms)
+   155→[security] SESSION_SECRET is using its insecure default value. Set the SESSION_SECRET environment variable to a string of at least 32 random characters before deploying to production. See .env.example.
+   156→ GET /api/trades?limit=10&sortBy=entryTime&sortDir=desc 200 in 128ms (compile: 106ms, render: 22ms)
+   157→ GET /api/dashboard?preset=thisMonth 200 in 122ms (compile: 12ms, render: 111ms)
+   158→ GET /api/accounts 200 in 33ms (compile: 9ms, render: 25ms)
+   159→ GET /api/accounts 200 in 31ms (compile: 16ms, render: 15ms)
+   160→ GET /api/me 200 in 48ms (compile: 11ms, render: 36ms)
+   161→ GET /api/strategies 200 in 11ms (compile: 2ms, render: 8ms)
+   162→ GET /api/strategies/cmtquxyo80007qpvxc6j8h9z2 200 in 30ms (compile: 17ms, render: 13ms)
+   163→ GET /api/accounts 200 in 11ms (compile: 2ms, render: 9ms)
+   164→[security] SESSION_SECRET is using its insecure default value. Set the SESSION_SECRET environment variable to a string of at least 32 random characters before deploying to production. See .env.example.
+   165→ POST /api/media 200 in 20ms (compile: 2ms, render: 17ms)
+   166→ GET /api/media/cmtvkq9o20009ot4gg4h41ra8 200 in 30ms (compile: 18ms, render: 12ms)
+   167→ GET /api/media/file?token=eyJwIjoiY210bXExcDJ5MDAwMHFkYnlkbTV3czB0MC9pbWFnZXMvNDFjYTU5MDYtYjIwYy00OWZmLTk3YmYtYjI5M2I2Y2Q5NGZiLWJhbm5lci5qcGciLCJleHAiOjE3ODkwNDg0Njd9.a85uoDYBQEHm23kE5MS3lPWVYeuB_7WuKcYwxBxKvWU 200 in 11ms (compile: 4ms, render: 7ms)
+   168→[security] SESSION_SECRET is using its insecure default value. Set the SESSION_SECRET environment variable to a string of at least 32 random characters before deploying to production. See .env.example.
+   169→[security] STORAGE_SECRET is using its insecure default value. Set the STORAGE_SECRET environment variable to a string of at least 32 random characters before deploying to production. See .env.example.
+   170→ POST /api/media 200 in 15ms (compile: 2ms, render: 13ms)
+   171→ GET /api/media/cmtvkqsv7000dot4go8p34a39 200 in 32ms (compile: 21ms, render: 10ms)
+   172→ GET /api/media/file?token=eyJwIjoiY210bXExcDJ5MDAwMHFkYnlkbTV3czB0MC9pbWFnZXMvOWQ5Yjc5ODQtZjVlMC00NzkwLTk0ZWItODdlYTBlODEwYTkyLWxvZ28ucG5nIiwiZXhwIjoxNzg5MDQ4NDkyfQ.uTBrQedE_wxARg5TiIp7Xbo4zLCieBblzjbpqrpNWK8 200 in 13ms (compile: 3ms, render: 10ms)
+   173→[security] SESSION_SECRET is using its insecure default value. Set the SESSION_SECRET environment variable to a string of at least 32 random characters before deploying to production. See .env.example.
+   174→[security] STORAGE_SECRET is using its insecure default value. Set the STORAGE_SECRET environment variable to a string of at least 32 random characters before deploying to production. See .env.example.
+   175→prisma:error 
+   176→Invalid `__TURBOPACK__imported__module__$5b$project$5d2f$src$2f$lib$2f$db$2e$ts__$5b$app$2d$route$5d$__$28$ecmascript$29$__["db"].trade.create()` invocation in
+   177→/home/z/my-project/.next/dev/server/chunks/[root-of-the-server]__6ba978ea._.js:1786:150
+   178→
+   179→  1783 }
+   180→  1784 let trade;
+   181→  1785 try {
+   182→→ 1786     trade = await __TURBOPACK__imported__module__$5b$project$5d2f$src$2f$lib$2f$db$2e$ts__$5b$app$2d$route$5d$__$28$ecmascript$29$__["db"].trade.create(
+   183→Foreign key constraint violated on the foreign key
+   184→ POST /api/trades 400 in 26ms (compile: 2ms, render: 24ms)
+   185→ GET / 200 in 73ms (compile: 4ms, render: 69ms)
+   186→✓ Compiled in 184ms
+   187→ GET /api/accounts 200 in 12ms (compile: 2ms, render: 9ms)
+   188→ GET /api/strategies 200 in 9ms (compile: 1497µs, render: 7ms)
+   189→ GET /api/me 200 in 24ms (compile: 3ms, render: 21ms)
+   190→ GET /api/strategies/cmtquxyo80007qpvxc6j8h9z2 200 in 33ms (compile: 18ms, render: 15ms)
+   191→[security] SESSION_SECRET is using its insecure default value. Set the SESSION_SECRET environment variable to a string of at least 32 random characters before deploying to production. See .env.example.
+   192→ GET / 200 in 550ms (compile: 56ms, render: 495ms)
+   193→ GET / 200 in 62ms (compile: 3ms, render: 59ms)
+   194→ GET / 200 in 59ms (compile: 3ms, render: 55ms)
+   195→ GET / 200 in 53ms (compile: 4ms, render: 50ms)
+   196→ POST /api/trades 200 in 24ms (compile: 4ms, render: 20ms)
+   197→ PATCH /api/media/cmtvkq9o20009ot4gg4h41ra8 200 in 31ms (compile: 19ms, render: 12ms)
+   198→ PATCH /api/media/cmtvkqsv7000dot4go8p34a39 200 in 12ms (compile: 2ms, render: 10ms)
+   199→[security] SESSION_SECRET is using its insecure default value. Set the SESSION_SECRET environment variable to a string of at least 32 random characters before deploying to production. See .env.example.
+   200→[security] STORAGE_SECRET is using its insecure default value. Set the STORAGE_SECRET environment variable to a string of at least 32 random characters before deploying to production. See .env.example.
+   201→ GET /api/trades?limit=200&sortBy=entryTime&sortDir=desc 200 in 23ms (compile: 3ms, render: 21ms)
+   202→ GET /api/accounts 200 in 11ms (compile: 3ms, render: 8ms)
+   203→ GET /api/strategies 200 in 11ms (compile: 2ms, render: 9ms)
+   204→[security] SESSION_SECRET is using its insecure default value. Set the SESSION_SECRET environment variable to a string of at least 32 random characters before deploying to production. See .env.example.
+   205→[security] STORAGE_SECRET is using its insecure default value. Set the STORAGE_SECRET environment variable to a string of at least 32 random characters before deploying to production. See .env.example.
+   206→ GET /api/trades/cmtr02wfi0007qpdoqei4ty36 200 in 186ms (compile: 76ms, render: 110ms)
+   207→[security] SESSION_SECRET is using its insecure default value. Set the SESSION_SECRET environment variable to a string of at least 32 random characters before deploying to production. See .env.example.
+   208→[security] STORAGE_SECRET is using its insecure default value. Set the STORAGE_SECRET environment variable to a string of at least 32 random characters before deploying to production. See .env.example.
+   209→ GET /api/trades/cmtvkxjtd000kot4gtjq3l5yr 200 in 103ms (compile: 17ms, render: 86ms)
+   210→[security] SESSION_SECRET is using its insecure default value. Set the SESSION_SECRET environment variable to a string of at least 32 random characters before deploying to production. See .env.example.
+   211→[security] STORAGE_SECRET is using its insecure default value. Set the STORAGE_SECRET environment variable to a string of at least 32 random characters before deploying to production. See .env.example.
+   212→ GET /api/strategies 200 in 18ms (compile: 5ms, render: 13ms)
+   213→ GET /api/accounts 200 in 20ms (compile: 3ms, render: 18ms)
+   214→ GET /api/me 200 in 19ms (compile: 3ms, render: 16ms)
+   215→ GET /api/trades/cmtvkxjtd000kot4gtjq3l5yr 200 in 32ms (compile: 20ms, render: 13ms)
+   216→ GET /api/strategies/cmtquxyo80007qpvxc6j8h9z2 200 in 35ms (compile: 17ms, render: 18ms)
+   217→[security] SESSION_SECRET is using its insecure default value. Set the SESSION_SECRET environment variable to a string of at least 32 random characters before deploying to production. See .env.example.
+   218→[security] STORAGE_SECRET is using its insecure default value. Set the STORAGE_SECRET environment variable to a string of at least 32 random characters before deploying to production. See .env.example.
+   219→[security] SESSION_SECRET is using its insecure default value. Set the SESSION_SECRET environment variable to a string of at least 32 random characters before deploying to production. See .env.example.
+   220→ GET /api/trades?limit=200&sortBy=entryTime&sortDir=desc 200 in 26ms (compile: 7ms, render: 20ms)
+   221→ GET /api/strategies 200 in 15ms (compile: 1749µs, render: 13ms)
+   222→ GET /api/accounts 200 in 11ms (compile: 3ms, render: 8ms)
+   223→ GET /api/trades?limit=10&sortBy=entryTime&sortDir=desc 200 in 13ms (compile: 1906µs, render: 11ms)
+   224→ GET /api/dashboard?preset=thisMonth 200 in 22ms (compile: 2ms, render: 20ms)
+   225→ GET /api/dashboard?preset=thisWeek 200 in 21ms (compile: 3ms, render: 18ms)
+   226→ GET /api/dashboard?preset=today 200 in 12ms (compile: 2ms, render: 9ms)
+   227→ GET /api/dashboard?preset=thisQuarter 200 in 25ms (compile: 1919µs, render: 23ms)
+   228→ GET /api/dashboard?preset=thisYear 200 in 31ms (compile: 2ms, render: 29ms)
+   229→ GET /api/dashboard?preset=all 200 in 24ms (compile: 3ms, render: 21ms)
+   230→ GET / 200 in 45ms (compile: 3ms, render: 42ms)
+   231→ GET / 200 in 45ms (compile: 3ms, render: 42ms)
+   232→ GET / 200 in 44ms (compile: 3ms, render: 42ms)
+   233→✓ Compiled in 199ms
+   234→✓ Compiled in 404ms
+   235→⚠ Fast Refresh had to perform a full reload due to a runtime error.
+   236→⨯ ReferenceError: nyOffset is not defined
+   237→    at TopBar (src/components/top-bar.tsx:104:30)
+   238→  102 |       <div className="ml-auto flex items-center gap-2">
+   239→  103 |         {/* Real-time New York Market Clock */}
+   240→> 104 |         <MarketClock offset={nyOffset} onOffsetChange={handleOffsetChange} />
+   241→      |                              ^
+   242→  105 |
+   243→  106 |         <DropdownMenu>
+   244→  107 |           <DropdownMenuTrigger asChild> {
+   245→  digest: '3298142026'
+   246→}
+   247→ GET / 500 in 431ms (compile: 98ms, render: 333ms)
+   248→⨯ ReferenceError: nyOffset is not defined
+   249→    at TopBar (src/components/top-bar.tsx:104:30)
+   250→  102 |       <div className="ml-auto flex items-center gap-2">
+   251→  103 |         {/* Real-time New York Market Clock */}
+   252→> 104 |         <MarketClock offset={nyOffset} onOffsetChange={handleOffsetChange} />
+   253→      |                              ^
+   254→  105 |
+   255→  106 |         <DropdownMenu>
+   256→  107 |           <DropdownMenuTrigger asChild> {
+   257→  digest: '3298142026'
+   258→}
+   259→ GET / 500 in 87ms (compile: 3ms, render: 84ms)
+   260→✓ Compiled in 198ms
+   261→⚠ Fast Refresh had to perform a full reload due to a runtime error.
+   262→ GET / 200 in 310ms (compile: 50ms, render: 260ms)
+   263→ GET /api/accounts 200 in 12ms (compile: 2ms, render: 10ms)
+   264→ GET /api/dashboard?preset=thisMonth 200 in 14ms (compile: 1701µs, render: 13ms)
+   265→ GET /api/trades?limit=10&sortBy=entryTime&sortDir=desc 200 in 13ms (compile: 2ms, render: 11ms)
+   266→ GET /api/settings 200 in 129ms (compile: 113ms, render: 16ms)
+   267→ GET /api/auth 200 in 9ms (compile: 2ms, render: 7ms)
+   268→✓ Compiled in 272ms
+   269→✓ Compiled in 194ms
+   270→ GET / 200 in 130ms (compile: 98ms, render: 32ms)
+   271→✓ Compiled in 205ms
+   272→✓ Compiled in 197ms
+   273→✓ Compiled in 193ms
+   274→ GET / 200 in 426ms (compile: 52ms, render: 373ms)
+   275→ GET / 200 in 480ms (compile: 4ms, render: 477ms)
+   276→ GET /api/settings 401 in 59ms (compile: 5ms, render: 54ms)
+   277→ GET /api/accounts 401 in 65ms (compile: 60ms, render: 6ms)
+   278→ GET /api/dashboard?preset=thisMonth 401 in 11ms (compile: 4ms, render: 7ms)
+   279→ GET /api/trades?limit=10&sortBy=entryTime&sortDir=desc 401 in 16ms (compile: 6ms, render: 10ms)
+   280→ GET /api/auth 401 in 20ms (compile: 10ms, render: 10ms)
+   281→ POST /api/auth?mode=signin 200 in 340ms (compile: 4ms, render: 336ms)
+   282→ GET /api/auth 200 in 11ms (compile: 2ms, render: 9ms)
+   283→ GET /api/me 200 in 19ms (compile: 2ms, render: 17ms)
+   284→ GET /api/dashboard?preset=thisMonth 200 in 63ms (compile: 5ms, render: 58ms)
+   285→ GET /api/trades?limit=10&sortBy=entryTime&sortDir=desc 200 in 102ms (compile: 21ms, render: 81ms)
+   286→ GET / 200 in 53ms (compile: 3ms, render: 50ms)
+   287→ GET / 200 in 59ms (compile: 3ms, render: 56ms)
+   288→ GET /api/settings 200 in 18ms (compile: 2ms, render: 15ms)
+   289→prisma:error 
+   290→Invalid `__TURBOPACK__imported__module__$5b$project$5d2f$src$2f$lib$2f$db$2e$ts__$5b$app$2d$route$5d$__$28$ecmascript$29$__["db"].userSettings.upsert()` invocation in
+   291→/home/z/my-project/.next/dev/server/chunks/[root-of-the-server]__2b0bf736._.js:476:162
+   292→
+   293→  473         }
+   294→  474     });
+   295→  475 }
+   296→→ 476 const settings = await __TURBOPACK__imported__module__$5b$project$5d2f$src$2f$lib$2f$db$2e$ts__$5b$app$2d$route$5d$__$28$ecmascript$29$__["db"].userSettings.upsert({
+   297→        where: {
+   298→          userId: "cmtmq1p2y0000qdbydm5ws0t0"
+   299→        },
+   300→        update: {
+   301→          nyMarketOffset: "UTC-5"
+   302→        },
+   303→        create: {
+   304→          userId: "cmtmq1p2y0000qdbydm5ws0t0",
+   305→          timezone: "UTC",
+   306→          theme: "nordic",
+   307→          nyMarketOffset: "UTC-5",
+   308→          ~~~~~~~~~~~~~~
+   309→      ?   displayTimezone?: String,
+   310→      ?   tradingTimezone?: String,
+   311→      ?   density?: String,
+   312→      ?   reducedMotion?: Boolean,
+   313→      ?   largerText?: Boolean,
+   314→      ?   defaultRiskPct?: String,
+   315→      ?   baseCurrencySymbol?: String,
+   316→      ?   normalRiskMaxPct?: Float,
+   317→      ?   warningRiskMaxPct?: Float,
+   318→      ?   criticalRiskMaxPct?: Float,
+   319→      ?   defaultAccountId?: String | Null,
+   320→      ?   defaultSession?: String | Null,
+   321→      ?   defaultInstrument?: String | Null,
+   322→      ?   defaultTimeframe?: String | Null,
+   323→      ?   dailyTradeLimit?: Int | Null,
+   324→      ?   maxTradesPerDay?: Int | Null,
+   325→      ?   maxRiskPerTradePct?: Float | Null,
+   326→      ?   dailyLossLimitPct?: String | Null,
+   327→      ?   preferredInstruments?: String | Null,
+   328→      ?   dateFormat?: String | Null,
+   329→      ?   timeFormat?: String | Null,
+   330→      ?   weekStartsOn?: String | Null,
+   331→      ?   privacyModeEnabled?: Boolean,
+   332→      ?   privacyPassphraseHash?: String | Null,
+   333→      ?   updatedAt?: DateTime
+   334→        }
+   335→      })
+   336→
+   337→Unknown argument `nyMarketOffset`. Available options are marked with ?.
+   338→⨯ Error [PrismaClientValidationError]: 
+   339→Invalid `{imported module ./src/lib/db.ts}["db"].userSettings.upsert()` invocation in
+   340→/home/z/my-project/.next/dev/server/chunks/[root-of-the-server]__2b0bf736._.js:476:162
+   341→
+   342→  473         }
+   343→  474     });
+   344→  475 }
+   345→→ 476 const settings = await {imported module ./src/lib/db.ts}["db"].userSettings.upsert({
+   346→        where: {
+   347→          userId: "cmtmq1p2y0000qdbydm5ws0t0"
+   348→        },
+   349→        update: {
+   350→          nyMarketOffset: "UTC-5"
+   351→        },
+   352→        create: {
+   353→          userId: "cmtmq1p2y0000qdbydm5ws0t0",
+   354→          timezone: "UTC",
+   355→          theme: "nordic",
+   356→          nyMarketOffset: "UTC-5",
+   357→          ~~~~~~~~~~~~~~
+   358→      ?   displayTimezone?: String,
+   359→      ?   tradingTimezone?: String,
+   360→      ?   density?: String,
+   361→      ?   reducedMotion?: Boolean,
+   362→      ?   largerText?: Boolean,
+   363→      ?   defaultRiskPct?: String,
+   364→      ?   baseCurrencySymbol?: String,
+   365→      ?   normalRiskMaxPct?: Float,
+   366→      ?   warningRiskMaxPct?: Float,
+   367→      ?   criticalRiskMaxPct?: Float,
+   368→      ?   defaultAccountId?: String | Null,
+   369→      ?   defaultSession?: String | Null,
+   370→      ?   defaultInstrument?: String | Null,
+   371→      ?   defaultTimeframe?: String | Null,
+   372→      ?   dailyTradeLimit?: Int | Null,
+   373→      ?   maxTradesPerDay?: Int | Null,
+   374→      ?   maxRiskPerTradePct?: Float | Null,
+   375→      ?   dailyLossLimitPct?: String | Null,
+   376→      ?   preferredInstruments?: String | Null,
+   377→      ?   dateFormat?: String | Null,
+   378→      ?   timeFormat?: String | Null,
+   379→      ?   weekStartsOn?: String | Null,
+   380→      ?   privacyModeEnabled?: Boolean,
+   381→      ?   privacyPassphraseHash?: String | Null,
+   382→      ?   updatedAt?: DateTime
+   383→        }
+   384→      })
+   385→
+   386→Unknown argument `nyMarketOffset`. Available options are marked with ?.
+   387→    at <unknown> (src/app/api/settings/route.ts:56:42)
+   388→    at async PATCH (src/app/api/settings/route.ts:56:20)
+   389→  54 |     });
+   390→  55 |   }
+   391→> 56 |   const settings = await db.userSettings.upsert({
+   392→     |                                          ^
+   393→  57 |     where: { userId: user.id },
+   394→  58 |     update: allowed,
+   395→  59 |     create: { userId: user.id, timezone: "UTC", theme: "nordic", ...allowed }, {
+   396→  clientVersion: '6.19.2'
+   397→}
+   398→ PATCH /api/settings 500 in 338ms (compile: 2ms, render: 336ms)
+   399→prisma:error 
+   400→Invalid `__TURBOPACK__imported__module__$5b$project$5d2f$src$2f$lib$2f$db$2e$ts__$5b$app$2d$route$5d$__$28$ecmascript$29$__["db"].userSettings.upsert()` invocation in
+   401→/home/z/my-project/.next/dev/server/chunks/[root-of-the-server]__2b0bf736._.js:476:162
+   402→
+   403→  473         }
+   404→  474     });
+   405→  475 }
+   406→→ 476 const settings = await __TURBOPACK__imported__module__$5b$project$5d2f$src$2f$lib$2f$db$2e$ts__$5b$app$2d$route$5d$__$28$ecmascript$29$__["db"].userSettings.upsert({
+   407→        where: {
+   408→          userId: "cmtmq1p2y0000qdbydm5ws0t0"
+   409→        },
+   410→        update: {
+   411→          nyMarketOffset: "UTC-4"
+   412→        },
+   413→        create: {
+   414→          userId: "cmtmq1p2y0000qdbydm5ws0t0",
+   415→          timezone: "UTC",
+   416→          theme: "nordic",
+   417→          nyMarketOffset: "UTC-4",
+   418→          ~~~~~~~~~~~~~~
+   419→      ?   displayTimezone?: String,
+   420→      ?   tradingTimezone?: String,
+   421→      ?   density?: String,
+   422→      ?   reducedMotion?: Boolean,
+   423→      ?   largerText?: Boolean,
+   424→      ?   defaultRiskPct?: String,
+   425→      ?   baseCurrencySymbol?: String,
+   426→      ?   normalRiskMaxPct?: Float,
+   427→      ?   warningRiskMaxPct?: Float,
+   428→      ?   criticalRiskMaxPct?: Float,
+   429→      ?   defaultAccountId?: String | Null,
+   430→      ?   defaultSession?: String | Null,
+   431→      ?   defaultInstrument?: String | Null,
+   432→      ?   defaultTimeframe?: String | Null,
+   433→      ?   dailyTradeLimit?: Int | Null,
+   434→      ?   maxTradesPerDay?: Int | Null,
+   435→      ?   maxRiskPerTradePct?: Float | Null,
+   436→      ?   dailyLossLimitPct?: String | Null,
+   437→      ?   preferredInstruments?: String | Null,
+   438→      ?   dateFormat?: String | Null,
+   439→      ?   timeFormat?: String | Null,
+   440→      ?   weekStartsOn?: String | Null,
+   441→      ?   privacyModeEnabled?: Boolean,
+   442→      ?   privacyPassphraseHash?: String | Null,
+   443→      ?   updatedAt?: DateTime
+   444→        }
+   445→      })
+   446→
+   447→Unknown argument `nyMarketOffset`. Available options are marked with ?.
+   448→⨯ Error [PrismaClientValidationError]: 
+   449→Invalid `{imported module ./src/lib/db.ts}["db"].userSettings.upsert()` invocation in
+   450→/home/z/my-project/.next/dev/server/chunks/[root-of-the-server]__2b0bf736._.js:476:162
+   451→
+   452→  473         }
+   453→  474     });
+   454→  475 }
+   455→→ 476 const settings = await {imported module ./src/lib/db.ts}["db"].userSettings.upsert({
+   456→        where: {
+   457→          userId: "cmtmq1p2y0000qdbydm5ws0t0"
+   458→        },
+   459→        update: {
+   460→          nyMarketOffset: "UTC-4"
+   461→        },
+   462→        create: {
+   463→          userId: "cmtmq1p2y0000qdbydm5ws0t0",
+   464→          timezone: "UTC",
+   465→          theme: "nordic",
+   466→          nyMarketOffset: "UTC-4",
+   467→          ~~~~~~~~~~~~~~
+   468→      ?   displayTimezone?: String,
+   469→      ?   tradingTimezone?: String,
+   470→      ?   density?: String,
+   471→      ?   reducedMotion?: Boolean,
+   472→      ?   largerText?: Boolean,
+   473→      ?   defaultRiskPct?: String,
+   474→      ?   baseCurrencySymbol?: String,
+   475→      ?   normalRiskMaxPct?: Float,
+   476→      ?   warningRiskMaxPct?: Float,
+   477→      ?   criticalRiskMaxPct?: Float,
+   478→      ?   defaultAccountId?: String | Null,
+   479→      ?   defaultSession?: String | Null,
+   480→      ?   defaultInstrument?: String | Null,
+   481→      ?   defaultTimeframe?: String | Null,
+   482→      ?   dailyTradeLimit?: Int | Null,
+   483→      ?   maxTradesPerDay?: Int | Null,
+   484→      ?   maxRiskPerTradePct?: Float | Null,
+   485→      ?   dailyLossLimitPct?: String | Null,
+   486→      ?   preferredInstruments?: String | Null,
+   487→      ?   dateFormat?: String | Null,
+   488→      ?   timeFormat?: String | Null,
+   489→      ?   weekStartsOn?: String | Null,
+   490→      ?   privacyModeEnabled?: Boolean,
+   491→      ?   privacyPassphraseHash?: String | Null,
+   492→      ?   updatedAt?: DateTime
+   493→        }
+   494→      })
+   495→
+   496→Unknown argument `nyMarketOffset`. Available options are marked with ?.
+   497→    at <unknown> (src/app/api/settings/route.ts:56:42)
+   498→    at async PATCH (src/app/api/settings/route.ts:56:20)
+   499→  54 |     });
+   500→  55 |   }
+   501→> 56 |   const settings = await db.userSettings.upsert({
+   502→     |                                          ^
+   503→  57 |     where: { userId: user.id },
+   504→  58 |     update: allowed,
+   505→  59 |     create: { userId: user.id, timezone: "UTC", theme: "nordic", ...allowed }, {
+   506→  clientVersion: '6.19.2'
+   507→}
+   508→ PATCH /api/settings 500 in 149ms (compile: 3ms, render: 146ms)
+   509→ GET /api/settings 200 in 12ms (compile: 1777µs, render: 10ms)
+   510→ GET /api/dashboard?preset=thisQuarter 200 in 96ms (compile: 2ms, render: 93ms)
+   511→ GET /api/trades?limit=200&sortBy=entryTime&sortDir=desc 200 in 25ms (compile: 6ms, render: 19ms)
+   512→ GET /api/accounts 200 in 10ms (compile: 2ms, render: 8ms)
+   513→ GET /api/strategies 200 in 11ms (compile: 2ms, render: 9ms)
+   514→ GET /api/calendar?year=2026&month=9 200 in 262ms (compile: 246ms, render: 16ms)
+   515→ GET /api/trades?fromDate=2026-09-01T00%3A00%3A00.000Z&toDate=2026-09-01T23%3A59%3A59.999Z&limit=100&sortBy=entryTime&sortDir=asc 200 in 12ms (compile: 2ms, render: 10ms)
+   516→ GET /api/calendar?year=2027&month=9 200 in 11ms (compile: 2ms, render: 9ms)
+   517→ GET /api/calendar?year=2026&month=9 200 in 14ms (compile: 3ms, render: 12ms)
+   518→ GET /api/dashboard?preset=thisMonth 200 in 15ms (compile: 2ms, render: 13ms)
+   519→ GET /api/trades?limit=10&sortBy=entryTime&sortDir=desc 200 in 14ms (compile: 3ms, render: 12ms)
+   520→ GET /api/strategies 200 in 10ms (compile: 2ms, render: 8ms)
+   521→ GET /api/me 200 in 15ms (compile: 2ms, render: 12ms)
+   522→ GET /api/settings 200 in 10ms (compile: 1583µs, render: 9ms)
+   523→ DELETE /api/auth 200 in 26ms (compile: 9ms, render: 17ms)
+   524→ GET / 200 in 58ms (compile: 7ms, render: 51ms)
+   525→ GET /api/settings 401 in 13ms (compile: 6ms, render: 7ms)
+   526→ GET /api/me 401 in 17ms (compile: 5ms, render: 12ms)
+   527→ GET /api/accounts 401 in 9ms (compile: 4ms, render: 4ms)
+   528→ GET /api/auth 401 in 6ms (compile: 2ms, render: 3ms)
+   529→ POST /api/auth?mode=signin 200 in 300ms (compile: 2ms, render: 298ms)
+   530→ GET /api/auth 200 in 10ms (compile: 2ms, render: 8ms)
+   531→ GET /api/me 200 in 16ms (compile: 2ms, render: 13ms)
+   532→ GET /api/trades?limit=10&sortBy=entryTime&sortDir=desc 200 in 16ms (compile: 7ms, render: 10ms)
+
+[showing lines 33-532 of 534; use offset=533 with limit to continue reading]

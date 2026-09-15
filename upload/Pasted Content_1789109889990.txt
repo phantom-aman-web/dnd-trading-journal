@@ -1,0 +1,2013 @@
+DN D CURRENT BUILD: ULTIMATE READ-ONLY FULL SYSTEM AUDIT
+
+============================================================
+ABSOLUTE RULE: DO NOT MODIFY THE PROJECT
+============================================================
+
+Your ONLY task is to inspect and document the CURRENT DnD project exactly as it exists at the moment this audit begins.
+
+This is a READ-ONLY reverse-engineering and documentation task.
+
+DO NOT:
+
+- modify source code
+- modify UI
+- redesign anything
+- fix bugs
+- refactor
+- rename files
+- rename variables
+- change configuration
+- change environment variables
+- install packages
+- update dependencies
+- delete files
+- create migrations
+- modify database schema
+- modify database records
+- seed data
+- alter user data
+- rewrite documentation in the project
+- change routes
+- change API behavior
+- change authentication
+- change styling
+- change settings
+- change onboarding
+- change financial logic
+- change deployment configuration
+
+Do not "improve" anything you find.
+
+Do not silently correct inconsistencies.
+
+Do not clean up the code.
+
+You are observing and documenting only.
+
+If a command could modify the project, DO NOT RUN IT.
+
+Safe read-only inspection, browser navigation, source inspection, build inspection, schema inspection, and non-destructive runtime observation are allowed.
+
+============================================================
+WHY THIS AUDIT EXISTS
+============================================================
+
+DnD has gone through several major redesigns and feature changes.
+
+Previous reports are now historical context and must NOT be treated as authoritative.
+
+The CURRENT CODEBASE + CURRENT RUNNING APPLICATION are the source of truth.
+
+I need a completely fresh snapshot of what DnD is NOW.
+
+The report must be detailed enough that I can give it to another AI model and that model can understand the entire application without needing to rediscover it from scratch.
+
+The report must cover:
+
+FRONTEND
+UI
+UX
+DESIGN
+EVERY SCREEN
+EVERY FORM
+EVERY INTERACTION
+NAVIGATION
+RESPONSIVE DESIGN
+STATE
+BACKEND
+API
+SERVER LOGIC
+DATABASE
+TRADING DOMAIN
+FINANCIAL ENGINE
+STRATEGIES
+CHECKLISTS
+DAILY PLANS
+TRADE STATES
+MEDIA
+TIMEFRAMES
+NEWS
+ANALYTICS
+CALENDAR
+ONBOARDING
+SETTINGS
+AUTH
+SECURITY
+LEGAL
+COOKIES
+PERFORMANCE
+TESTING
+DEPLOYMENT
+DATA FLOW
+KNOWN ISSUES
+MISSING FEATURES
+
+============================================================
+SOURCE-OF-TRUTH RULE
+============================================================
+
+Use this priority:
+
+1. Current running application
+2. Current source code
+3. Current database/schema
+4. Current configuration
+5. Current package/dependency configuration
+6. Current deployment files
+7. Historical project documentation only for comparison
+
+If sources conflict:
+
+CURRENT BEHAVIOR wins.
+
+Mark the discrepancy under:
+
+CURRENT VS HISTORICAL
+
+Never silently merge different versions together.
+
+============================================================
+VERIFICATION LABELS
+============================================================
+
+Every important conclusion must use one of:
+
+VERIFIED
+PARTIALLY VERIFIED
+INFERRED
+NOT FOUND
+NOT VERIFIED
+BLOCKED
+
+Definitions:
+
+VERIFIED
+Directly confirmed through current code, UI, runtime, schema, configuration, or other concrete evidence.
+
+PARTIALLY VERIFIED
+Some parts confirmed, others not.
+
+INFERRED
+Strongly suggested but not directly confirmed.
+
+NOT FOUND
+Search performed and no implementation was found.
+
+NOT VERIFIED
+Implementation may exist but behavior could not be confirmed.
+
+BLOCKED
+Could not inspect/test because required infrastructure was unavailable.
+
+Never turn:
+BLOCKED → VERIFIED
+
+Never turn:
+INFERRED → VERIFIED
+
+============================================================
+1. PROJECT IDENTITY
+============================================================
+
+Document:
+
+- product name
+- current product description
+- product purpose
+- target user
+- user problem
+- current value proposition
+- differentiators
+- current positioning
+- core mental model
+- major workflows
+
+Explain what DnD currently is in one paragraph.
+
+Then explain it technically.
+
+============================================================
+2. COMPLETE PROJECT STRUCTURE
+============================================================
+
+Inspect the entire repository.
+
+Create a meaningful architecture tree showing:
+
+- app
+- components
+- views
+- common components
+- UI components
+- trade components
+- onboarding
+- public
+- libraries
+- database
+- API
+- services
+- utilities
+- styles
+- public assets
+- scripts
+- tests
+- deployment
+- configuration
+
+For important files include:
+
+PATH
+PURPOSE
+FEATURE
+DEPENDENCIES
+
+Do not dump thousands of unimportant files.
+
+============================================================
+3. COMPLETE CURRENT ROUTE / VIEW MAP
+============================================================
+
+Determine exactly how navigation works.
+
+Determine whether the current app uses:
+
+- Next.js routes
+- SPA view switching
+- query parameters
+- modals
+- drawers
+- overlays
+- nested navigation
+
+For EVERY view:
+
+- exact route/view key
+- component
+- public/authenticated
+- purpose
+- entry points
+- exit points
+- primary action
+- secondary actions
+- related views
+- backend dependencies
+
+============================================================
+4. COMPLETE NAVIGATION AUDIT
+============================================================
+
+Inspect the ACTUAL current:
+
+- desktop sidebar
+- top navbar
+- mobile navigation
+- account switcher
+- search
+- command palette
+- profile/user menu
+- dropdowns
+- contextual actions
+- buttons that navigate to views
+
+For each:
+
+- exact label
+- icon
+- position
+- order
+- grouping
+- active state
+- collapsed state
+- mobile behavior
+- keyboard behavior
+- data-tour attribute if present
+
+Do not rely on old navigation documentation.
+
+============================================================
+5. COMPLETE DESIGN SYSTEM
+============================================================
+
+Inspect actual current UI styling.
+
+Document exact values where available:
+
+COLORS
+
+- background
+- foreground
+- surface
+- card
+- border
+- primary
+- secondary
+- success
+- warning
+- danger
+- profit
+- loss
+- sidebar
+- inputs
+- overlays
+- charts
+
+TYPOGRAPHY
+
+- fonts
+- font stack
+- headings
+- body
+- labels
+- captions
+- numeric styles
+- monospace
+
+SPACING
+
+- page padding
+- section spacing
+- card padding
+- grid gap
+- form gap
+- navigation spacing
+
+COMPONENT STYLING
+
+- border radius
+- borders
+- shadows
+- elevation
+- hover
+- active
+- selected
+- focus
+- disabled
+
+THEMES
+
+- light
+- dark
+- institutional/other
+- persistence
+- initialization
+- no-FOUC behavior
+
+ICONS
+
+- library
+- sizes
+- usage patterns
+
+MOTION
+
+- animation library
+- transitions
+- entrance animations
+- reduced motion behavior
+
+ACCESSIBILITY
+
+- focus
+- keyboard
+- aria labels
+- contrast
+- touch targets
+
+============================================================
+6. SCREEN-BY-SCREEN UI REVERSE ENGINEERING
+============================================================
+
+THIS IS ONE OF THE MOST IMPORTANT SECTIONS.
+
+Open and inspect every accessible screen.
+
+For each screen document:
+
+SCREEN NAME
+
+ROUTE / VIEW
+
+PURPOSE
+
+LAYOUT
+
+HEADER
+
+SIDEBAR/NAV
+
+CONTENT STRUCTURE
+
+SECTION ORDER
+
+CARDS
+
+TABLES
+
+CHARTS
+
+FILTERS
+
+TABS
+
+DROPDOWNS
+
+FORMS
+
+BUTTONS
+
+MODALS
+
+DRAWERS
+
+TOOLTIPS
+
+EMPTY STATES
+
+LOADING STATES
+
+ERROR STATES
+
+SUCCESS STATES
+
+PRIMARY CTA
+
+SECONDARY ACTIONS
+
+DATA DISPLAYED
+
+DATA SOURCE
+
+BACKEND DEPENDENCIES
+
+RESPONSIVE BEHAVIOR
+
+KEY INTERACTIONS
+
+============================================================
+7. VISUAL SCREEN INVENTORY
+============================================================
+
+If browser screenshot tooling is available, capture representative screenshots of:
+
+- landing page
+- signup
+- sign in
+- cookie consent
+- onboarding welcome
+- every setup step
+- every tour state where useful
+- dashboard
+- trades log
+- planned trade
+- open trade
+- close trade modal
+- closed trade
+- add trade
+- every Add Trade step
+- trade detail
+- strategies
+- strategy creation
+- strategy editing
+- strategy versions
+- checklist
+- media/evidence
+- calendar
+- day details
+- analytics
+- settings
+- profile
+- trading settings
+- appearance
+- legal
+- backup
+- account management
+- mobile layouts
+
+Screenshots are evidence.
+
+Do not modify the application to create screenshots.
+
+============================================================
+8. COMPLETE FORM INVENTORY
+============================================================
+
+Inspect EVERY form.
+
+For each form:
+
+FORM NAME
+
+SCREEN
+
+STEP/TAB
+
+PURPOSE
+
+FIELDS
+
+FIELD TYPE
+
+REQUIRED / OPTIONAL
+
+DEFAULT
+
+PLACEHOLDER
+
+OPTIONS
+
+ENUM VALUES
+
+AUTO-FORMATTING
+
+VALIDATION
+
+DEPENDENCIES
+
+CONDITIONAL LOGIC
+
+CALCULATED VALUES
+
+CLIENT VALIDATION
+
+SERVER VALIDATION
+
+SUBMIT ACTION
+
+API/SERVER ACTION
+
+SUCCESS
+
+ERROR
+
+RESET
+
+EDIT MODE
+
+UNSAVED STATE
+
+DRAFT STATE
+
+PERSISTENCE
+
+Do this for:
+
+- signup
+- signin
+- account creation
+- account editing
+- instrument selection
+- strategy creation
+- strategy editing
+- rules
+- trade creation
+- trade editing
+- planned trade
+- execution
+- close trade
+- partial exits
+- checklist
+- psychology
+- evidence
+- annotations
+- daily plan
+- reviews
+- settings
+- legal
+- cookie preferences
+- data import
+- other discovered forms
+
+============================================================
+9. ADD TRADE COMPLETE AUDIT
+============================================================
+
+Reverse-engineer the ENTIRE current Add Trade experience.
+
+Document the exact number and order of steps.
+
+For every step:
+
+- exact title
+- exact fields
+- field types
+- defaults
+- validation
+- dynamic behavior
+- dependent fields
+- calculated values
+- next/back
+- save behavior
+- draft behavior
+
+Trace:
+
+USER
+→ ADD TRADE
+→ FORM
+→ STATE
+→ VALIDATION
+→ API
+→ SERVER LOGIC
+→ DATABASE
+→ ANALYTICS
+→ UI
+
+Inspect in detail:
+
+- account
+- instrument
+- direction
+- status
+- date/time
+- session
+- timeframe
+- news
+- strategy
+- checklist
+- entry
+- stop
+- target
+- size
+- risk
+- R:R
+- partial exits
+- psychology
+- thesis
+- evidence
+- image
+- video
+- files
+- media upload
+- timeframe tagging
+- annotations
+- planned vs actual
+- final review/save
+
+============================================================
+10. TRADE STATE MACHINE
+============================================================
+
+Determine the actual supported states.
+
+Potential examples:
+
+DRAFT
+PLANNED
+OPEN
+CLOSED
+
+But DO NOT assume these exist.
+
+Identify:
+
+- valid states
+- state transitions
+- who/what triggers transition
+- available actions per state
+- fields required by state
+- calculated metrics by state
+- whether state transitions are reversible
+
+Create a state diagram.
+
+============================================================
+11. PLANNED TRADE
+============================================================
+
+Inspect everything relating to planned trades.
+
+Document:
+
+- creation
+- fields
+- UI
+- status
+- editing
+- execution/start
+- conversion to open trade
+- cancel/delete
+- calendar
+- dashboard
+- analytics
+- relationship to actual execution
+
+Determine exactly how:
+
+PLANNED
+→ OPEN
+→ CLOSED
+
+works in the current implementation.
+
+============================================================
+12. OPEN TRADE / CLOSE TRADE
+============================================================
+
+Inspect the current close-trade experience.
+
+Document:
+
+- where Close Trade appears
+- modal/page
+- all fields
+- validation
+- partial close
+- full close
+- execution details
+- fees
+- P&L preview
+- R preview
+- server calculations
+- status update
+- audit
+- refresh behavior
+- errors
+
+============================================================
+13. STRATEGY SYSTEM
+============================================================
+
+Reverse-engineer:
+
+- strategy creation
+- strategy editing
+- strategy duplication
+- activation/deactivation
+- versioning
+- version labels
+- rule management
+- rule ordering
+- rule weight
+- rule necessity
+- descriptions
+- historical versions
+- trade linkage
+
+Trace:
+
+STRATEGY
+→ VERSION
+→ RULES
+→ TRADE
+→ CHECKLIST
+
+============================================================
+14. CHECKLIST / A+ SYSTEM
+============================================================
+
+Inspect the current implementation.
+
+Determine exactly:
+
+- source of checklist rules
+- strategy relation
+- generic checklist existence
+- item structure
+- required rules
+- weight
+- scoring
+- grade calculation
+- thresholds
+- grade caps
+- server validation
+- raw answers
+- snapshot
+- historical version preservation
+
+Trace:
+
+RAW ANSWERS
+→ SCORE
+→ GRADE
+→ STORED EVALUATION
+
+============================================================
+15. INSTRUMENT SYSTEM
+============================================================
+
+Inspect the actual current instrument implementation.
+
+Document:
+
+- catalog source
+- database model
+- categories
+- market types
+- supported symbols
+- capitalization behavior
+- search
+- dropdown
+- favorites
+- defaults
+- custom instruments
+- price precision
+- quantity precision
+- pip size
+- tick size
+- point value
+- contract size
+- currencies
+
+Trace how instruments affect:
+
+- trade form
+- calculations
+- risk
+- display
+- analytics
+- filters
+- settings
+
+============================================================
+16. FINANCIAL ENGINE
+============================================================
+
+Inspect every financial calculation.
+
+Document:
+
+- entry
+- exit
+- average price
+- quantity
+- partial exits
+- gross P&L
+- fees
+- commissions
+- swap
+- slippage
+- net P&L
+- risk
+- planned R
+- actual R
+- equity
+- drawdown
+- profit factor
+- expectancy
+- win rate
+- streaks
+- other metrics
+
+For each:
+
+INPUT
+→ FORMULA
+→ FUNCTION
+→ STORAGE
+→ API
+→ DISPLAY
+
+Document numeric representations and precision.
+
+Identify client-derived versus server-authoritative values.
+
+============================================================
+17. MEDIA / EVIDENCE
+============================================================
+
+Inspect the actual current media architecture.
+
+Document:
+
+- upload
+- image
+- video
+- file
+- size limits
+- formats
+- progress indicator
+- background/non-blocking upload
+- upload states
+- retry
+- cancel
+- storage
+- signed URLs
+- metadata
+- timeframe
+- descriptions/captions
+- thumbnails
+- preview
+- download
+- annotations
+- deletion
+- trade relationship
+
+Trace:
+
+SELECT
+→ UPLOAD
+→ PROGRESS
+→ STORAGE
+→ DATABASE
+→ TRADE
+→ DISPLAY
+
+Determine whether uploads block the trade form.
+
+============================================================
+18. TIMEFRAME SYSTEM
+============================================================
+
+Inspect exact supported timeframes.
+
+Document:
+
+- values
+- labels
+- categories/groups
+- where used
+- default
+- persistence
+- filtering
+- media grouping
+- trade-level timeframe
+- chart timeframe
+- analytics use
+
+============================================================
+19. NEWS SYSTEM
+============================================================
+
+Inspect:
+
+- field
+- selector
+- values
+- default
+- validation
+- storage
+- single/multiple
+- UI display
+- analytics
+- historical records
+
+============================================================
+20. PSYCHOLOGY / BEHAVIOR
+============================================================
+
+Inspect all psychological data.
+
+Document:
+
+- emotions
+- confidence
+- discipline
+- tags
+- behavior flags
+- mistakes
+- notes
+- before/after
+- score
+- analytics
+- correlations
+
+============================================================
+21. DAILY PLANS
+============================================================
+
+Determine the CURRENT status.
+
+Is the UI active?
+
+Is it hidden?
+
+Is it only API/model-level?
+
+Document:
+
+- navigation
+- creation
+- fields
+- editing
+- date
+- instrument
+- bias
+- liquidity
+- levels
+- sessions
+- risk
+- max trades
+- invalidation
+- strategy
+- trade linkage
+- adherence
+
+Do not assume Daily Plans exist in UI.
+
+============================================================
+22. CALENDAR
+============================================================
+
+Inspect actual calendar behavior.
+
+Document:
+
+- layout
+- month navigation
+- timezone
+- day aggregation
+- P&L
+- R
+- trades
+- wins
+- losses
+- grades
+- A+
+- violations
+- sessions
+- planned trades
+- day popup/page
+- actions
+
+Document exactly what happens when a day is clicked.
+
+============================================================
+23. ANALYTICS
+============================================================
+
+Inspect every analytics tab, chart, table and metric.
+
+For each:
+
+- name
+- purpose
+- source
+- formula
+- filters
+- dimensions
+- aggregation
+- sample-size gating
+- date range
+- cache
+- UI display
+- drilldown
+- account filter
+
+Determine whether analytics are:
+
+- client-side
+- server-side
+- cached
+- background
+- synchronous
+
+============================================================
+24. DASHBOARD
+============================================================
+
+Document EVERY dashboard element.
+
+Include:
+
+- metric cards
+- charts
+- recent trades
+- performance summaries
+- insight cards
+- filters
+- account selector
+- date ranges
+- planned/open/closed treatment
+- empty state
+- actions
+- links
+
+Explain the data source for each major element.
+
+============================================================
+25. REVIEWS
+============================================================
+
+Determine the actual current state.
+
+If active:
+
+document:
+
+- daily
+- weekly
+- monthly
+- reflections
+- auto metrics
+- patterns
+- action items
+- trade links
+
+If inactive:
+
+state clearly.
+
+============================================================
+26. ONBOARDING
+============================================================
+
+Inspect the EXACT current new-user flow.
+
+Document:
+
+SIGNUP
+→ LEGAL
+→ WELCOME
+→ SETUP
+→ TOUR
+→ DASHBOARD
+
+For setup:
+
+- exact welcome text
+- number of steps
+- each step
+- fields
+- defaults
+- required/optional
+- skip
+- back
+- completion
+- persistence
+- resume
+
+For tour:
+
+- exact number of steps
+- every step
+- target
+- selector
+- spotlight behavior
+- tooltip
+- navigation
+- mobile behavior
+- skip
+- replay
+- completion
+
+============================================================
+27. SETTINGS
+============================================================
+
+Inspect EVERY current Settings tab.
+
+For each tab:
+
+- exact label
+- section order
+- field
+- type
+- default
+- description
+- storage
+- effect on application
+
+Document:
+
+Profile
+
+Trading
+
+Appearance
+
+Legal
+
+and any additional current tabs.
+
+============================================================
+28. SETTINGS → TIME / MARKET CLOCK
+============================================================
+
+Inspect the current New York market clock.
+
+Document:
+
+- where it appears
+- displayed time
+- update frequency
+- UTC-4
+- UTC-5
+- selector
+- persisted preference
+- session indicator
+- session definitions
+- DST behavior
+- mobile behavior
+- relationship to user timezone
+
+============================================================
+29. AUTHENTICATION
+============================================================
+
+Trace exact:
+
+SIGNUP
+LOGIN
+LOGOUT
+SESSION
+COOKIE
+PASSWORD
+RECOVERY
+VERIFICATION
+MFA
+
+Document:
+
+- provider
+- token/session
+- expiry
+- cookie attributes
+- password hashing
+- rate limit
+- redirects
+- signout
+- errors
+
+============================================================
+30. LEGAL / COOKIE CONSENT
+============================================================
+
+Document:
+
+- Terms
+- Privacy
+- Cookies
+- cookie banner
+- categories
+- persistence
+- version
+- timestamp
+- signup acceptance
+- reacceptance
+- settings management
+
+============================================================
+31. DATABASE
+============================================================
+
+Inspect current Prisma/schema/database.
+
+For EVERY model:
+
+- exact model name
+- purpose
+- fields
+- types
+- required/optional
+- primary key
+- foreign keys
+- relations
+- indexes
+- unique constraints
+- enums
+- defaults
+- cascading
+- SetNull
+- soft delete
+- ownership
+- timestamps
+
+Create complete relationship map.
+
+============================================================
+32. API INVENTORY
+============================================================
+
+Inventory EVERY current API route.
+
+For each:
+
+METHOD
+
+PATH
+
+AUTH
+
+OWNER CHECK
+
+INPUT
+
+VALIDATION
+
+DATABASE
+
+RESPONSE
+
+ERRORS
+
+SIDE EFFECTS
+
+AUDIT
+
+CACHE
+
+Include auth, trade, media, settings, analytics, legal, backup, imports and everything else.
+
+============================================================
+33. SERVER BUSINESS LOGIC
+============================================================
+
+Identify important server functions.
+
+For each:
+
+- name
+- file
+- inputs
+- outputs
+- callers
+- database interaction
+- financial importance
+- security importance
+- side effects
+
+Prioritize:
+
+- P&L
+- risk
+- R
+- checklist
+- grade
+- instrument handling
+- session/timezone
+- close trade
+- plan adherence
+- analytics
+- auth
+- authorization
+- consent
+
+============================================================
+34. FRONTEND STATE
+============================================================
+
+Inventory:
+
+- Zustand stores
+- React Query
+- local state
+- persisted state
+- localStorage
+- sessionStorage
+- URL state
+
+For each:
+
+- what it stores
+- persistence
+- hydration
+- ownership
+- invalidation
+- synchronization
+
+============================================================
+35. COMPLETE DATA FLOW
+============================================================
+
+Create diagrams for:
+
+Signup
+
+Login
+
+Onboarding
+
+Strategy creation
+
+Strategy version
+
+Daily Plan
+
+Add Trade
+
+Planned Trade
+
+Open Trade
+
+Close Trade
+
+Media Upload
+
+Checklist
+
+Calendar
+
+Analytics
+
+Settings
+
+Cookie Consent
+
+Legal Acceptance
+
+For each:
+
+USER
+→ UI
+→ STATE
+→ SERVER/API
+→ BUSINESS LOGIC
+→ DATABASE/STORAGE
+→ RESPONSE
+→ UI
+
+============================================================
+36. ERROR HANDLING
+============================================================
+
+Inspect:
+
+- validation
+- API errors
+- auth errors
+- database failures
+- media errors
+- network errors
+- empty states
+- loading
+- unexpected errors
+- destructive confirmations
+
+Record where behavior is missing.
+
+============================================================
+37. RESPONSIVE DESIGN
+============================================================
+
+Inspect:
+
+DESKTOP
+
+TABLET
+
+MOBILE
+
+Document:
+
+- sidebar
+- top bar
+- mobile nav
+- forms
+- tables
+- charts
+- dialogs
+- trade flow
+- onboarding
+- media
+- calendar
+
+Identify UI degradation.
+
+============================================================
+38. ACCESSIBILITY
+============================================================
+
+Inspect:
+
+- focus
+- keyboard
+- screen readers
+- aria
+- contrast
+- labels
+- dialogs
+- touch targets
+- reduced motion
+
+============================================================
+39. SECURITY AUDIT
+============================================================
+
+Static inspection only.
+
+Inspect:
+
+- auth
+- authorization
+- ownership
+- sessions
+- cookies
+- CSRF
+- XSS
+- injection
+- validation
+- upload security
+- signed URLs
+- secrets
+- rate limits
+- headers
+- CSP
+- HSTS
+- CORS
+- mass assignment
+- information leakage
+
+Classify:
+
+SAFE
+WARNING
+CRITICAL
+NOT VERIFIED
+BLOCKED
+
+Do not perform destructive security testing.
+
+============================================================
+40. PERFORMANCE
+============================================================
+
+Inspect:
+
+- database queries
+- N+1
+- pagination
+- filters
+- client aggregation
+- analytics
+- charts
+- media
+- large video
+- upload behavior
+- bundle
+- rendering
+- caching
+
+If actual measurement is possible without modification, record it.
+
+Otherwise mark NOT VERIFIED.
+
+============================================================
+41. TESTING
+============================================================
+
+Inventory every actual test.
+
+Include:
+
+- unit
+- integration
+- E2E
+- browser
+- database
+- financial
+- auth
+- authorization
+- security
+
+Determine whether tests actually execute.
+
+============================================================
+42. BUILD / DEPLOYMENT
+============================================================
+
+Inspect:
+
+- development
+- build
+- production
+- hosting
+- reverse proxy
+- database
+- file storage
+- authentication
+- environment variables
+- CI/CD
+- monitoring
+- cron
+- workers
+
+Document actual current deployment.
+
+============================================================
+43. ENVIRONMENT VARIABLES
+============================================================
+
+List names only.
+
+Never show values.
+
+For each:
+
+- purpose
+- required
+- client/server
+- fallback
+- sensitivity
+
+============================================================
+44. DEPENDENCIES
+============================================================
+
+Inventory major dependencies.
+
+Group:
+
+Framework
+
+UI
+
+State
+
+Database
+
+Auth
+
+Validation
+
+Charts
+
+Media
+
+Security
+
+Testing
+
+Other
+
+Identify clearly unused/phantom dependencies.
+
+============================================================
+45. BACKUP / IMPORT / EXPORT
+============================================================
+
+Document:
+
+- export
+- import
+- CSV
+- JSON
+- backup
+- restore
+- merge
+- replace
+- validation
+- ownership
+- duplicates
+- destructive operations
+
+============================================================
+46. AUDIT TRAIL
+============================================================
+
+Document:
+
+- event types
+- resource types
+- mutations
+- actor
+- timestamp
+- metadata
+- immutability
+- missing coverage
+
+============================================================
+47. KNOWN BUGS
+============================================================
+
+Find REAL bugs.
+
+For each:
+
+ID
+
+SEVERITY
+
+FEATURE
+
+DESCRIPTION
+
+EVIDENCE
+
+USER IMPACT
+
+TECHNICAL IMPACT
+
+REPRODUCIBILITY
+
+Do NOT fix them.
+
+============================================================
+48. MISSING FEATURES
+============================================================
+
+Separate:
+
+CONFIRMED MISSING
+
+POSSIBLY MISSING
+
+NOT VERIFIED
+
+Do not infer missing functionality merely because it isn't visible in navigation.
+
+============================================================
+49. ARCHITECTURAL RISKS
+============================================================
+
+Identify:
+
+- scalability risks
+- security risks
+- data-loss risks
+- financial correctness risks
+- maintainability risks
+- UX risks
+- deployment risks
+- performance risks
+
+Provide evidence.
+
+============================================================
+50. CURRENT VS HISTORICAL
+============================================================
+
+Create:
+
+CURRENT SYSTEM
+
+PREVIOUS / HISTORICAL
+
+CHANGES
+
+IMPORTANT DIFFERENCES
+
+This section exists specifically to prevent future AI models from accidentally using outdated DnD assumptions.
+
+============================================================
+51. FEATURE TRACEABILITY MATRIX
+============================================================
+
+Create:
+
+FEATURE
+→ SCREEN
+→ COMPONENT
+→ STATE
+→ API
+→ BUSINESS LOGIC
+→ DATABASE
+→ AUTHORIZATION
+→ AUDIT
+→ ANALYTICS
+→ TESTS
+
+Cover all major features.
+
+============================================================
+52. SCREEN INVENTORY TABLE
+============================================================
+
+Create:
+
+SCREEN
+VIEW/ROUTE
+AUTH
+PURPOSE
+MAIN COMPONENTS
+PRIMARY ACTION
+DATA
+API
+MOBILE
+STATUS
+
+============================================================
+53. FORM INVENTORY TABLE
+============================================================
+
+Create:
+
+FORM
+SCREEN
+STEP
+FIELDS
+VALIDATION
+SUBMISSION
+SERVER
+DATABASE
+STATE
+STATUS
+
+============================================================
+54. DATABASE INVENTORY TABLE
+============================================================
+
+Create:
+
+MODEL
+PURPOSE
+KEY FIELDS
+OWNER
+RELATIONSHIPS
+LIFECYCLE
+IMPORTANT NOTES
+
+============================================================
+55. API INVENTORY TABLE
+============================================================
+
+Create:
+
+METHOD
+ENDPOINT
+AUTH
+INPUT
+VALIDATION
+DATABASE
+RESPONSE
+SIDE EFFECTS
+ERRORS
+
+============================================================
+56. MASTER ARCHITECTURE DIAGRAM
+============================================================
+
+Create a current architecture diagram showing:
+
+USER
+↓
+PUBLIC UI
+↓
+AUTH
+↓
+APP SHELL
+↓
+FRONTEND STATE
+↓
+API / SERVER
+↓
+BUSINESS LOGIC
+↓
+DATABASE / STORAGE
+↓
+ANALYTICS
+
+Use actual current components.
+
+============================================================
+57. MASTER PRODUCT MAP
+============================================================
+
+Create a current feature hierarchy.
+
+Example only:
+
+DnD
+├── Public
+├── Authentication
+├── Onboarding
+├── Dashboard
+├── Trading
+├── Strategies
+├── Planning
+├── Evidence
+├── Calendar
+├── Analytics
+├── Settings
+└── Infrastructure
+
+Replace with actual current structure.
+
+============================================================
+58. MASTER TRADE FLOW
+============================================================
+
+Create exact current flow:
+
+PLAN
+→ TRADE
+→ EXECUTION
+→ EVIDENCE
+→ RESULT
+→ REVIEW
+→ ANALYSIS
+
+Only include stages that actually exist.
+
+============================================================
+59. AI HANDOFF
+============================================================
+
+Create a final section:
+
+# AI HANDOFF: CURRENT DnD SYSTEM
+
+This should be the most useful section for another AI.
+
+Explain:
+
+- what DnD is
+- exact current architecture
+- exact UI
+- exact navigation
+- exact forms
+- trade workflow
+- planned/open/closed states
+- strategy system
+- checklist
+- instrument system
+- financial engine
+- evidence/media
+- Daily Plans
+- Calendar
+- Analytics
+- Settings
+- Onboarding
+- Authentication
+- Database
+- APIs
+- security
+- deployment
+- important constraints
+- dangerous areas
+- known bugs
+- important things not to break
+
+Write this as practical engineering context.
+
+============================================================
+60. FINAL ASSESSMENT
+============================================================
+
+Score 0-10:
+
+Product maturity
+
+UX maturity
+
+Frontend maturity
+
+Backend maturity
+
+Database maturity
+
+Financial correctness
+
+Security
+
+Testing
+
+Performance
+
+Responsive design
+
+Production readiness
+
+Every score must contain evidence.
+
+============================================================
+61. TOP FINDINGS
+============================================================
+
+Provide:
+
+TOP 10 STRENGTHS
+
+TOP 10 BUGS
+
+TOP 10 RISKS
+
+TOP 10 ARCHITECTURAL CONCERNS
+
+TOP 10 MISSING FEATURES
+
+TOP 10 AREAS THAT MUST BE PRESERVED
+
+============================================================
+62. FINAL OUTPUT FILE
+============================================================
+
+Create ONE Markdown document:
+
+DnD_CURRENT_BUILD_ULTIMATE_REVERSE_ENGINEERING_REPORT.md
+
+The report must be comprehensive.
+
+Do not sacrifice completeness for brevity.
+
+Use:
+
+- headings
+- tables
+- diagrams
+- exact paths
+- exact labels
+- exact model names
+- exact API paths
+- exact field names
+- exact formulas
+
+where available.
+
+============================================================
+63. FINAL CONFIRMATION
+============================================================
+
+At the very end write exactly:
+
+"Audit completed in read-only mode. No application code, database schema, configuration, dependencies, or user data were modified."
+
+============================================================
+MOST IMPORTANT INSTRUCTION
+============================================================
+
+DO NOT CHANGE THE PROJECT.
+
+Your job is to observe the CURRENT DnD application and produce the most accurate and complete technical/product snapshot possible.
+
+This report will become the primary source of truth for future AI-assisted development of DnD.

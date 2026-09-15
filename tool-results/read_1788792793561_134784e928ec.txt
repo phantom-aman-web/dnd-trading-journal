@@ -1,0 +1,1367 @@
+     1→"use client";
+     2→
+     3→import { useQuery, useQueryClient } from "@tanstack/react-query";
+     4→import { useState, useEffect, useRef, useMemo } from "react";
+     5→import { useNav } from "@/lib/nav-store";
+     6→import {
+     7→  evaluateChecklist,
+     8→  parseChecklistItems,
+     9→  parseGradingThresholds,
+    10→  parseAnswers,
+    11→  type ChecklistItem,
+    12→  type ChecklistAnswerValue,
+    13→  type GradingThresholds,
+    14→} from "@/lib/checklist-evaluation";
+    15→import { Button } from "@/components/ui/button";
+    16→import { Input } from "@/components/ui/input";
+    17→import { Label } from "@/components/ui/label";
+    18→import { Textarea } from "@/components/ui/textarea";
+    19→import { Card } from "@/components/ui/card";
+    20→import { Badge } from "@/components/ui/badge";
+    21→import { ArrowLeft, ArrowRight, Loader2, Save, Sparkles, Check, Tag as TagIcon, Upload, Image as ImageIcon, X, Pencil, AlertTriangle } from "lucide-react";
+    22→import {
+    23→  Select,
+    24→  SelectContent,
+    25→  SelectItem,
+    26→  SelectTrigger,
+    27→  SelectValue,
+    28→} from "@/components/ui/select";
+    29→import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+    30→import { FieldLabel } from "@/components/common/field-label";
+    31→import { Checkbox } from "@/components/ui/checkbox";
+    32→import { ImageViewer } from "@/components/trade/image-viewer";
+    33→import { toast } from "sonner";
+    34→import { cn } from "@/lib/utils";
+    35→
+    36→const DRAFT_KEY = "dnd-trade-draft";
+    37→
+    38→async function fetchMe() {
+    39→  const res = await fetch("/api/me", { cache: "no-store" });
+    40→  if (!res.ok) return null;
+    41→  return res.json();
+    42→}
+    43→
+    44→const PSYCH_BEFORE = ["calm", "confident", "hesitant", "fearful", "FOMO", "impatient", "distracted", "excited", "tired", "focused"];
+    45→const PSYCH_AFTER = ["satisfied", "frustrated", "regret", "relief", "overconfident", "disappointed", "calm", "confused", "angry"];
+    46→const BEHAVIOR_FLAGS = ["entered_early", "broke_rules", "moved_stop", "moved_target", "exited_early", "revenge_trade", "overtraded", "increased_size", "chased_price", "ignored_plan"];
+    47→
+    48→export function TradeFormView() {
+    49→  const { params, navigate } = useNav();
+    50→  const qc = useQueryClient();
+    51→  const editingId = params.id;
+    52→
+    53→  const { data: meta } = useQuery({ queryKey: ["me"], queryFn: fetchMe });
+    54→  const { data: existing } = useQuery({
+    55→    queryKey: ["trade", editingId],
+    56→    queryFn: async () => {
+    57→      const res = await fetch(`/api/trades/${editingId}`, { cache: "no-store" });
+    58→      if (!res.ok) return null;
+    59→      return res.json();
+    60→    },
+    61→    enabled: !!editingId,
+    62→  });
+    63→
+    64→  const [form, setForm] = useState<any>({
+    65→    accountId: "",
+    66→    instrumentSymbol: "",
+    67→    direction: "long",
+    68→    session: "ny_am",
+    69→    strategyId: "",
+    70→    strategyVersionId: "",
+    71→    dailyPlanId: "",
+    72→    checklistVersionId: "",
+    73→    checklistAnswers: {} as Record<string, ChecklistAnswerValue>,
+    74→    plannedEntryPrice: "",
+    75→    plannedStopPrice: "",
+    76→    plannedTargetPrice: "",
+    77→    plannedRiskPct: "0.005",
+    78→    entryPrice: "",
+    79→    exitPrice: "",
+    80→    quantity: "1",
+    81→    feesCents: 0,
+    82→    commissionCents: 0,
+    83→    swapCents: 0,
+    84→    slippageCents: 0,
+    85→    entryTime: new Date().toISOString().slice(0, 16),
+    86→    exitTime: "",
+    87→    tradingTimezone: "UTC",
+    88→    setup: { htfContext: { weeklyBias: "bullish", dailyBias: "bullish" }, liquidity: [], structure: [], entryModel: "FVG", session: "ny_am" },
+    89→    thesis: { why: "", narrative: "", liquidityTarget: "", confirms: [], invalidates: [], target: "", earlyExit: "" },
+    90→    notes: "",
+    91→    lessons: "",
+    92→    psychBefore: { moodTags: [], confidence: 3, energy: 3, impact: "moderate" },
+    93→    psychAfter: { moodTags: [], confidence: 3, energy: 3, impact: "moderate" },
+    94→    behaviorFlags: [],
+    95→    tags: [],
+    96→    ruleCompliance: {} as Record<string, boolean>,
+    97→    uploadedMedia: [] as any[],
+    98→    isDraft: false,
+    99→  });
+   100→
+   101→  // Fetch the selected strategy's latest version rules when a strategy is selected
+   102→  const { data: strategyDetail } = useQuery({
+   103→    queryKey: ["strategy-for-form", form.strategyId],
+   104→    queryFn: async () => {
+   105→      if (!form.strategyId) return null;
+   106→      const res = await fetch(`/api/strategies/${form.strategyId}`, { cache: "no-store" });
+   107→      if (!res.ok) return null;
+   108→      return res.json();
+   109→    },
+   110→    enabled: !!form.strategyId,
+   111→  });
+   112→
+   113→  // Fetch the user's daily plans (most recent 30) for the daily-plan selector
+   114→  // in the Basics tab. A trade can optionally be linked to a daily plan to
+   115→  // support plan-vs-execution analytics.
+   116→  const { data: dailyPlansData } = useQuery({
+   117→    queryKey: ["daily-plans-for-form"],
+   118→    queryFn: async () => {
+   119→      const res = await fetch(`/api/daily-plans`, { cache: "no-store" });
+   120→      if (!res.ok) return null;
+   121→      return res.json();
+   122→    },
+   123→  });
+   124→  const dailyPlans: any[] = dailyPlansData?.items ?? [];
+   125→
+   126→  // Skip flag for the strategy-change reset effect. When loading an existing
+   127→  // trade for editing, the load effect calls setForm which changes
+   128→  // `form.strategyId` from "" to `existing.strategyId`. The strategy-change
+   129→  // effect would then fire and clear `ruleCompliance`/`strategyVersionId` that
+   130→  // we just restored. The skip flag is set by the load effect and consumed by
+   131→  // the strategy-change effect on its very next invocation.
+   132→  const skipStrategyResetRef = useRef(false);
+   133→
+   134→  // ── Unified Strategy Rules Checklist ──────────────────────────────────
+   135→  // The strategy version's rulesJson IS the checklist. Each rule has
+   136→  // { text, weight, required }. We convert them to ChecklistItem[] for
+   137→  // the evaluateChecklist() function, which computes the weighted score
+   138→  // and derives the grade automatically.
+   139→
+   140→  // The selected strategy version (from the version selector or latest)
+   141→  const selectedStrategyVersion = useMemo(() => {
+   142→    if (!strategyDetail?.versions?.length) return null;
+   143→    if (form.strategyVersionId) {
+   144→      return strategyDetail.versions.find((v: any) => v.id === form.strategyVersionId) ?? strategyDetail.versions[0];
+   145→    }
+   146→    return strategyDetail.versions[0];
+   147→  }, [strategyDetail, form.strategyVersionId]);
+   148→
+   149→  // Parse the strategy version's rulesJson into ChecklistItem[]
+   150→  const checklistItems: ChecklistItem[] = useMemo(() => {
+   151→    if (!selectedStrategyVersion?.rulesJson) return [];
+   152→    try {
+   153→      const parsed = JSON.parse(selectedStrategyVersion.rulesJson);
+   154→      const items: ChecklistItem[] = [];
+   155→      let idx = 0;
+   156→      for (const section of ["entry", "stop", "target", "management", "invalidation"]) {
+   157→        const sectionRules = Array.isArray(parsed[section]) ? parsed[section] : [];
+   158→        for (const rule of sectionRules) {
+   159→          if (typeof rule === "string") {
+   160→            // Old format: plain string
+   161→            items.push({ id: `rule_${idx}`, text: rule, required: true, weight: 1, evidenceRequired: false });
+   162→          } else {
+   163→            // New format: { text, weight, required }
+   164→            items.push({
+   165→              id: `rule_${idx}`,
+   166→              text: rule.text ?? rule,
+   167→              required: rule.required ?? true,
+   168→              weight: rule.weight ?? 1,
+   169→              evidenceRequired: false,
+   170→            });
+   171→          }
+   172→          idx++;
+   173→        }
+   174→      }
+   175→      return items;
+   176→    } catch { return []; }
+   177→  }, [selectedStrategyVersion]);
+   178→
+   179→  // Extract grading thresholds from the rulesJson
+   180→  const checklistThresholds: GradingThresholds | null = useMemo(() => {
+   181→    if (!selectedStrategyVersion?.rulesJson) return null;
+   182→    try {
+   183→      const parsed = JSON.parse(selectedStrategyVersion.rulesJson);
+   184→      if (parsed.gradingThresholds) {
+   185→        return parsed.gradingThresholds;
+   186→      }
+   187→    } catch {}
+   188→    // Default thresholds
+   189→    return { "A+": 0.9, A: 0.75, B: 0.6, C: 0.4 };
+   190→  }, [selectedStrategyVersion]);
+   191→
+   192→  // Live evaluation of the answers — recalculated whenever items/answers/thresholds
+   193→  // change. Drives both the on-screen score/grade and the payload sent on save.
+   194→  const checklistAnswers = form.checklistAnswers ?? {};
+   195→  const evaluation = useMemo(
+   196→    () =>
+   197→      evaluateChecklist(
+   198→        checklistItems,
+   199→        checklistAnswers as Record<string, ChecklistAnswerValue>,
+   200→        checklistThresholds,
+   201→      ),
+   202→    [checklistItems, checklistAnswers, checklistThresholds],
+   203→  );
+   204→
+   205→  // When the strategy changes, reset checklist answers (not checklistVersionId,
+   206→  // since we no longer use a separate ChecklistConfig).
+   207→  useEffect(() => {
+   208→    if (skipStrategyResetRef.current) {
+   209→      skipStrategyResetRef.current = false;
+   210→      return;
+   211→    }
+   212→    // Reset checklist answers when strategy changes
+   213→    setForm((f: any) => ({ ...f, checklistAnswers: {}, checklistVersionId: "" }));
+   214→  }, [form.strategyId]);
+   215→
+   216→  // Reset rule compliance and strategyVersionId when the strategy changes.
+   217→  // Skipped once after loading an existing trade so that the values restored
+   218→  // from the trade (`existing.strategyVersionId`, parsed `planAdherenceJson`)
+   219→  // survive into the form state. The version is re-defaulted to the latest
+   220→  // by the strategyDetail effect below once the new strategy's versions load.
+   221→  useEffect(() => {
+   222→    if (skipStrategyResetRef.current) {
+   223→      skipStrategyResetRef.current = false;
+   224→      return;
+   225→    }
+   226→    setForm((f: any) => ({ ...f, ruleCompliance: {}, strategyVersionId: "" }));
+   227→  }, [form.strategyId]);
+   228→
+   229→  // When the selected strategy's versions load (or change), default
+   230→  // `strategyVersionId` to the latest version (`versions[0]`) — but only if
+   231→  // the form's current value doesn't already match one of the loaded
+   232→  // versions. This preserves the version restored from an existing trade
+   233→  // during edit, while ensuring new trades always start on the latest
+   234→  // version (Fix: strategy version is now user-selectable, not silently
+   235→  // inferred on submit).
+   236→  useEffect(() => {
+   237→    if (!strategyDetail) return;
+   238→    const versions: any[] = strategyDetail.versions ?? [];
+   239→    if (versions.length === 0) return;
+   240→    const matches = versions.some((v: any) => v.id === form.strategyVersionId);
+   241→    if (!matches) {
+   242→      setForm((f: any) => ({ ...f, strategyVersionId: versions[0].id }));
+   243→    }
+   244→  }, [strategyDetail, form.strategyVersionId]);
+   245→
+   246→  // Set default account
+   247→  useEffect(() => {
+   248→    if (meta?.accounts && !form.accountId) {
+   249→      const def = meta.accounts.find((a: any) => a.isDefault) ?? meta.accounts[0];
+   250→      if (def) setForm((f: any) => ({ ...f, accountId: def.id }));
+   251→    }
+   252→  }, [meta]);
+   253→
+   254→  // Load existing trade for editing. Merge with the existing form state so
+   255→  // fields like `uploadedMedia`, `ruleCompliance`, `tags`, `setup`, `thesis`,
+   256→  // `psychBefore`, `psychAfter` that aren't in the trade payload are
+   257→  // preserved (rather than replaced wholesale). `ruleCompliance` is parsed
+   258→  // from `planAdherenceJson` and `strategyVersionId`/`dailyPlanId` are
+   259→  // restored from the trade record. Media signed URLs are fetched
+   260→  // asynchronously after the form is populated.
+   261→  useEffect(() => {
+   262→    if (!existing) return;
+   263→    skipStrategyResetRef.current = true;
+   264→
+   265→    // Restore checklist answers from the latest TradeChecklistEvaluation
+   266→    // (if any) so the A+ Setup Checklist re-renders with the saved state.
+   267→    const evals = Array.isArray(existing.checklistEvaluations)
+   268→      ? [...existing.checklistEvaluations].sort(
+   269→          (a: any, b: any) =>
+   270→            new Date(b.evaluatedAt).getTime() - new Date(a.evaluatedAt).getTime(),
+   271→        )
+   272→      : [];
+   273→    const latestEval = evals[0];
+   274→    const restoredAnswers = latestEval?.rawAnswersJson
+   275→      ? parseAnswers(latestEval.rawAnswersJson)
+   276→      : {};
+   277→
+   278→    // Parse `ruleCompliance` out of `planAdherenceJson`. The plan-adherence
+   279→    // column stores `{ ruleCompliance: { ... } }` (see POST /api/trades), so we
+   280→    // unwrap it here. Malformed/missing JSON degrades to `{}`.
+   281→    let restoredRuleCompliance: Record<string, boolean> = {};
+   282→    try {
+   283→      const pa = JSON.parse(existing.planAdherenceJson ?? "{}");
+   284→      if (pa && typeof pa === "object" && pa.ruleCompliance && typeof pa.ruleCompliance === "object") {
+   285→        restoredRuleCompliance = pa.ruleCompliance as Record<string, boolean>;
+   286→      }
+   287→    } catch {
+   288→      // leave as {}
+   289→    }
+   290→
+   291→    setForm((f: any) => ({
+   292→      ...f,
+   293→      accountId: existing.accountId,
+   294→      instrumentSymbol: existing.instrumentSymbol,
+   295→      direction: existing.direction,
+   296→      session: existing.session ?? "ny_am",
+   297→      strategyId: existing.strategyId ?? "",
+   298→      strategyVersionId: existing.strategyVersionId ?? "",
+   299→      dailyPlanId: existing.dailyPlanId ?? "",
+   300→      checklistVersionId: existing.checklistVersionId ?? "",
+   301→      checklistAnswers: restoredAnswers,
+   302→      plannedEntryPrice: existing.plannedEntryPrice ?? "",
+   303→      plannedStopPrice: existing.plannedStopPrice ?? "",
+   304→      plannedTargetPrice: existing.plannedTargetPrice ?? "",
+   305→      plannedRiskPct: existing.plannedRiskPct ?? "0.005",
+   306→      entryPrice: existing.executions?.find((e: any) => e.kind === "entry")?.price ?? existing.entryPriceAvg ?? "",
+   307→      exitPrice: existing.executions?.find((e: any) => e.kind === "exit")?.price ?? existing.exitPriceAvg ?? "",
+   308→      quantity: existing.executions?.[0]?.quantity ?? existing.positionSize ?? "1",
+   309→      feesCents: existing.feesCents,
+   310→      commissionCents: existing.commissionCents,
+   311→      swapCents: existing.swapCents,
+   312→      slippageCents: existing.slippageCents,
+   313→      entryTime: existing.entryTime ? new Date(existing.entryTime).toISOString().slice(0, 16) : "",
+   314→      exitTime: existing.exitTime ? new Date(existing.exitTime).toISOString().slice(0, 16) : "",
+   315→      tradingTimezone: existing.tradingTimezone ?? "UTC",
+   316→      setup: safeJson(existing.setupJson, f.setup),
+   317→      thesis: safeJson(existing.thesisJson, f.thesis),
+   318→      notes: existing.notes ?? "",
+   319→      lessons: existing.lessons ?? "",
+   320→      psychBefore: safeJson(existing.psychBeforeJson, f.psychBefore),
+   321→      psychAfter: safeJson(existing.psychAfterJson, f.psychAfter),
+   322→      behaviorFlags: safeJson(existing.behaviorFlagsJson, []),
+   323→      tags: safeJson(existing.tagsJson, []),
+   324→      ruleCompliance: restoredRuleCompliance,
+   325→      uploadedMedia: [],
+   326→      isDraft: existing.isDraft ?? false,
+   327→    }));
+   328→
+   329→    // After setForm, if existing.media exists, fetch signed URLs for each
+   330→    // media item so the Evidence tab can render thumbnails.
+   331→    if (existing.media?.length > 0) {
+   332→      Promise.all(
+   333→        existing.media.map(async (m: any) => {
+   334→          try {
+   335→            const res = await fetch(`/api/media/${m.id}`);
+   336→            if (res.ok) {
+   337→              const detail = await res.json();
+   338→              return { ...m, url: detail.url };
+   339→            }
+   340→          } catch {}
+   341→          return m;
+   342→        }),
+   343→      ).then((mediaWithUrls) => {
+   344→        setForm((f: any) => ({ ...f, uploadedMedia: mediaWithUrls }));
+   345→      });
+   346→    }
+   347→  }, [existing]);
+   348→
+   349→  // Autosave draft (spec section 27)
+   350→  useEffect(() => {
+   351→    if (editingId) return;
+   352→    const t = setTimeout(() => {
+   353→      localStorage.setItem(DRAFT_KEY, JSON.stringify(form));
+   354→    }, 500);
+   355→    return () => clearTimeout(t);
+   356→  }, [form, editingId]);
+   357→
+   358→  // Restore draft on mount (only when not editing)
+   359→  useEffect(() => {
+   360→    if (editingId) return;
+   361→    const saved = localStorage.getItem(DRAFT_KEY);
+   362→    if (saved) {
+   363→      try {
+   364→        const parsed = JSON.parse(saved);
+   365→        setForm((f: any) => ({ ...f, ...parsed }));
+   366→        toast.info("Restored autosaved draft.");
+   367→      } catch {}
+   368→    }
+   369→  }, [editingId]);
+   370→
+   371→  // Deep-link pre-fills from the URL/state params (calendar "Add Trade for
+   372→  // This Day" → `?date=YYYY-MM-DD`; plan detail "Create Trade From Plan" →
+   373→  // `?dailyPlanId=<id>`). Applied only when creating a new trade (not when
+   374→  // editing an existing one). Runs after the draft-restore effect so the
+   375→  // explicit deep-link values override any restored draft entries.
+   376→  useEffect(() => {
+   377→    if (editingId) return;
+   378→    if (!params.date && !params.dailyPlanId) return;
+   379→    setForm((f: any) => {
+   380→      const next: any = { ...f };
+   381→      if (params.date) {
+   382→        // Pre-fill entry time at market open (09:00) on the deep-linked
+   383→        // date. The datetime-local input expects "YYYY-MM-DDTHH:MM" with
+   384→        // no timezone offset; the server parses it as local time on submit.
+   385→        next.entryTime = `${params.date}T09:00`;
+   386→      }
+   387→      if (params.dailyPlanId) {
+   388→        next.dailyPlanId = params.dailyPlanId;
+   389→      }
+   390→      return next;
+   391→    });
+   392→  }, [params.date, params.dailyPlanId, editingId]);
+   393→
+   394→  const [saving, setSaving] = useState(false);
+   395→  const [activeTab, setActiveTab] = useState<string>("basics");
+   396→  const fileInputRef = useRef<HTMLInputElement>(null);
+   397→  const [viewerIndex, setViewerIndex] = useState<number | null>(null);
+   398→
+   399→  const TAB_ORDER = ["basics", "execution", "plan", "setup", "psychology", "review", "evidence"];
+   400→
+   401→  // Upload media files to the server immediately (before the trade is saved).
+   402→  // The media is associated with this trade via the tradeId once the trade is created.
+   403→  // For new trades (no editingId yet), we upload as "orphan" media and attach after save.
+   404→  async function handleFileUpload(files: FileList | File[]) {
+   405→    const fileList = Array.from(files);
+   406→    for (const file of fileList) {
+   407→      const formData = new FormData();
+   408→      formData.append("file", file);
+   409→      if (editingId) formData.append("tradeId", editingId);
+   410→      try {
+   411→        const res = await fetch("/api/media", { method: "POST", body: formData });
+   412→        if (res.ok) {
+   413→          const data = await res.json();
+   414→          // Fetch signed URL
+   415→          const detailRes = await fetch(`/api/media/${data.id}`);
+   416→          const detail = await detailRes.json();
+   417→          setForm((f: any) => ({
+   418→            ...f,
+   419→            uploadedMedia: [...(f.uploadedMedia ?? []), { ...data, url: detail.url }],
+   420→          }));
+   421→          toast.success(`${file.name} uploaded.`);
+   422→        } else {
+   423→          const err = await res.json().catch(() => ({}));
+   424→          toast.error(err?.error ?? `Failed to upload ${file.name}`);
+   425→        }
+   426→      } catch {
+   427→        toast.error(`Failed to upload ${file.name}`);
+   428→      }
+   429→    }
+   430→  }
+   431→
+   432→  function setField(path: string, value: any) {
+   433→    setForm((f: any) => {
+   434→      const next = { ...f };
+   435→      const parts = path.split(".");
+   436→      let cur: any = next;
+   437→      for (let i = 0; i < parts.length - 1; i++) {
+   438→        cur[parts[i]] = { ...cur[parts[i]] };
+   439→        cur = cur[parts[i]];
+   440→      }
+   441→      cur[parts[parts.length - 1]] = value;
+   442→      return next;
+   443→    });
+   444→  }
+   445→
+   446→  function toggleArrayField(path: string, value: string) {
+   447→    setForm((f: any) => {
+   448→      const next = { ...f };
+   449→      const parts = path.split(".");
+   450→      let cur: any = next;
+   451→      for (let i = 0; i < parts.length - 1; i++) {
+   452→        cur[parts[i]] = { ...cur[parts[i]] };
+   453→        cur = cur[parts[i]];
+   454→      }
+   455→      const key = parts[parts.length - 1];
+   456→      const arr = Array.isArray(cur[key]) ? [...cur[key]] : [];
+   457→      const idx = arr.indexOf(value);
+   458→      if (idx >= 0) arr.splice(idx, 1); else arr.push(value);
+   459→      cur[key] = arr;
+   460→      return next;
+   461→    });
+   462→  }
+   463→
+   464→  // Update one A+ checklist answer field (`checked` or `note`) for the given
+   465→  // item id. Used by the checkbox + evidence-note inputs in the ICT Setup tab.
+   466→  function updateChecklistAnswer(
+   467→    itemId: string,
+   468→    field: "checked" | "note",
+   469→    value: boolean | string,
+   470→  ) {
+   471→    setForm((f: any) => {
+   472→      const current = f.checklistAnswers?.[itemId] ?? { checked: false };
+   473→      const next = {
+   474→        ...f.checklistAnswers,
+   475→        [itemId]: {
+   476→          ...current,
+   477→          [field]: value,
+   478→        },
+   479→      };
+   480→      // If a checked item is being unchecked, drop its note so storage stays clean.
+   481→      if (field === "checked" && value === false && next[itemId].note) {
+   482→        delete next[itemId].note;
+   483→      }
+   484→      return { ...f, checklistAnswers: next };
+   485→    });
+   486→  }
+   487→
+   488→  async function submit(isDraft: boolean = false) {
+   489→    // Validate required fields and navigate to the first error
+   490→    if (!form.accountId) {
+   491→      toast.error("Please select an account.");
+   492→      setActiveTab("basics");
+   493→      setTimeout(() => document.getElementById("field-account")?.scrollIntoView({ behavior: "smooth", block: "center" }), 100);
+   494→      return;
+   495→    }
+   496→    if (!form.instrumentSymbol) {
+   497→      toast.error("Please enter an instrument symbol.");
+   498→      setActiveTab("basics");
+   499→      setTimeout(() => document.getElementById("field-instrument")?.scrollIntoView({ behavior: "smooth", block: "center" }), 100);
+   500→      return;
+   501→    }
+   502→    setSaving(true);
+   503→    try {
+   504→      const executions = [];
+   505→      if (form.entryPrice) {
+   506→        executions.push({
+   507→          kind: "entry",
+   508→          price: form.entryPrice,
+   509→          quantity: form.quantity || "1",
+   510→          timestamp: form.entryTime ? new Date(form.entryTime).toISOString() : new Date().toISOString(),
+   511→        });
+   512→      }
+   513→      if (form.exitPrice) {
+   514→        executions.push({
+   515→          kind: "exit",
+   516→          price: form.exitPrice,
+   517→          quantity: form.quantity || "1",
+   518→          timestamp: form.exitTime ? new Date(form.exitTime).toISOString() : new Date().toISOString(),
+   519→        });
+   520→      }
+   521→      const payload = {
+   522→        accountId: form.accountId,
+   523→        instrumentSymbol: form.instrumentSymbol.toUpperCase(),
+   524→        market: meta?.instruments?.find((i: any) => i.symbol === form.instrumentSymbol.toUpperCase())?.market ?? "custom",
+   525→        direction: form.direction,
+   526→        session: form.session,
+   527→        strategyId: form.strategyId || null,
+   528→        // Use the user-selected strategy version directly. The version
+   529→        // dropdown in the Basics tab defaults to the latest version
+   530→        // (`versions[0]`) when a strategy is first picked (see the
+   531→        // strategyDetail effect above), and the user can override it. Stays
+   532→        // null when no strategy is selected.
+   533→        strategyVersionId: form.strategyId ? (form.strategyVersionId || null) : null,
+   534→        dailyPlanId: form.dailyPlanId || null,
+   535→        // Setup grade/score are now derived from the A+ checklist evaluation,
+   536→        // not a manual dropdown. The server re-computes and overrides these
+   537→        // values from the answers to prevent client tampering (spec §102).
+   538→        checklistVersionId: form.strategyVersionId || null,
+   539→        checklistAnswers: form.strategyVersionId ? form.checklistAnswers : null,
+   540→        setupGrade: form.strategyVersionId && checklistItems.length > 0 ? evaluation.grade : null,
+   541→        setupScore: form.strategyVersionId && checklistItems.length > 0 ? String(evaluation.score) : null,
+   542→        tags: form.tags,
+   543→        plannedEntryPrice: form.plannedEntryPrice || null,
+   544→        plannedStopPrice: form.plannedStopPrice || null,
+   545→        plannedTargetPrice: form.plannedTargetPrice || null,
+   546→        plannedRiskPct: form.plannedRiskPct || null,
+   547→        executions,
+   548→        feesCents: Number(form.feesCents) || 0,
+   549→        commissionCents: Number(form.commissionCents) || 0,
+   550→        swapCents: Number(form.swapCents) || 0,
+   551→        slippageCents: Number(form.slippageCents) || 0,
+   552→        entryTime: form.entryTime ? new Date(form.entryTime).toISOString() : null,
+   553→        exitTime: form.exitTime ? new Date(form.exitTime).toISOString() : null,
+   554→        tradingTimezone: form.tradingTimezone,
+   555→        setup: form.setup,
+   556→        thesis: form.thesis,
+   557→        notes: form.notes || null,
+   558→        lessons: form.lessons || null,
+   559→        psychBefore: form.psychBefore,
+   560→        psychAfter: form.psychAfter,
+   561→        behaviorFlags: form.behaviorFlags,
+   562→        ruleCompliance: form.ruleCompliance,
+   563→        isDraft,
+   564→      };
+   565→      const url = editingId ? `/api/trades/${editingId}` : "/api/trades";
+   566→      const method = editingId ? "PATCH" : "POST";
+   567→      const res = await fetch(url, {
+   568→        method,
+   569→        headers: { "Content-Type": "application/json" },
+   570→        body: JSON.stringify(payload),
+   571→      });
+   572→      const data = await res.json();
+   573→      if (!res.ok) {
+   574→        toast.error(data?.error ?? "Failed to save trade.");
+   575→        setSaving(false);
+   576→        return;
+   577→      }
+   578→      // Attach any orphaned uploaded media to the newly created trade and save captions
+   579→      if (form.uploadedMedia?.length > 0) {
+   580→        for (const m of form.uploadedMedia) {
+   581→          if (m.id) {
+   582→            const patchBody: any = {};
+   583→            if (!editingId) patchBody.tradeId = data.id;
+   584→            if (m.caption) patchBody.caption = m.caption;
+   585→            if (Object.keys(patchBody).length > 0) {
+   586→              await fetch(`/api/media/${m.id}`, {
+   587→                method: "PATCH",
+   588→                headers: { "Content-Type": "application/json" },
+   589→                body: JSON.stringify(patchBody),
+   590→              }).catch(() => {});
+   591→            }
+   592→          }
+   593→        }
+   594→      }
+   595→      toast.success(isDraft ? "Draft saved." : "Trade saved.");
+   596→      localStorage.removeItem(DRAFT_KEY);
+   597→      qc.invalidateQueries({ queryKey: ["trades"] });
+   598→      qc.invalidateQueries({ queryKey: ["dashboard"] });
+   599→      navigate("tradeDetail", { id: data.id });
+   600→    } catch (e) {
+   601→      toast.error("Network error");
+   602→      setSaving(false);
+   603→    }
+   604→  }
+   605→
+   606→  return (
+   607→    <div className="p-4 md:p-6 max-w-4xl space-y-4">
+   608→      <div className="flex items-center gap-3">
+   609→        <Button variant="ghost" size="icon" onClick={() => navigate("journal")}>
+   610→          <ArrowLeft className="h-4 w-4" />
+   611→        </Button>
+   612→        <h1 className="text-2xl font-semibold tracking-tight">
+   613→          {editingId ? "Edit Trade" : "Add Trade"}
+   614→        </h1>
+   615→      </div>
+   616→
+   617→      <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
+   618→        <TabsList className="w-full justify-start overflow-x-auto no-scrollbar">
+   619→          <TabsTrigger value="basics">1. Basics</TabsTrigger>
+   620→          <TabsTrigger value="execution">2. Execution</TabsTrigger>
+   621→          <TabsTrigger value="plan">3. Trading Plan</TabsTrigger>
+   622→          <TabsTrigger value="setup">4. ICT Setup</TabsTrigger>
+   623→          <TabsTrigger value="psychology">5. Psychology</TabsTrigger>
+   624→          <TabsTrigger value="review">6. Review</TabsTrigger>
+   625→          <TabsTrigger value="evidence">7. Evidence</TabsTrigger>
+   626→        </TabsList>
+   627→
+   628→        {/* Basics */}
+   629→        <TabsContent value="basics" className="space-y-4 mt-3">
+   630→          <Card className="p-4 space-y-4">
+   631→            <div className="grid sm:grid-cols-2 gap-3">
+   632→              <div className="space-y-2" id="field-account">
+   633→                <FieldLabel required>Account</FieldLabel>
+   634→                <Select value={form.accountId} onValueChange={(v) => setField("accountId", v)}>
+   635→                  <SelectTrigger><SelectValue /></SelectTrigger>
+   636→                  <SelectContent>
+   637→                    {meta?.accounts?.map((a: any) => (
+   638→                      <SelectItem key={a.id} value={a.id}>{a.name} ({a.currency})</SelectItem>
+   639→                    ))}
+   640→                  </SelectContent>
+   641→                </Select>
+   642→              </div>
+   643→              <div className="space-y-2" id="field-instrument">
+   644→                <FieldLabel required>Instrument</FieldLabel>
+   645→                <Input
+   646→                  list="instruments"
+   647→                  value={form.instrumentSymbol}
+   648→                  onChange={(e) => setField("instrumentSymbol", e.target.value)}
+   649→                 
+   650→                />
+   651→                <datalist id="instruments">
+   652→                  {meta?.instruments?.map((i: any) => <option key={i.id} value={i.symbol} />)}
+   653→                </datalist>
+   654→              </div>
+   655→              <div className="space-y-2">
+   656→                <FieldLabel required>Direction</FieldLabel>
+   657→                <Select value={form.direction} onValueChange={(v) => setField("direction", v)}>
+   658→                  <SelectTrigger><SelectValue /></SelectTrigger>
+   659→                  <SelectContent>
+   660→                    <SelectItem value="long">Long</SelectItem>
+   661→                    <SelectItem value="short">Short</SelectItem>
+   662→                  </SelectContent>
+   663→                </Select>
+   664→              </div>
+   665→              <div className="space-y-2">
+   666→                <FieldLabel required hint="The trading session for this trade">Session</FieldLabel>
+   667→                <Select value={form.session} onValueChange={(v) => setField("session", v)}>
+   668→                  <SelectTrigger><SelectValue /></SelectTrigger>
+   669→                  <SelectContent>
+   670→                    <SelectItem value="asia">Asia</SelectItem>
+   671→                    <SelectItem value="london">London</SelectItem>
+   672→                    <SelectItem value="ny_am">New York AM</SelectItem>
+   673→                    <SelectItem value="ny_pm">New York PM</SelectItem>
+   674→                    <SelectItem value="custom">Custom</SelectItem>
+   675→                  </SelectContent>
+   676→                </Select>
+   677→              </div>
+   678→              <div className="space-y-2">
+   679→                <FieldLabel hint="Select the strategy this trade follows">Strategy</FieldLabel>
+   680→                <Select value={form.strategyId || "__none"} onValueChange={(v) => setField("strategyId", v === "__none" ? "" : v)}>
+   681→                  <SelectTrigger><SelectValue /></SelectTrigger>
+   682→                  <SelectContent>
+   683→                    <SelectItem value="__none">None</SelectItem>
+   684→                    {meta?.strategies?.map((s: any) => (
+   685→                      <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>
+   686→                    ))}
+   687→                  </SelectContent>
+   688→                </Select>
+   689→              </div>
+   690→              <div className="space-y-2">
+   691→                <FieldLabel hint="The specific version of the strategy used">Strategy Version</FieldLabel>
+   692→                <Select
+   693→                  value={form.strategyVersionId || "__none"}
+   694→                  onValueChange={(v) => setField("strategyVersionId", v === "__none" ? "" : v)}
+   695→                  disabled={!form.strategyId || !strategyDetail?.versions?.length}
+   696→                >
+   697→                  <SelectTrigger>
+   698→                    <SelectValue placeholder={form.strategyId ? "No versions" : "Select a strategy first"} />
+   699→                  </SelectTrigger>
+   700→                  <SelectContent>
+   701→                    {form.strategyId && (strategyDetail?.versions ?? []).length === 0 && (
+   702→                      <SelectItem value="__none" disabled>No versions defined</SelectItem>
+   703→                    )}
+   704→                    {(strategyDetail?.versions ?? []).map((v: any) => (
+   705→                      <SelectItem key={v.id} value={v.id}>v{v.versionLabel}</SelectItem>
+   706→                    ))}
+   707→                  </SelectContent>
+   708→                </Select>
+   709→                <p className="text-[11px] text-muted-foreground">
+   710→                  Defaults to the latest version. Pick the rule set this trade was executed under.
+   711→                </p>
+   712→              </div>
+   713→              <div className="space-y-2">
+   714→                <FieldLabel hint="Link this trade to a pre-made daily plan">Daily Plan</FieldLabel>
+   715→                <Select value={form.dailyPlanId || "__none"} onValueChange={(v) => setField("dailyPlanId", v === "__none" ? "" : v)}>
+   716→                  <SelectTrigger><SelectValue /></SelectTrigger>
+   717→                  <SelectContent>
+   718→                    <SelectItem value="__none">None</SelectItem>
+   719→                    {dailyPlans.map((p: any) => {
+   720→                      const d = p.date ? new Date(p.date) : null;
+   721→                      const dateLabel = d
+   722→                        ? d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })
+   723→                        : "Unknown date";
+   724→                      const bias = p.dailyBias ? ` · ${p.dailyBias}` : "";
+   725→                      return (
+   726→                        <SelectItem key={p.id} value={p.id}>{dateLabel}{bias}</SelectItem>
+   727→                      );
+   728→                    })}
+   729→                  </SelectContent>
+   730→                </Select>
+   731→              </div>
+   732→              {/* Setup grade is now derived from the A+ checklist in the ICT Setup
+   733→                  tab — no manual dropdown here. See the A+ Setup Checklist card. */}
+   734→              <div className="space-y-2">
+   735→                <FieldLabel hint="When you entered the trade">Entry Time</FieldLabel>
+   736→                <Input
+   737→                  type="datetime-local"
+   738→                  value={form.entryTime}
+   739→                  onChange={(e) => setField("entryTime", e.target.value)}
+   740→                />
+   741→              </div>
+   742→              <div className="space-y-2">
+   743→                <FieldLabel hint="When you exited the trade">Exit Time</FieldLabel>
+   744→                <Input
+   745→                  type="datetime-local"
+   746→                  value={form.exitTime}
+   747→                  onChange={(e) => setField("exitTime", e.target.value)}
+   748→                />
+   749→              </div>
+   750→            </div>
+   751→          </Card>
+   752→        </TabsContent>
+   753→
+   754→        {/* Execution */}
+   755→        <TabsContent value="execution" className="space-y-4 mt-3">
+   756→          <Card className="p-4 space-y-4">
+   757→            <div className="grid sm:grid-cols-2 gap-3">
+   758→              <div className="space-y-2">
+   759→                <FieldLabel hint="Actual entry fill price">Entry Price</FieldLabel>
+   760→                <Input value={form.entryPrice} onChange={(e) => setField("entryPrice", e.target.value)} />
+   761→              </div>
+   762→              <div className="space-y-2">
+   763→                <FieldLabel hint="Actual exit fill price">Exit Price</FieldLabel>
+   764→                <Input value={form.exitPrice} onChange={(e) => setField("exitPrice", e.target.value)} />
+   765→              </div>
+   766→              <div className="space-y-2">
+   767→                <FieldLabel hint="Position size (e.g. 0.5 lots, 1 contract)">Quantity / Size</FieldLabel>
+   768→                <Input value={form.quantity} onChange={(e) => setField("quantity", e.target.value)} />
+   769→              </div>
+   770→              <div className="space-y-2">
+   771→                <FieldLabel hint="Risk as a decimal (e.g. 0.005 = 0.5%)">Risk %</FieldLabel>
+   772→                <Input value={form.plannedRiskPct} onChange={(e) => setField("plannedRiskPct", e.target.value)} />
+   773→              </div>
+   774→            </div>
+   775→            <Separator />
+   776→            <div className="grid sm:grid-cols-2 gap-3">
+   777→              <div className="space-y-2">
+   778→                <FieldLabel hint="Trading fees in cents">Fees (cents)</FieldLabel>
+   779→                <Input type="number" value={form.feesCents} onChange={(e) => setField("feesCents", Number(e.target.value))} />
+   780→              </div>
+   781→              <div className="space-y-2">
+   782→                <FieldLabel hint="Commission in cents">Commission (cents)</FieldLabel>
+   783→                <Input type="number" value={form.commissionCents} onChange={(e) => setField("commissionCents", Number(e.target.value))} />
+   784→              </div>
+   785→              <div className="space-y-2">
+   786→                <FieldLabel hint="Swap charges in cents">Swap (cents)</FieldLabel>
+   787→                <Input type="number" value={form.swapCents} onChange={(e) => setField("swapCents", Number(e.target.value))} />
+   788→              </div>
+   789→              <div className="space-y-2">
+   790→                <FieldLabel hint="Slippage cost in cents">Slippage (cents)</FieldLabel>
+   791→                <Input type="number" value={form.slippageCents} onChange={(e) => setField("slippageCents", Number(e.target.value))} />
+   792→              </div>
+   793→            </div>
+   794→            <p className="text-xs text-muted-foreground">
+   795→              P&L and R are computed server-side. Values shown are computed from the execution ledger and validated before storage.
+   796→            </p>
+   797→          </Card>
+   798→        </TabsContent>
+   799→
+   800→        {/* Plan */}
+   801→        <TabsContent value="plan" className="space-y-4 mt-3">
+   802→          <Card className="p-4 space-y-4">
+   803→            <div className="grid sm:grid-cols-3 gap-3">
+   804→              <div className="space-y-2">
+   805→                <FieldLabel hint="The price you planned to enter at">Planned Entry</FieldLabel>
+   806→                <Input value={form.plannedEntryPrice} onChange={(e) => setField("plannedEntryPrice", e.target.value)} />
+   807→              </div>
+   808→              <div className="space-y-2">
+   809→                <FieldLabel hint="The stop loss you planned">Planned Stop</FieldLabel>
+   810→                <Input value={form.plannedStopPrice} onChange={(e) => setField("plannedStopPrice", e.target.value)} />
+   811→              </div>
+   812→              <div className="space-y-2">
+   813→                <FieldLabel hint="The take profit you planned">Planned Target</FieldLabel>
+   814→                <Input value={form.plannedTargetPrice} onChange={(e) => setField("plannedTargetPrice", e.target.value)} />
+   815→              </div>
+   816→            </div>
+   817→            <Separator />
+   818→            <div className="space-y-2">
+   819→              <FieldLabel hint="Your core reasoning for taking this trade">Thesis: Why am I taking this trade?</FieldLabel>
+   820→              <Textarea
+   821→                value={form.thesis.why}
+   822→                onChange={(e) => setField("thesis.why", e.target.value)}
+   823→                rows={3}
+   824→               
+   825→              />
+   826→            </div>
+   827→            <div className="grid sm:grid-cols-2 gap-3">
+   828→              <div className="space-y-2">
+   829→                <FieldLabel hint="What signals confirm the setup is valid">What confirms the setup?</FieldLabel>
+   830→                <Input
+   831→                  value={(form.thesis.confirms ?? []).join(", ")}
+   832→                  onChange={(e) => setField("thesis.confirms", e.target.value.split(",").map((s: string) => s.trim()).filter(Boolean))}
+   833→                 
+   834→                />
+   835→              </div>
+   836→              <div className="space-y-2">
+   837→                <FieldLabel hint="What would invalidate this trade">What invalidates it?</FieldLabel>
+   838→                <Input
+   839→                  value={(form.thesis.invalidates ?? []).join(", ")}
+   840→                  onChange={(e) => setField("thesis.invalidates", e.target.value.split(",").map((s: string) => s.trim()).filter(Boolean))}
+   841→                 
+   842→                />
+   843→              </div>
+   844→              <div className="space-y-2">
+   845→                <FieldLabel hint="Your price target for this trade">Target</FieldLabel>
+   846→                <Input value={form.thesis.target} onChange={(e) => setField("thesis.target", e.target.value)} />
+   847→              </div>
+   848→              <div className="space-y-2">
+   849→                <FieldLabel hint="Conditions that would cause an early exit">What would make me exit early?</FieldLabel>
+   850→                <Input value={form.thesis.earlyExit} onChange={(e) => setField("thesis.earlyExit", e.target.value)} />
+   851→              </div>
+   852→            </div>
+   853→          </Card>
+   854→        </TabsContent>
+   855→
+   856→        {/* Setup */}
+   857→        <TabsContent value="setup" className="space-y-4 mt-3">
+   858→          <Card className="p-4 space-y-4">
+   859→            <div className="grid sm:grid-cols-2 gap-3">
+   860→              <div className="space-y-2">
+   861→                <FieldLabel hint="Overall weekly market direction">Weekly Bias</FieldLabel>
+   862→                <Select value={form.setup.htfContext.weeklyBias} onValueChange={(v) => setField("setup.htfContext.weeklyBias", v)}>
+   863→                  <SelectTrigger><SelectValue /></SelectTrigger>
+   864→                  <SelectContent>
+   865→                    <SelectItem value="bullish">Bullish</SelectItem>
+   866→                    <SelectItem value="bearish">Bearish</SelectItem>
+   867→                    <SelectItem value="neutral">Neutral</SelectItem>
+   868→                  </SelectContent>
+   869→                </Select>
+   870→              </div>
+   871→              <div className="space-y-2">
+   872→                <FieldLabel hint="Today expected direction">Daily Bias</FieldLabel>
+   873→                <Select value={form.setup.htfContext.dailyBias} onValueChange={(v) => setField("setup.htfContext.dailyBias", v)}>
+   874→                  <SelectTrigger><SelectValue /></SelectTrigger>
+   875→                  <SelectContent>
+   876→                    <SelectItem value="bullish">Bullish</SelectItem>
+   877→                    <SelectItem value="bearish">Bearish</SelectItem>
+   878→                    <SelectItem value="neutral">Neutral</SelectItem>
+   879→                  </SelectContent>
+   880→                </Select>
+   881→              </div>
+   882→            </div>
+   883→            <Separator />
+   884→            <div className="space-y-2">
+   885→              <FieldLabel hint="Key liquidity levels">Liquidity Targets</FieldLabel>
+   886→              <div className="flex flex-wrap gap-2">
+   887→                {["PDH", "PDL", "PWH", "PWL", "equal highs", "equal lows", "buy-side", "sell-side", "session liquidity"].map((opt) => {
+   888→                  const active = (form.setup.liquidity ?? []).includes(opt);
+   889→                  return (
+   890→                    <button
+   891→                      key={opt}
+   892→                      type="button"
+   893→                      onClick={() => toggleArrayField("setup.liquidity", opt)}
+   894→                      className={cn("px-2 py-1 rounded-md text-xs border transition-colors", active ? "bg-primary text-primary-foreground border-primary" : "border-border hover:bg-muted")}
+   895→                    >
+   896→                      {opt}
+   897→                    </button>
+   898→                  );
+   899→                })}
+   900→              </div>
+   901→            </div>
+   902→            <div className="space-y-2">
+   903→              <FieldLabel hint="Market structure">Structure</FieldLabel>
+   904→              <div className="flex flex-wrap gap-2">
+   905→                {["BOS", "MSS", "displacement", "protected high", "protected low", "structure shift"].map((opt) => {
+   906→                  const active = (form.setup.structure ?? []).includes(opt);
+   907→                  return (
+   908→                    <button
+   909→                      key={opt}
+   910→                      type="button"
+   911→                      onClick={() => toggleArrayField("setup.structure", opt)}
+   912→                      className={cn("px-2 py-1 rounded-md text-xs border transition-colors", active ? "bg-primary text-primary-foreground border-primary" : "border-border hover:bg-muted")}
+   913→                    >
+   914→                      {opt}
+   915→                    </button>
+   916→                  );
+   917→                })}
+   918→              </div>
+   919→            </div>
+   920→            <div className="space-y-2">
+   921→              <FieldLabel hint="Entry model used">Entry Model</FieldLabel>
+   922→              <Select value={form.setup.entryModel} onValueChange={(v) => setField("setup.entryModel", v)}>
+   923→                <SelectTrigger><SelectValue /></SelectTrigger>
+   924→                <SelectContent>
+   925→                  {["liquidity sweep", "displacement", "FVG", "Order Block", "Breaker", "Mitigation", "SMT", "retracement"].map((o) => (
+   926→                    <SelectItem key={o} value={o}>{o}</SelectItem>
+   927→                  ))}
+   928→                </SelectContent>
+   929→              </Select>
+   930→            </div>
+   931→          </Card>
+   932→
+   933→          {/* Unified Strategy Setup Checklist — the strategy version's rules
+   934→              ARE the checklist. Each rule has weight + required status.
+   935→              The grade is automatically calculated from checked answers. */}
+   936→          {form.strategyId && selectedStrategyVersion && checklistItems.length > 0 ? (
+   937→            <Card className="p-4 space-y-4">
+   938→              <div className="flex items-start justify-between gap-3 flex-wrap">
+   939→                <div className="min-w-0">
+   940→                  <h3 className="font-medium flex items-center gap-2">
+   941→                    Setup Checklist
+   942→                    <Sparkles className="h-4 w-4 text-primary" />
+   943→                  </h3>
+   944→                  <p className="text-xs text-muted-foreground mt-0.5">
+   945→                    {strategyDetail.name} · v{selectedStrategyVersion.versionLabel}
+   946→                  </p>
+   947→                </div>
+   948→                <div className="flex items-center gap-3">
+   949→                  <div className="text-right">
+   950→                    <div className={cn(
+   951→                      "text-lg font-bold tnum",
+   952→                      evaluation.grade === "A+" ? "text-profit"
+   953→                      : evaluation.grade === "A" ? "text-profit"
+   954→                      : evaluation.grade === "B" ? "text-warning"
+   955→                      : evaluation.grade === "C" ? "text-muted-foreground"
+   956→                      : "text-loss"
+   957→                    )}>
+   958→                      {evaluation.grade}
+   959→                    </div>
+   960→                    <div className="text-xs text-muted-foreground tnum">
+   961→                      Score: {(evaluation.score * 100).toFixed(1)}%
+   962→                    </div>
+   963→                  </div>
+   964→                </div>
+   965→              </div>
+   966→
+   967→              {/* Score progress bar */}
+   968→              <div className="space-y-1">
+   969→                <div className="flex items-center justify-between text-xs">
+   970→                  <span className="text-muted-foreground">
+   971→                    Required: {evaluation.requiredCheckedCount}/{evaluation.requiredTotalCount} met
+   972→                  </span>
+   973→                  <span className="text-muted-foreground tnum">
+   974→                    {(evaluation.score * 100).toFixed(1)}%
+   975→                  </span>
+   976→                </div>
+   977→                <div className="h-2 rounded-full bg-muted overflow-hidden">
+   978→                  <div
+   979→                    className={cn(
+   980→                      "h-full rounded-full transition-all",
+   981→                      evaluation.score >= 0.9 ? "bg-profit"
+   982→                      : evaluation.score >= 0.75 ? "bg-profit"
+   983→                      : evaluation.score >= 0.6 ? "bg-warning"
+   984→                      : evaluation.score >= 0.4 ? "bg-muted-foreground"
+   985→                      : "bg-loss"
+   986→                    )}
+   987→                    style={{ width: `${evaluation.score * 100}%` }}
+   988→                  />
+   989→                </div>
+   990→              </div>
+   991→
+   992→              {/* Grading info */}
+   993→              <div className="flex flex-wrap gap-2 text-[10px] text-muted-foreground">
+   994→                <span className={cn("px-1.5 py-0.5 rounded", evaluation.grade === "A+" ? "bg-profit/15 text-profit" : "bg-muted")}>A+ ≥ 90%</span>
+   995→                <span className={cn("px-1.5 py-0.5 rounded", evaluation.grade === "A" ? "bg-profit/15 text-profit" : "bg-muted")}>A ≥ 75%</span>
+   996→                <span className={cn("px-1.5 py-0.5 rounded", evaluation.grade === "B" ? "bg-warning/15 text-warning" : "bg-muted")}>B ≥ 60%</span>
+   997→                <span className={cn("px-1.5 py-0.5 rounded", evaluation.grade === "C" ? "bg-muted-foreground/15" : "bg-muted")}>C ≥ 40%</span>
+   998→                <span className={cn("px-1.5 py-0.5 rounded", evaluation.grade === "Invalid" ? "bg-loss/15 text-loss" : "bg-muted")}>Invalid</span>
+   999→              </div>
+  1000→
+  1001→              {/* Checklist items */}
+  1002→              <div className="space-y-2">
+  1003→                {checklistItems.map((item) => {
+  1004→                  const ans = form.checklistAnswers?.[item.id] ?? { checked: false };
+  1005→                  return (
+  1006→                    <label
+  1007→                      key={item.id}
+  1008→                      className={cn(
+  1009→                        "flex items-center gap-3 p-2 rounded-md border cursor-pointer transition-colors",
+  1010→                        ans.checked ? "bg-profit/10 border-profit/30" : "border-border hover:bg-muted/40",
+  1011→                      )}
+  1012→                    >
+  1013→                      <Checkbox
+  1014→                        checked={ans.checked}
+  1015→                        onCheckedChange={(v) => {
+  1016→                          setForm((f: any) => ({
+  1017→                            ...f,
+  1018→                            checklistAnswers: {
+  1019→                              ...(f.checklistAnswers ?? {}),
+  1020→                              [item.id]: { checked: !!v },
+  1021→                            },
+  1022→                          }));
+  1023→                        }}
+  1024→                      />
+  1025→                      <span className={cn("text-sm flex-1", ans.checked && "text-profit font-medium")}>
+  1026→                        {item.text}
+  1027→                      </span>
+  1028→                      {item.required && (
+  1029→                        <span className="text-[10px] text-loss font-medium uppercase">Required</span>
+  1030→                      )}
+  1031→                      <span className="text-[10px] text-muted-foreground">×{item.weight}</span>
+  1032→                    </label>
+  1033→                  );
+  1034→                })}
+  1035→              </div>
+  1036→
+  1037→              <p className="text-xs text-muted-foreground">
+  1038→                Score = sum(weights of checked) / sum(weights of all). Required items must all be checked to keep an A+/A/B grade; otherwise the grade is capped at C.
+  1039→              </p>
+  1040→            </Card>
+  1041→          ) : form.strategyId && (!selectedStrategyVersion || checklistItems.length === 0) ? (
+  1042→            <Card className="p-4">
+  1043→              <div className="text-center py-4 space-y-1">
+  1044→                <p className="text-sm text-muted-foreground">No setup rules configured for this strategy version.</p>
+  1045→                <p className="text-xs text-muted-foreground">
+  1046→                  Add rules with weights when creating or versioning the strategy to enable setup-grade scoring.
+  1047→                </p>
+  1048→              </div>
+  1049→            </Card>
+  1050→          ) : (
+  1051→            <Card className="p-4">
+  1052→              <div className="text-center py-4 space-y-1">
+  1053→                <p className="text-sm text-muted-foreground">Select a strategy to load its setup checklist.</p>
+  1054→                <p className="text-xs text-muted-foreground">
+  1055→                  The checklist is derived from the strategy's versioned rules. Choose a strategy to see its specific setup requirements.
+  1056→                </p>
+  1057→              </div>
+  1058→            </Card>
+  1059→          )}
+  1060→        </TabsContent>
+  1061→
+  1062→        {/* Psychology */}
+  1063→        <TabsContent value="psychology" className="space-y-4 mt-3">
+  1064→          <Card className="p-4 space-y-4">
+  1065→            <div className="space-y-2">
+  1066→              <FieldLabel hint="Emotional state before entry">Mood Before</FieldLabel>
+  1067→              <div className="flex flex-wrap gap-2">
+  1068→                {PSYCH_BEFORE.map((opt) => {
+  1069→                  const active = (form.psychBefore.moodTags ?? []).includes(opt);
+  1070→                  return (
+  1071→                    <button
+  1072→                      key={opt}
+  1073→                      type="button"
+  1074→                      onClick={() => toggleArrayField("psychBefore.moodTags", opt)}
+  1075→                      className={cn("px-2 py-1 rounded-md text-xs border transition-colors", active ? "bg-primary text-primary-foreground border-primary" : "border-border hover:bg-muted")}
+  1076→                    >
+  1077→                      {opt}
+  1078→                    </button>
+  1079→                  );
+  1080→                })}
+  1081→              </div>
+  1082→            </div>
+  1083→            <div className="grid sm:grid-cols-2 gap-3">
+  1084→              <div className="space-y-2">
+  1085→                <FieldLabel hint="1 (low) to 5 (high)">Confidence Before (1-5)</FieldLabel>
+  1086→                <Input type="number" min={1} max={5} value={form.psychBefore.confidence} onChange={(e) => setField("psychBefore.confidence", Number(e.target.value))} />
+  1087→              </div>
+  1088→              <div className="space-y-2">
+  1089→                <FieldLabel hint="1 (low) to 5 (high)">Energy/Focus Before (1-5)</FieldLabel>
+  1090→                <Input type="number" min={1} max={5} value={form.psychBefore.energy} onChange={(e) => setField("psychBefore.energy", Number(e.target.value))} />
+  1091→              </div>
+  1092→            </div>
+  1093→            <Separator />
+  1094→            <div className="space-y-2">
+  1095→              <FieldLabel hint="Emotional state after">Mood After</FieldLabel>
+  1096→              <div className="flex flex-wrap gap-2">
+  1097→                {PSYCH_AFTER.map((opt) => {
+  1098→                  const active = (form.psychAfter.moodTags ?? []).includes(opt);
+  1099→                  return (
+  1100→                    <button
+  1101→                      key={opt}
+  1102→                      type="button"
+  1103→                      onClick={() => toggleArrayField("psychAfter.moodTags", opt)}
+  1104→                      className={cn("px-2 py-1 rounded-md text-xs border transition-colors", active ? "bg-primary text-primary-foreground border-primary" : "border-border hover:bg-muted")}
+  1105→                    >
+  1106→                      {opt}
+  1107→                    </button>
+  1108→                  );
+  1109→                })}
+  1110→              </div>
+  1111→            </div>
+  1112→            <Separator />
+  1113→            <div className="space-y-2">
+  1114→              <FieldLabel hint="Mark rule violations">Behavior Flags</FieldLabel>
+  1115→              <div className="flex flex-wrap gap-2">
+  1116→                {BEHAVIOR_FLAGS.map((opt) => {
+  1117→                  const active = (form.behaviorFlags ?? []).includes(opt);
+  1118→                  return (
+  1119→                    <button
+  1120→                      key={opt}
+  1121→                      type="button"
+  1122→                      onClick={() => toggleArrayField("behaviorFlags", opt)}
+  1123→                      className={cn("px-2 py-1 rounded-md text-xs border transition-colors", active ? "bg-warning text-white border-warning" : "border-border hover:bg-muted")}
+  1124→                    >
+  1125→                      {opt.split("_").map((w) => w.charAt(0).toUpperCase() + w.slice(1)).join(" ")}
+  1126→                    </button>
+  1127→                  );
+  1128→                })}
+  1129→              </div>
+  1130→            </div>
+  1131→          </Card>
+  1132→        </TabsContent>
+  1133→
+  1134→        {/* Review */}
+  1135→        <TabsContent value="review" className="space-y-4 mt-3">
+  1136→          <Card className="p-4 space-y-4">
+  1137→            <div className="space-y-2">
+  1138→              <FieldLabel hint="Free-form notes">Notes</FieldLabel>
+  1139→              <Textarea value={form.notes} onChange={(e) => setField("notes", e.target.value)} rows={4} />
+  1140→            </div>
+  1141→            <div className="space-y-2">
+  1142→              <FieldLabel hint="Key lessons learned">Lessons</FieldLabel>
+  1143→              <Textarea value={form.lessons} onChange={(e) => setField("lessons", e.target.value)} rows={3} />
+  1144→            </div>
+  1145→            <div className="space-y-2">
+  1146→              <Label className="flex items-center gap-2"><TagIcon className="h-4 w-4" /> Tags</Label>
+  1147→              <div className="flex flex-wrap gap-2">
+  1148→                {(meta?.tags ?? []).map((tag: any) => {
+  1149→                  const active = (form.tags ?? []).includes(tag.name);
+  1150→                  return (
+  1151→                    <button
+  1152→                      key={tag.id}
+  1153→                      type="button"
+  1154→                      onClick={() => toggleArrayField("tags", tag.name)}
+  1155→                      className={cn("px-2 py-1 rounded-md text-xs border transition-colors", active ? "bg-primary text-primary-foreground border-primary" : "border-border hover:bg-muted")}
+  1156→                    >
+  1157→                      {tag.name}
+  1158→                    </button>
+  1159→                  );
+  1160→                })}
+  1161→              </div>
+  1162→            </div>
+  1163→          </Card>
+  1164→        </TabsContent>
+  1165→
+  1166→        {/* Evidence */}
+  1167→        <TabsContent value="evidence" className="space-y-4 mt-3">
+  1168→          <Card className="p-4 space-y-4">
+  1169→            <div className="flex items-center justify-between">
+  1170→              <div>
+  1171→                <h3 className="font-medium">Evidence</h3>
+  1172→                <p className="text-sm text-muted-foreground mt-0.5">
+  1173→                  Upload screenshots, chart recordings, or trade evidence. Files are stored privately.
+  1174→                </p>
+  1175→              </div>
+  1176→              <Button
+  1177→                type="button"
+  1178→                variant="outline"
+  1179→                size="sm"
+  1180→                onClick={() => fileInputRef.current?.click()}
+  1181→              >
+  1182→                <Upload className="h-4 w-4" /> Upload
+  1183→              </Button>
+  1184→              <input
+  1185→                ref={fileInputRef}
+  1186→                type="file"
+  1187→                accept="image/png,image/jpeg,image/webp,image/gif,video/mp4,video/webm,video/quicktime"
+  1188→                multiple
+  1189→                className="hidden"
+  1190→                onChange={(e) => {
+  1191→                  const files = e.target.files;
+  1192→                  if (!files) return;
+  1193→                  handleFileUpload(files);
+  1194→                  e.target.value = "";
+  1195→                }}
+  1196→              />
+  1197→            </div>
+  1198→
+  1199→            {/* Paste support */}
+  1200→            <div className="rounded-md border border-dashed border-border p-3 text-center text-sm text-muted-foreground">
+  1201→              You can also paste screenshots directly with Ctrl+V (click here first to focus).
+  1202→              <div
+  1203→                contentEditable
+  1204→                className="sr-only"
+  1205→                onPaste={(e) => {
+  1206→                  const items = e.clipboardData?.items;
+  1207→                  if (!items) return;
+  1208→                  const files: File[] = [];
+  1209→                  for (const item of items) {
+  1210→                    if (item.type.startsWith("image/")) {
+  1211→                      const file = item.getAsFile();
+  1212→                      if (file) files.push(file);
+  1213→                    }
+  1214→                  }
+  1215→                  if (files.length > 0) {
+  1216→                    handleFileUpload(files);
+  1217→                    e.preventDefault();
+  1218→                  }
+  1219→                }}
+  1220→                tabIndex={0}
+  1221→              />
+  1222→            </div>
+  1223→
+  1224→            {/* Uploaded media grid */}
+  1225→            {form.uploadedMedia.length > 0 && (
+  1226→              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+  1227→                {form.uploadedMedia.map((m: any, i: number) => (
+  1228→                  <div key={m.id || i} className="relative group rounded-md border border-border overflow-hidden">
+  1229→                    <div className="relative">
+  1230→                      {m.kind === "image" ? (
+  1231→                        <img src={m.url} alt={m.filename} className="w-full aspect-video object-cover" />
+  1232→                      ) : (
+  1233→                        <div className="aspect-video bg-muted flex items-center justify-center">
+  1234→                          <ImageIcon className="h-8 w-8 text-muted-foreground" />
+  1235→                        </div>
+  1236→                      )}
+  1237→                      {m.kind === "image" && (
+  1238→                        <button
+  1239→                          type="button"
+  1240→                          className="absolute top-2 right-2 h-7 px-2 rounded-full bg-black/60 text-white flex items-center gap-1 text-xs opacity-0 group-hover:opacity-100 transition-opacity"
+  1241→                          onClick={() => setViewerIndex(i)}
+  1242→                        >
+  1243→                          <Pencil className="h-3 w-3" /> Annotate
+  1244→                        </button>
+  1245→                      )}
+  1246→                      <button
+  1247→                        type="button"
+  1248→                        className="absolute top-2 left-2 h-7 w-7 rounded-full bg-black/60 text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+  1249→                        onClick={() => {
+  1250→                          setForm((f: any) => ({
+  1251→                            ...f,
+  1252→                            uploadedMedia: f.uploadedMedia.filter((_: any, idx: number) => idx !== i),
+  1253→                          }));
+  1254→                        }}
+  1255→                      >
+  1256→                        <X className="h-3 w-3" />
+  1257→                      </button>
+  1258→                    </div>
+  1259→                    <div className="p-3 space-y-2">
+  1260→                      <div className="flex items-center justify-between">
+  1261→                        <div className="text-xs font-medium truncate flex-1">{m.filename}</div>
+  1262→                        <div className="text-[10px] text-muted-foreground ml-2 shrink-0">
+  1263→                          {(m.sizeBytes / 1024).toFixed(0)} KB
+  1264→                        </div>
+  1265→                      </div>
+  1266→                      <div>
+  1267→                        <Label className="text-xs text-muted-foreground">Description (optional)</Label>
+  1268→                        <Textarea
+  1269→                          value={m.caption || ""}
+  1270→                          onChange={(e) => {
+  1271→                            const val = e.target.value;
+  1272→                            setForm((f: any) => ({
+  1273→                              ...f,
+  1274→                              uploadedMedia: f.uploadedMedia.map((item: any, idx: number) =>
+  1275→                                idx === i ? { ...item, caption: val } : item
+  1276→                              ),
+  1277→                            }));
+  1278→                          }}
+  1279→                          rows={2}
+  1280→                         
+  1281→                          className="text-sm mt-1"
+  1282→                        />
+  1283→                      </div>
+  1284→                    </div>
+  1285→                  </div>
+  1286→                ))}
+  1287→              </div>
+  1288→            )}
+  1289→
+  1290→            {form.uploadedMedia.length === 0 && (
+  1291→              <div className="rounded-md border border-dashed border-border p-8 text-center">
+  1292→                <ImageIcon className="h-8 w-8 mx-auto text-muted-foreground mb-2" />
+  1293→                <p className="text-sm text-muted-foreground">No evidence uploaded yet.</p>
+  1294→                <p className="text-xs text-muted-foreground mt-1">
+  1295→                  Click Upload above or paste a screenshot with Ctrl+V.
+  1296→                </p>
+  1297→              </div>
+  1298→            )}
+  1299→          </Card>
+  1300→        </TabsContent>
+  1301→      </Tabs>
+  1302→
+  1303→      {/* Navigation bar: Next/Back on intermediate tabs, Save on the final tab.
+  1304→          On mobile: fixed to bottom of viewport (below mobile nav). On desktop: sticky at bottom of scroll. */}
+  1305→      <div className="fixed bottom-16 md:static left-0 right-0 z-20 flex gap-2 justify-between bg-background/95 backdrop-blur p-2 border-t border-border md:rounded-md md:border">
+  1306→        <div className="flex gap-2">
+  1307→          <Button
+  1308→            variant="outline"
+  1309→            onClick={() => {
+  1310→              const idx = TAB_ORDER.indexOf(activeTab);
+  1311→              if (idx > 0) setActiveTab(TAB_ORDER[idx - 1]);
+  1312→            }}
+  1313→            disabled={activeTab === TAB_ORDER[0]}
+  1314→          >
+  1315→            <ArrowLeft className="h-4 w-4" /> Back
+  1316→          </Button>
+  1317→        </div>
+  1318→        <div className="flex gap-2">
+  1319→          {activeTab !== TAB_ORDER[TAB_ORDER.length - 1] ? (
+  1320→            <Button
+  1321→              onClick={() => {
+  1322→                const idx = TAB_ORDER.indexOf(activeTab);
+  1323→                if (idx < TAB_ORDER.length - 1) setActiveTab(TAB_ORDER[idx + 1]);
+  1324→              }}
+  1325→            >
+  1326→              Next <ArrowRight className="h-4 w-4" />
+  1327→            </Button>
+  1328→          ) : (
+  1329→            <>
+  1330→              <Button variant="outline" onClick={() => submit(true)} disabled={saving}>
+  1331→                {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+  1332→                Save as Draft
+  1333→              </Button>
+  1334→              <Button onClick={() => submit(false)} disabled={saving}>
+  1335→                {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
+  1336→                Save Trade
+  1337→              </Button>
+  1338→            </>
+  1339→          )}
+  1340→        </div>
+  1341→      </div>
+  1342→
+  1343→      {/* Image viewer with annotation support */}
+  1344→      {viewerIndex != null && form.uploadedMedia[viewerIndex] && (
+  1345→        <ImageViewer
+  1346→          mediaItems={form.uploadedMedia.filter((m: any) => m.kind === "image").map((m: any) => ({
+  1347→            ...m,
+  1348→            // Include annotations if available, otherwise empty (ImageViewer will fetch them via the media detail API)
+  1349→            annotations: m.annotations ?? [],
+  1350→          }))}
+  1351→          initialIndex={form.uploadedMedia.filter((m: any) => m.kind === "image").findIndex((m: any) => m.id === form.uploadedMedia[viewerIndex].id)}
+  1352→          onClose={() => setViewerIndex(null)}
+  1353→        />
+  1354→      )}
+  1355→    </div>
+  1356→  );
+  1357→}
+  1358→
+  1359→function safeJson(json: string | null, fallback: any): any {
+  1360→  if (!json) return fallback;
+  1361→  try { return JSON.parse(json); } catch { return fallback; }
+  1362→}
+  1363→
+  1364→function Separator() {
+  1365→  return <div className="h-px bg-border" />;
+  1366→}
+  1367→

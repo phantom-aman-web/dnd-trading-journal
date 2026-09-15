@@ -1,0 +1,632 @@
+     1→"use client";
+     2→
+     3→import { useQuery, useQueryClient } from "@tanstack/react-query";
+     4→import { useNav } from "@/lib/nav-store";
+     5→import { Card } from "@/components/ui/card";
+     6→import { Badge } from "@/components/ui/badge";
+     7→import { Button } from "@/components/ui/button";
+     8→import { Skeleton } from "@/components/ui/skeleton";
+     9→import { Separator } from "@/components/ui/separator";
+    10→import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+    11→import { formatSignedCents, formatR, formatPrice, centsToNumberString } from "@/lib/money";
+    12→import { dToNumber } from "@/lib/decimal";
+    13→import {
+    14→  parseChecklistItems,
+    15→  parseAnswers,
+    16→  type ChecklistItem,
+    17→  type ChecklistAnswer,
+    18→} from "@/lib/checklist-evaluation";
+    19→import {
+    20→  ArrowLeft,
+    21→  Copy,
+    22→  Trash2,
+    23→  Edit,
+    24→  TrendingUp,
+    25→  TrendingDown,
+    26→  Clock,
+    27→  Tag,
+    28→  AlertTriangle,
+    29→  Image as ImageIcon,
+    30→  Check,
+    31→  X,
+    32→  Sparkles,
+    33→} from "lucide-react";
+    34→import { toast } from "sonner";
+    35→import { cn } from "@/lib/utils";
+    36→import { useState, useMemo } from "react";
+    37→import { ImageViewer } from "@/components/trade/image-viewer";
+    38→import { useRouter } from "next/navigation";
+    39→
+    40→async function fetchTrade(id: string) {
+    41→  const res = await fetch(`/api/trades/${id}`, { cache: "no-store" });
+    42→  if (!res.ok) throw new Error("Failed to load trade");
+    43→  return res.json();
+    44→}
+    45→
+    46→export function TradeDetailView() {
+    47→  const { params, navigate } = useNav();
+    48→  const qc = useQueryClient();
+    49→  const id = params.id;
+    50→  const { data: trade, isLoading } = useQuery({
+    51→    queryKey: ["trade", id],
+    52→    queryFn: () => fetchTrade(id),
+    53→    enabled: !!id,
+    54→  });
+    55→  const [viewerOpen, setViewerOpen] = useState(false);
+    56→  const [viewerIndex, setViewerIndex] = useState(0);
+    57→
+    58→  // Latest checklist evaluation for the trade (Fix 3). The trade-detail GET
+    59→  // returns `checklistEvaluations` ordered by `evaluatedAt` desc, so the
+    60→  // first entry is the most recent. We parse the version's `itemsJson`
+    61→  // (for item labels) and the evaluation's `rawAnswersJson` (for the
+    62→  // checked/unchecked state of each item) once here so the Setup tab can
+    63→  // render the full evaluation breakdown. Declared before the early-return
+    64→  // guards so the hook ordering stays stable across renders.
+    65→  const checklistEvaluation = useMemo(() => {
+    66→    if (!trade) return null;
+    67→    const evals = Array.isArray(trade.checklistEvaluations)
+    68→      ? trade.checklistEvaluations
+    69→      : [];
+    70→    if (evals.length === 0) return null;
+    71→    const latest = evals[0];
+    72→    const version = latest?.checklistVersion;
+    73→    if (!version) return null;
+    74→    const items: ChecklistItem[] = parseChecklistItems(version.itemsJson);
+    75→    const answers: ChecklistAnswer = parseAnswers(latest.rawAnswersJson);
+    76→    const checklistName = version.checklist?.name ?? "Checklist";
+    77→    return {
+    78→      checklistName,
+    79→      versionLabel: version.versionLabel,
+    80→      weightedScore: latest.weightedScore,
+    81→      finalGrade: latest.finalGrade,
+    82→      evaluatedAt: latest.evaluatedAt,
+    83→      items,
+    84→      answers,
+    85→    };
+    86→  }, [trade]);
+    87→
+    88→  if (isLoading) {
+    89→    return (
+    90→      <div className="p-4 md:p-6 space-y-3">
+    91→        <Skeleton className="h-8 w-32" />
+    92→        <Skeleton className="h-24" />
+    93→        <Skeleton className="h-64" />
+    94→      </div>
+    95→    );
+    96→  }
+    97→
+    98→  if (!trade) return null;
+    99→
+   100→  const pnl = formatSignedCents(trade.netPnlCents);
+   101→  const setup = safeJson(trade.setupJson, {});
+   102→  const thesis = safeJson(trade.thesisJson, {});
+   103→  const psychBefore = safeJson(trade.psychBeforeJson, {});
+   104→  const psychAfter = safeJson(trade.psychAfterJson, {});
+   105→  const behaviorFlags: string[] = safeJson(trade.behaviorFlagsJson, []);
+   106→  const tags: string[] = safeJson(trade.tagsJson, []);
+   107→  const planAdherence = safeJson(trade.planAdherenceJson, {});
+   108→
+   109→  const media = trade.media ?? [];
+   110→  // Evidence timeline renders both images and videos. The ImageViewer modal
+   111→  // is image-only by design, but videos get an inline <video controls>
+   112→  // player below in the grid (Fix 4 — video playback).
+   113→  const images = media.filter((m: any) => m.kind === "image");
+   114→  const evidenceMedia = media.filter((m: any) => m.kind === "image" || m.kind === "video");
+   115→
+   116→  // Strategy + version display label (Fix 2). Falls back to just the
+   117→  // strategy name if no version is linked, or "-" if neither exists.
+   118→  const strategyLabel = trade.strategy?.name
+   119→    ? trade.strategyVersion?.versionLabel
+   120→      ? `${trade.strategy.name} v${trade.strategyVersion.versionLabel}`
+   121→      : trade.strategy.name
+   122→    : "-";
+   123→
+   124→  return (
+   125→    <div className="p-4 md:p-6 space-y-4 max-w-5xl">
+   126→      {/* Header */}
+   127→      <div className="flex items-center gap-3">
+   128→        <Button variant="ghost" size="icon" onClick={() => navigate("journal")}>
+   129→          <ArrowLeft className="h-4 w-4" />
+   130→        </Button>
+   131→        <div className="flex-1 min-w-0">
+   132→          <div className="flex items-center gap-2 flex-wrap">
+   133→            <h1 className="text-2xl font-semibold tracking-tight">{trade.instrumentSymbol}</h1>
+   134→            <Badge variant="outline" className={cn(trade.direction === "long" ? "text-profit" : "text-loss")}>
+   135→              {trade.direction === "long" ? "LONG" : "SHORT"}
+   136→            </Badge>
+   137→            {trade.setupGrade && (
+   138→              <Badge variant="outline" className={cn(gradeClass(trade.setupGrade))}>{trade.setupGrade}</Badge>
+   139→            )}
+   140→            {trade.strategyVersion?.versionLabel && (
+   141→              <Badge variant="outline" className="font-normal">
+   142→                v{trade.strategyVersion.versionLabel}
+   143→              </Badge>
+   144→            )}
+   145→            <Badge variant="secondary">{trade.status}</Badge>
+   146→          </div>
+   147→          <div className="mt-1 text-sm text-muted-foreground">
+   148→            {trade.entryTime ? new Date(trade.entryTime).toLocaleString() : "Open"} · {trade.session ?? "-"}
+   149→          </div>
+   150→        </div>
+   151→        <div className="text-right">
+   152→          <div className={cn("text-xl font-semibold tnum", pnl.sign > 0 ? "text-profit" : pnl.sign < 0 ? "text-loss" : "")}>
+   153→            {pnl.text}
+   154→          </div>
+   155→          <div className={cn("text-sm tnum", trade.actualR && dToNumber(trade.actualR) > 0 ? "text-profit" : trade.actualR && dToNumber(trade.actualR) < 0 ? "text-loss" : "text-muted-foreground")}>
+   156→            {formatR(trade.actualR)}
+   157→          </div>
+   158→        </div>
+   159→      </div>
+   160→
+   161→      {/* Actions */}
+   162→      <div className="flex flex-wrap gap-2">
+   163→        <Button variant="outline" size="sm" onClick={() => navigate("tradeNew", { id })}>
+   164→          <Edit className="h-4 w-4" /> Edit
+   165→        </Button>
+   166→        <Button
+   167→          variant="outline"
+   168→          size="sm"
+   169→          onClick={async () => {
+   170→            const res = await fetch(`/api/trades/${id}/duplicate`, { method: "POST" });
+   171→            if (res.ok) {
+   172→              toast.success("Trade duplicated as draft.");
+   173→              qc.invalidateQueries({ queryKey: ["trades"] });
+   174→            } else {
+   175→              toast.error("Failed to duplicate.");
+   176→            }
+   177→          }}
+   178→        >
+   179→          <Copy className="h-4 w-4" /> Duplicate
+   180→        </Button>
+   181→        <Button
+   182→          variant="outline"
+   183→          size="sm"
+   184→          className="text-loss hover:text-loss"
+   185→          onClick={async () => {
+   186→            if (!confirm("Delete this trade? This cannot be undone.")) return;
+   187→            const res = await fetch(`/api/trades/${id}`, { method: "DELETE" });
+   188→            if (res.ok) {
+   189→              toast.success("Trade deleted.");
+   190→              navigate("journal");
+   191→            } else {
+   192→              toast.error("Failed to delete.");
+   193→            }
+   194→          }}
+   195→        >
+   196→          <Trash2 className="h-4 w-4" /> Delete
+   197→        </Button>
+   198→      </div>
+   199→
+   200→      {/* Quick stats */}
+   201→      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+   202→        <MiniStat label="Entry" value={trade.entryPriceAvg ? formatPrice(trade.entryPriceAvg, 5) : "-"} />
+   203→        <MiniStat label="Exit" value={trade.exitPriceAvg ? formatPrice(trade.exitPriceAvg, 5) : "-"} />
+   204→        <MiniStat label="Quantity" value={trade.positionSize ?? "-"} />
+   205→        <MiniStat label="Net P&L" value={pnl.text} tone={pnl.sign > 0 ? "profit" : pnl.sign < 0 ? "loss" : "neutral"} />
+   206→        <MiniStat label="Gross P&L" value={formatSignedCents(trade.grossPnlCents).text} tone={trade.grossPnlCents > 0 ? "profit" : trade.grossPnlCents < 0 ? "loss" : "neutral"} />
+   207→        <MiniStat label="R Multiple" value={formatR(trade.actualR)} tone={trade.actualR && dToNumber(trade.actualR) > 0 ? "profit" : trade.actualR && dToNumber(trade.actualR) < 0 ? "loss" : "neutral"} />
+   208→        <MiniStat label="Costs" value={centsToNumberString(trade.feesCents + trade.commissionCents + trade.swapCents)} />
+   209→        <MiniStat label="Strategy" value={strategyLabel} />
+   210→      </div>
+   211→
+   212→      {/* Tabs */}
+   213→      <Tabs defaultValue="overview" className="w-full">
+   214→        <TabsList className="w-full justify-start overflow-x-auto">
+   215→          <TabsTrigger value="overview">Overview</TabsTrigger>
+   216→          <TabsTrigger value="setup">Setup</TabsTrigger>
+   217→          <TabsTrigger value="execution">Execution</TabsTrigger>
+   218→          <TabsTrigger value="psychology">Psychology</TabsTrigger>
+   219→          <TabsTrigger value="evidence">Evidence</TabsTrigger>
+   220→          <TabsTrigger value="review">Review</TabsTrigger>
+   221→        </TabsList>
+   222→
+   223→        <TabsContent value="overview" className="space-y-4 mt-3">
+   224→          <Card className="p-4">
+   225→            <h3 className="font-medium mb-2">Trading Thesis</h3>
+   226→            {thesis?.why ? (
+   227→              <p className="text-sm text-muted-foreground leading-relaxed">{thesis.why}</p>
+   228→            ) : (
+   229→              <p className="text-sm text-muted-foreground">No thesis recorded.</p>
+   230→            )}
+   231→            {thesis?.narrative && (
+   232→              <div className="mt-3 text-sm">
+   233→                <span className="text-muted-foreground">Narrative:</span> {thesis.narrative}
+   234→              </div>
+   235→            )}
+   236→            <div className="mt-3 grid sm:grid-cols-2 gap-2 text-sm">
+   237→              {thesis?.liquidityTarget && <div><span className="text-muted-foreground">Liquidity target:</span> {thesis.liquidityTarget}</div>}
+   238→              {thesis?.target && <div><span className="text-muted-foreground">Target:</span> {thesis.target}</div>}
+   239→            </div>
+   240→            {thesis?.confirms && Array.isArray(thesis.confirms) && thesis.confirms.length > 0 && (
+   241→              <div className="mt-3 text-sm">
+   242→                <span className="text-muted-foreground">Confirmations:</span>
+   243→                <div className="flex flex-wrap gap-1 mt-1">
+   244→                  {thesis.confirms.map((c: string) => <Badge key={c} variant="secondary" className="text-xs">{c}</Badge>)}
+   245→                </div>
+   246→              </div>
+   247→            )}
+   248→            {thesis?.invalidates && Array.isArray(thesis.invalidates) && thesis.invalidates.length > 0 && (
+   249→              <div className="mt-3 text-sm">
+   250→                <span className="text-muted-foreground">Invalidations:</span>
+   251→                <div className="flex flex-wrap gap-1 mt-1">
+   252→                  {thesis.invalidates.map((c: string) => <Badge key={c} variant="outline" className="text-xs text-loss">{c}</Badge>)}
+   253→                </div>
+   254→              </div>
+   255→            )}
+   256→          </Card>
+   257→
+   258→          {tags.length > 0 && (
+   259→            <Card className="p-4">
+   260→              <h3 className="font-medium mb-2 flex items-center gap-2"><Tag className="h-4 w-4" /> Tags</h3>
+   261→              <div className="flex flex-wrap gap-1">
+   262→                {tags.map((t) => <Badge key={t} variant="secondary">{t}</Badge>)}
+   263→              </div>
+   264→            </Card>
+   265→          )}
+   266→
+   267→          {behaviorFlags.length > 0 && (
+   268→            <Card className="p-4 border-warning/50">
+   269→              <h3 className="font-medium mb-2 flex items-center gap-2"><AlertTriangle className="h-4 w-4 text-warning" /> Behavior Flags</h3>
+   270→              <div className="flex flex-wrap gap-1">
+   271→                {behaviorFlags.map((f) => (
+   272→                  <Badge key={f} variant="outline" className="text-warning">
+   273→                    {f.split("_").map((w) => w.charAt(0).toUpperCase() + w.slice(1)).join(" ")}
+   274→                  </Badge>
+   275→                ))}
+   276→              </div>
+   277→            </Card>
+   278→          )}
+   279→
+   280→          {trade.notes && (
+   281→            <Card className="p-4">
+   282→              <h3 className="font-medium mb-2">Notes</h3>
+   283→              <p className="text-sm text-muted-foreground whitespace-pre-wrap leading-relaxed">{trade.notes}</p>
+   284→            </Card>
+   285→          )}
+   286→        </TabsContent>
+   287→
+   288→        <TabsContent value="setup" className="space-y-4 mt-3">
+   289→          <Card className="p-4">
+   290→            <h3 className="font-medium mb-3">ICT Setup</h3>
+   291→            <div className="grid sm:grid-cols-2 gap-4 text-sm">
+   292→              <SetupSection title="Higher Timeframe Context" data={setup?.htfContext} />
+   293→              <SetupSection title="Liquidity" data={setup?.liquidity} isList />
+   294→              <SetupSection title="Structure" data={setup?.structure} isList />
+   295→              <SetupSection title="Entry Model" data={setup?.entryModel} />
+   296→              <SetupSection title="Session" data={setup?.session} />
+   297→              <SetupSection title="Setup Score" data={trade.setupScore ? `${(dToNumber(trade.setupScore) * 100).toFixed(0)}%` : null} />
+   298→            </div>
+   299→          </Card>
+   300→
+   301→          {/* Checklist Evaluation (Fix 3). Shows the snapshot of the A+
+   302→              checklist answers + the computed score/grade at the time the
+   303→              trade was saved. The evaluation row is created server-side on
+   304→              POST/PATCH /api/trades/[id] (see checklist-evaluation.ts). */}
+   305→          {checklistEvaluation ? (
+   306→            <Card className="p-4 space-y-4">
+   307→              <div className="flex items-start justify-between gap-3 flex-wrap">
+   308→                <div className="min-w-0">
+   309→                  <h3 className="font-medium flex items-center gap-2">
+   310→                    Checklist Evaluation
+   311→                    <Sparkles className="h-4 w-4 text-primary" />
+   312→                  </h3>
+   313→                  <p className="text-xs text-muted-foreground mt-0.5">
+   314→                    {checklistEvaluation.checklistName} · v{checklistEvaluation.versionLabel}
+   315→                  </p>
+   316→                </div>
+   317→                <div className="flex items-center gap-2 shrink-0">
+   318→                  <Badge
+   319→                    variant="outline"
+   320→                    className={cn(gradeClass(checklistEvaluation.finalGrade))}
+   321→                  >
+   322→                    {checklistEvaluation.finalGrade}
+   323→                  </Badge>
+   324→                  <span className="text-sm font-semibold tabular-nums">
+   325→                    {(dToNumber(checklistEvaluation.weightedScore) * 100).toFixed(1)}%
+   326→                  </span>
+   327→                </div>
+   328→              </div>
+   329→
+   330→              <div className="flex items-center gap-2 text-xs text-muted-foreground">
+   331→                <Clock className="h-3.5 w-3.5" />
+   332→                <span>
+   333→                  Evaluated {new Date(checklistEvaluation.evaluatedAt).toLocaleString()}
+   334→                </span>
+   335→              </div>
+   336→
+   337→              {/* Score progress bar */}
+   338→              <div className="space-y-1.5">
+   339→                <div className="h-2 w-full rounded-full bg-muted overflow-hidden">
+   340→                  <div
+   341→                    className={cn(
+   342→                      "h-full transition-all duration-300",
+   343→                      checklistEvaluation.finalGrade === "A+" ? "bg-profit" :
+   344→                      checklistEvaluation.finalGrade === "A" ? "bg-profit/80" :
+   345→                      checklistEvaluation.finalGrade === "B" ? "bg-warning" :
+   346→                      checklistEvaluation.finalGrade === "C" ? "bg-muted-foreground" :
+   347→                      "bg-destructive",
+   348→                    )}
+   349→                    style={{
+   350→                      width: `${Math.round(dToNumber(checklistEvaluation.weightedScore) * 100)}%`,
+   351→                    }}
+   352→                  />
+   353→                </div>
+   354→              </div>
+   355→
+   356→              {/* Per-item answers */}
+   357→              {checklistEvaluation.items.length > 0 ? (
+   358→                <div className="space-y-1.5">
+   359→                  {checklistEvaluation.items.map((item) => {
+   360→                    const ans = checklistEvaluation.answers[item.id] ?? { checked: false };
+   361→                    return (
+   362→                      <div
+   363→                        key={item.id}
+   364→                        className={cn(
+   365→                          "flex items-start gap-2 p-2 rounded-md border text-sm",
+   366→                          ans.checked
+   367→                            ? "bg-profit/5 border-profit/20"
+   368→                            : "border-border bg-muted/20",
+   369→                        )}
+   370→                      >
+   371→                        {ans.checked ? (
+   372→                          <Check className="h-4 w-4 text-profit shrink-0 mt-0.5" />
+   373→                        ) : (
+   374→                          <X className="h-4 w-4 text-muted-foreground shrink-0 mt-0.5" />
+   375→                        )}
+   376→                        <span className={cn("flex-1 min-w-0", !ans.checked && "text-muted-foreground line-through")}>
+   377→                          {item.text}
+   378→                        </span>
+   379→                        {item.required && (
+   380→                          <Badge variant="outline" className="text-[10px] py-0 px-1 shrink-0">
+   381→                            Required
+   382→                          </Badge>
+   383→                        )}
+   384→                        <Badge variant="secondary" className="text-[10px] py-0 px-1 shrink-0">
+   385→                          ×{item.weight}
+   386→                        </Badge>
+   387→                      </div>
+   388→                    );
+   389→                  })}
+   390→                </div>
+   391→              ) : (
+   392→                <p className="text-sm text-muted-foreground text-center py-2">
+   393→                  This checklist version has no items defined.
+   394→                </p>
+   395→              )}
+   396→
+   397→              {checklistEvaluation.items.length > 0 && (
+   398→                <p className="text-xs text-muted-foreground">
+   399→                  Score = sum(weights of checked) / sum(weights of all). Required items must all be checked to keep an A+/A/B grade; otherwise the grade is capped at C.
+   400→                </p>
+   401→              )}
+   402→            </Card>
+   403→          ) : (
+   404→            <Card className="p-4">
+   405→              <div className="text-center py-3 space-y-1">
+   406→                <p className="text-sm text-muted-foreground">
+   407→                  No checklist evaluation recorded for this trade.
+   408→                </p>
+   409→                <p className="text-xs text-muted-foreground">
+   410→                  Evaluations are captured when the A+ Setup Checklist is filled in on the trade form.
+   411→                </p>
+   412→              </div>
+   413→            </Card>
+   414→          )}
+   415→        </TabsContent>
+   416→
+   417→        <TabsContent value="execution" className="space-y-4 mt-3">
+   418→          <Card className="p-4">
+   419→            <h3 className="font-medium mb-3">Execution Ledger</h3>
+   420→            <div className="rounded-md border border-border overflow-hidden">
+   421→              <table className="w-full text-sm">
+   422→                <thead className="bg-muted/50 text-xs uppercase text-muted-foreground">
+   423→                  <tr>
+   424→                    <th className="px-3 py-2 text-left">Type</th>
+   425→                    <th className="px-3 py-2 text-right">Price</th>
+   426→                    <th className="px-3 py-2 text-right">Qty</th>
+   427→                    <th className="px-3 py-2 text-right hidden md:table-cell">Time</th>
+   428→                  </tr>
+   429→                </thead>
+   430→                <tbody>
+   431→                  {trade.executions?.map((e: any) => (
+   432→                    <tr key={e.id} className="border-t border-border">
+   433→                      <td className="px-3 py-2">
+   434→                        <Badge variant="outline" className={cn(e.kind === "entry" ? "text-profit" : "text-loss")}>
+   435→                          {e.kind}
+   436→                        </Badge>
+   437→                      </td>
+   438→                      <td className="px-3 py-2 text-right tnum">{formatPrice(e.price, 5)}</td>
+   439→                      <td className="px-3 py-2 text-right tnum">{e.quantity}</td>
+   440→                      <td className="px-3 py-2 text-right tnum text-xs text-muted-foreground hidden md:table-cell">
+   441→                        {new Date(e.timestamp).toLocaleString()}
+   442→                      </td>
+   443→                    </tr>
+   444→                  ))}
+   445→                </tbody>
+   446→              </table>
+   447→            </div>
+   448→          </Card>
+   449→
+   450→          <Card className="p-4">
+   451→            <h3 className="font-medium mb-3">Planned vs Actual</h3>
+   452→            <div className="grid sm:grid-cols-3 gap-4 text-sm">
+   453→              <div>
+   454→                <div className="text-xs text-muted-foreground">Planned Entry</div>
+   455→                <div className="font-medium tnum">{trade.plannedEntryPrice ? formatPrice(trade.plannedEntryPrice, 5) : "-"}</div>
+   456→              </div>
+   457→              <div>
+   458→                <div className="text-xs text-muted-foreground">Planned Stop</div>
+   459→                <div className="font-medium tnum">{trade.plannedStopPrice ? formatPrice(trade.plannedStopPrice, 5) : "-"}</div>
+   460→              </div>
+   461→              <div>
+   462→                <div className="text-xs text-muted-foreground">Planned Target</div>
+   463→                <div className="font-medium tnum">{trade.plannedTargetPrice ? formatPrice(trade.plannedTargetPrice, 5) : "-"}</div>
+   464→              </div>
+   465→              <div>
+   466→                <div className="text-xs text-muted-foreground">Avg Entry</div>
+   467→                <div className="font-medium tnum">{trade.entryPriceAvg ? formatPrice(trade.entryPriceAvg, 5) : "-"}</div>
+   468→              </div>
+   469→              <div>
+   470→                <div className="text-xs text-muted-foreground">Avg Exit</div>
+   471→                <div className="font-medium tnum">{trade.exitPriceAvg ? formatPrice(trade.exitPriceAvg, 5) : "-"}</div>
+   472→              </div>
+   473→              <div>
+   474→                <div className="text-xs text-muted-foreground">Risk %</div>
+   475→                <div className="font-medium tnum">{trade.plannedRiskPct ? `${(dToNumber(trade.plannedRiskPct) * 100).toFixed(2)}%` : "-"}</div>
+   476→              </div>
+   477→            </div>
+   478→          </Card>
+   479→        </TabsContent>
+   480→
+   481→        <TabsContent value="psychology" className="space-y-4 mt-3">
+   482→          <div className="grid md:grid-cols-2 gap-4">
+   483→            <Card className="p-4">
+   484→              <h3 className="font-medium mb-3">Before Execution</h3>
+   485→              {psychBefore?.moodTags && (
+   486→                <div className="flex flex-wrap gap-1 mb-3">
+   487→                  {psychBefore.moodTags.map((t: string) => <Badge key={t} variant="secondary">{t}</Badge>)}
+   488→                </div>
+   489→              )}
+   490→              <div className="grid grid-cols-2 gap-3 text-sm">
+   491→                <div><span className="text-muted-foreground">Confidence:</span> {psychBefore?.confidence ?? "-"}/5</div>
+   492→                <div><span className="text-muted-foreground">Energy:</span> {psychBefore?.energy ?? "-"}/5</div>
+   493→              </div>
+   494→            </Card>
+   495→            <Card className="p-4">
+   496→              <h3 className="font-medium mb-3">After Execution</h3>
+   497→              {psychAfter?.moodTags && (
+   498→                <div className="flex flex-wrap gap-1 mb-3">
+   499→                  {psychAfter.moodTags.map((t: string) => <Badge key={t} variant="secondary">{t}</Badge>)}
+   500→                </div>
+   501→              )}
+   502→              <div className="grid grid-cols-2 gap-3 text-sm">
+   503→                <div><span className="text-muted-foreground">Confidence:</span> {psychAfter?.confidence ?? "-"}/5</div>
+   504→                <div><span className="text-muted-foreground">Energy:</span> {psychAfter?.energy ?? "-"}/5</div>
+   505→              </div>
+   506→            </Card>
+   507→          </div>
+   508→        </TabsContent>
+   509→
+   510→        <TabsContent value="evidence" className="space-y-4 mt-3">
+   511→          <Card className="p-4">
+   512→            <div className="flex items-center justify-between mb-3">
+   513→              <h3 className="font-medium">Evidence Timeline</h3>
+   514→              <Button size="sm" variant="outline" onClick={() => navigate("tradeNew", { id })}>
+   515→                <ImageIcon className="h-4 w-4" /> Add Media
+   516→              </Button>
+   517→            </div>
+   518→            {evidenceMedia.length === 0 ? (
+   519→              <div className="rounded-md border border-dashed border-border p-8 text-center text-sm text-muted-foreground">
+   520→                No evidence uploaded yet. Add screenshots or videos to build a chronological story of this trade.
+   521→              </div>
+   522→            ) : (
+   523→              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2">
+   524→                {evidenceMedia.map((m: any) => {
+   525→                  const isVideo = m.kind === "video";
+   526→                  return (
+   527→                    <div key={m.id}>
+   528→                    <button
+   529→                      onClick={() => {
+   530→                        // m.url is already populated by the trade detail API
+   531→                        // (signed URL inlined server-side), so we no longer need
+   532→                        // to fan out a GET /api/media/[id] request here.
+   533→                        if (isVideo) return; // video has inline controls; don't open the image modal
+   534→                        const imgIdx = images.findIndex((im: any) => im.id === m.id);
+   535→                        if (imgIdx >= 0) {
+   536→                          setViewerIndex(imgIdx);
+   537→                          setViewerOpen(true);
+   538→                        }
+   539→                      }}
+   540→                      className="aspect-video rounded-md border border-border overflow-hidden bg-muted hover:opacity-80 transition-opacity text-left w-full"
+   541→                    >
+   542→                      {isVideo && m.url ? (
+   543→                        <video src={m.url} className="w-full h-full object-cover" preload="metadata" controls />
+   544→                      ) : (
+   545→                        <img src={m.url || `/api/media/file?token=placeholder`} alt={m.caption || "Evidence"} className="w-full h-full object-cover" />
+   546→                      )}
+   547→                    </button>
+   548→                    {m.caption && (
+   549→                      <p className="text-xs text-muted-foreground mt-1 line-clamp-2">{m.caption}</p>
+   550→                    )}
+   551→                    </div>
+   552→                  );
+   553→                })}
+   554→              </div>
+   555→            )}
+   556→          </Card>
+   557→        </TabsContent>
+   558→
+   559→        <TabsContent value="review" className="space-y-4 mt-3">
+   560→          <Card className="p-4">
+   561→            <h3 className="font-medium mb-2">Lessons</h3>
+   562→            {trade.lessons ? (
+   563→              <p className="text-sm text-muted-foreground whitespace-pre-wrap leading-relaxed">{trade.lessons}</p>
+   564→            ) : (
+   565→              <p className="text-sm text-muted-foreground">No lessons recorded for this trade.</p>
+   566→            )}
+   567→          </Card>
+   568→        </TabsContent>
+   569→      </Tabs>
+   570→
+   571→      {viewerOpen && images.length > 0 && (
+   572→        <ImageViewer
+   573→          mediaItems={images}
+   574→          initialIndex={viewerIndex}
+   575→          onClose={() => setViewerOpen(false)}
+   576→        />
+   577→      )}
+   578→    </div>
+   579→  );
+   580→}
+   581→
+   582→function MiniStat({ label, value, tone }: { label: string; value: string; tone?: "profit" | "loss" | "neutral" }) {
+   583→  return (
+   584→    <Card className="p-3">
+   585→      <div className="text-xs text-muted-foreground">{label}</div>
+   586→      <div className={cn("font-medium tnum mt-1", tone === "profit" ? "text-profit" : tone === "loss" ? "text-loss" : "")}>
+   587→        {value}
+   588→      </div>
+   589→    </Card>
+   590→  );
+   591→}
+   592→
+   593→function SetupSection({ title, data, isList }: { title: string; data: any; isList?: boolean }) {
+   594→  if (!data) return null;
+   595→  return (
+   596→    <div>
+   597→      <div className="text-xs text-muted-foreground uppercase tracking-wide">{title}</div>
+   598→      {isList && Array.isArray(data) ? (
+   599→        <div className="flex flex-wrap gap-1 mt-1">
+   600→          {data.map((d: string, i: number) => <Badge key={i} variant="secondary" className="text-xs">{d}</Badge>)}
+   601→        </div>
+   602→      ) : typeof data === "object" ? (
+   603→        <div className="mt-1 text-sm">
+   604→          {Object.entries(data).map(([k, v]) => (
+   605→            <div key={k}>
+   606→              <span className="text-muted-foreground">{k}:</span> {String(v)}
+   607→            </div>
+   608→          ))}
+   609→        </div>
+   610→      ) : (
+   611→        <div className="font-medium mt-1">{String(data)}</div>
+   612→      )}
+   613→    </div>
+   614→  );
+   615→}
+   616→
+   617→function safeJson(json: string | null, fallback: any): any {
+   618→  if (!json) return fallback;
+   619→  try { return JSON.parse(json); } catch { return fallback; }
+   620→}
+   621→
+   622→function gradeClass(g: string): string {
+   623→  switch (g) {
+   624→    case "A+": return "bg-profit/15 text-profit";
+   625→    case "A": return "bg-profit/10 text-profit";
+   626→    case "B": return "bg-warning/15 text-warning";
+   627→    case "C": return "bg-muted text-muted-foreground";
+   628→    case "Invalid": return "bg-loss/15 text-loss";
+   629→    default: return "bg-muted text-muted-foreground";
+   630→  }
+   631→}
+   632→

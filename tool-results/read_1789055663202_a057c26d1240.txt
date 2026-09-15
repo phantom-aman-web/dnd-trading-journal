@@ -1,0 +1,749 @@
+     1→"use client";
+     2→
+     3→import { useQuery, useQueryClient } from "@tanstack/react-query";
+     4→import { useState, useEffect, useMemo } from "react";
+     5→import { Card } from "@/components/ui/card";
+     6→import { Button } from "@/components/ui/button";
+     7→import { Input } from "@/components/ui/input";
+     8→import { Label } from "@/components/ui/label";
+     9→import { Textarea } from "@/components/ui/textarea";
+    10→import { Badge } from "@/components/ui/badge";
+    11→import { Skeleton } from "@/components/ui/skeleton";
+    12→import { Separator } from "@/components/ui/separator";
+    13→import {
+    14→  Dialog,
+    15→  DialogContent,
+    16→  DialogHeader,
+    17→  DialogTitle,
+    18→  DialogTrigger,
+    19→} from "@/components/ui/dialog";
+    20→import {
+    21→  Select,
+    22→  SelectContent,
+    23→  SelectItem,
+    24→  SelectTrigger,
+    25→  SelectValue,
+    26→} from "@/components/ui/select";
+    27→import { ClipboardList, Plus, Loader2, Trash2, Pencil, TrendingUp } from "lucide-react";
+    28→import { toast } from "sonner";
+    29→import { cn } from "@/lib/utils";
+    30→import { FieldLabel } from "@/components/common/field-label";
+    31→import { EmptyState } from "@/components/common/empty-state";
+    32→import { useNav } from "@/lib/nav-store";
+    33→
+    34→// ---------------------------------------------------------------------------
+    35→// Types
+    36→// ---------------------------------------------------------------------------
+    37→
+    38→interface DailyPlan {
+    39→  id: string;
+    40→  date: string;
+    41→  weeklyBias?: string | null;
+    42→  dailyBias?: string | null;
+    43→  instruments?: string | null;
+    44→  pwh?: string | null;
+    45→  pwl?: string | null;
+    46→  pdh?: string | null;
+    47→  pdl?: string | null;
+    48→  htfLevelsJson?: string | null;
+    49→  liquidityTargets?: string | null;
+    50→  session?: string | null;
+    51→  setupConditions?: string | null;
+    52→  invalidation?: string | null;
+    53→  maxTrades?: number | null;
+    54→  maxDailyRiskPct?: string | null;
+    55→  notes?: string | null;
+    56→  createdAt: string;
+    57→  updatedAt: string;
+    58→}
+    59→
+    60→interface PlanFormState {
+    61→  date: string;
+    62→  weeklyBias: string;
+    63→  dailyBias: string;
+    64→  instruments: string;
+    65→  pwh: string;
+    66→  pwl: string;
+    67→  pdh: string;
+    68→  pdl: string;
+    69→  htfLevelsJson: string;
+    70→  liquidityTargets: string;
+    71→  session: string;
+    72→  setupConditions: string;
+    73→  invalidation: string;
+    74→  maxTrades: string;
+    75→  maxDailyRiskPct: string;
+    76→  notes: string;
+    77→}
+    78→
+    79→const EMPTY_FORM: PlanFormState = {
+    80→  date: new Date().toISOString().slice(0, 10),
+    81→  weeklyBias: "",
+    82→  dailyBias: "",
+    83→  instruments: "",
+    84→  pwh: "",
+    85→  pwl: "",
+    86→  pdh: "",
+    87→  pdl: "",
+    88→  htfLevelsJson: "",
+    89→  liquidityTargets: "",
+    90→  session: "",
+    91→  setupConditions: "",
+    92→  invalidation: "",
+    93→  maxTrades: "",
+    94→  maxDailyRiskPct: "",
+    95→  notes: "",
+    96→};
+    97→
+    98→// ---------------------------------------------------------------------------
+    99→// API helpers
+   100→// ---------------------------------------------------------------------------
+   101→
+   102→async function fetchPlans() {
+   103→  const res = await fetch("/api/daily-plans", { cache: "no-store" });
+   104→  if (!res.ok) throw new Error("Failed to load daily plans");
+   105→  return res.json();
+   106→}
+   107→
+   108→function planToForm(plan: DailyPlan): PlanFormState {
+   109→  // The date stored in the DB is a UTC ISO string. We extract the YYYY-MM-DD
+   110→  // portion to populate the <input type="date"> control without timezone
+   111→  // shifting it back/forward a day.
+   112→  const dateStr = plan.date ? plan.date.slice(0, 10) : new Date().toISOString().slice(0, 10);
+   113→  return {
+   114→    date: dateStr,
+   115→    weeklyBias: plan.weeklyBias ?? "",
+   116→    dailyBias: plan.dailyBias ?? "",
+   117→    instruments: plan.instruments ?? "",
+   118→    pwh: plan.pwh ?? "",
+   119→    pwl: plan.pwl ?? "",
+   120→    pdh: plan.pdh ?? "",
+   121→    pdl: plan.pdl ?? "",
+   122→    htfLevelsJson: plan.htfLevelsJson ?? "",
+   123→    liquidityTargets: plan.liquidityTargets ?? "",
+   124→    session: plan.session ?? "__none",
+   125→    setupConditions: plan.setupConditions ?? "",
+   126→    invalidation: plan.invalidation ?? "",
+   127→    maxTrades: plan.maxTrades != null ? String(plan.maxTrades) : "",
+   128→    maxDailyRiskPct: plan.maxDailyRiskPct ?? "",
+   129→    notes: plan.notes ?? "",
+   130→  };
+   131→}
+   132→
+   133→function formToPayload(form: PlanFormState) {
+   134→  // Numbers / decimals are sent as null when blank to keep the schema
+   135→  // optional (no zero-defaulting surprises).
+   136→  return {
+   137→    date: form.date,
+   138→    weeklyBias: form.weeklyBias || undefined,
+   139→    dailyBias: form.dailyBias || undefined,
+   140→    instruments: form.instruments || undefined,
+   141→    pwh: form.pwh || undefined,
+   142→    pwl: form.pwl || undefined,
+   143→    pdh: form.pdh || undefined,
+   144→    pdl: form.pdl || undefined,
+   145→    htfLevelsJson: form.htfLevelsJson || undefined,
+   146→    liquidityTargets: form.liquidityTargets || undefined,
+   147→    session: form.session && form.session !== "__none" ? form.session : undefined,
+   148→    setupConditions: form.setupConditions || undefined,
+   149→    invalidation: form.invalidation || undefined,
+   150→    maxTrades: form.maxTrades === "" ? undefined : Number(form.maxTrades),
+   151→    maxDailyRiskPct: form.maxDailyRiskPct || undefined,
+   152→    notes: form.notes || undefined,
+   153→  };
+   154→}
+   155→
+   156→// ---------------------------------------------------------------------------
+   157→// Main view
+   158→// ---------------------------------------------------------------------------
+   159→
+   160→export function PlansView() {
+   161→  const qc = useQueryClient();
+   162→  const { data, isLoading } = useQuery({ queryKey: ["daily-plans"], queryFn: fetchPlans });
+   163→  const { params } = useNav();
+   164→  const [selectedId, setSelectedId] = useState<string | null>(null);
+   165→  const [dialogOpen, setDialogOpen] = useState(false);
+   166→  const [editingPlan, setEditingPlan] = useState<DailyPlan | null>(null);
+   167→  // When the user deep-links in with a `?date=YYYY-MM-DD` (e.g. from the
+   168→  // calendar's "Create Plan" button), we open the create dialog with that
+   169→  // date pre-filled. The value is cleared after the dialog opens to avoid
+   170→  // re-opening it on every render.
+   171→  const [initialDate, setInitialDate] = useState<string | null>(null);
+   172→
+   173→  const plans: DailyPlan[] = data?.items ?? [];
+   174→
+   175→  // Allow deep-linking into a specific plan: when the calendar's day-detail
+   176→  // dialog navigates to "plans" with `{ id: <planId> }`, auto-select that
+   177→  // plan in the list.
+   178→  useEffect(() => {
+   179→    if (params?.id && plans.some((p) => p.id === params.id)) {
+   180→      setSelectedId(params.id);
+   181→    }
+   182→  }, [params?.id, plans]);
+   183→
+   184→  // Deep-link from the calendar's "Create Plan" CTA: when arriving with a
+   185→  // `date` param, open the create dialog with that date pre-filled.
+   186→  useEffect(() => {
+   187→    if (params?.date && !dialogOpen) {
+   188→      setEditingPlan(null);
+   189→      setInitialDate(params.date);
+   190→      setDialogOpen(true);
+   191→    }
+   192→  }, [params?.date, dialogOpen]);
+   193→
+   194→  // Sort newest first. The API already returns desc by date, but be defensive
+   195→  // and also group by month for visual scanability.
+   196→  const sortedPlans = useMemo(() => {
+   197→    return [...plans].sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0));
+   198→  }, [plans]);
+   199→
+   200→  // Group plans by "Month Year" label for the list display.
+   201→  const grouped = useMemo(() => {
+   202→    const map = new Map<string, DailyPlan[]>();
+   203→    for (const p of sortedPlans) {
+   204→      const d = new Date(p.date);
+   205→      const label = d.toLocaleDateString("en-US", { month: "long", year: "numeric" });
+   206→      const arr = map.get(label) ?? [];
+   207→      arr.push(p);
+   208→      map.set(label, arr);
+   209→    }
+   210→    return Array.from(map.entries());
+   211→  }, [sortedPlans]);
+   212→
+   213→  const selected = selectedId ? plans.find((p) => p.id === selectedId) ?? null : null;
+   214→
+   215→  function openCreate() {
+   216→    setEditingPlan(null);
+   217→    setInitialDate(null);
+   218→    setDialogOpen(true);
+   219→  }
+   220→
+   221→  function openEdit(plan: DailyPlan) {
+   222→    setEditingPlan(plan);
+   223→    setInitialDate(null);
+   224→    setDialogOpen(true);
+   225→  }
+   226→
+   227→  function onSaved() {
+   228→    qc.invalidateQueries({ queryKey: ["daily-plans"] });
+   229→    setDialogOpen(false);
+   230→    setEditingPlan(null);
+   231→    setInitialDate(null);
+   232→  }
+   233→
+   234→  return (
+   235→    <div className="p-4 md:p-6 grid lg:grid-cols-3 gap-4">
+   236→      {/* List */}
+   237→      <Card className="p-3 lg:col-span-1">
+   238→        <div className="flex items-center justify-between mb-3">
+   239→          <div>
+   240→            <h1 className="font-semibold">Daily Plans</h1>
+   241→            <p className="text-xs text-muted-foreground">Pre-market bias, levels &amp; limits.</p>
+   242→          </div>
+   243→          <Dialog open={dialogOpen} onOpenChange={(o) => { setDialogOpen(o); if (!o) { setEditingPlan(null); setInitialDate(null); } }}>
+   244→            <DialogTrigger asChild>
+   245→              <Button size="sm" onClick={openCreate}>
+   246→                <Plus className="h-4 w-4" />
+   247→              </Button>
+   248→            </DialogTrigger>
+   249→            <PlanFormDialog
+   250→              key={editingPlan?.id ?? (initialDate ? `new-${initialDate}` : "new")}
+   251→              plan={editingPlan}
+   252→              initialDate={initialDate}
+   253→              onClose={() => { setDialogOpen(false); setEditingPlan(null); setInitialDate(null); }}
+   254→              onSaved={onSaved}
+   255→            />
+   256→          </Dialog>
+   257→        </div>
+   258→
+   259→        {isLoading ? (
+   260→          <div className="space-y-2">
+   261→            <Skeleton className="h-12" />
+   262→            <Skeleton className="h-12" />
+   263→            <Skeleton className="h-12" />
+   264→          </div>
+   265→        ) : sortedPlans.length === 0 ? (
+   266→          <EmptyState
+   267→            title="No daily plans yet"
+   268→            description="Create your first daily plan to record pre-market bias, key levels, session focus and risk limits for each trading day."
+   269→            icon={ClipboardList}
+   270→            action={{ label: "New Daily Plan", onClick: openCreate }}
+   271→          />
+   272→        ) : (
+   273→          <div className="space-y-4 max-h-[70vh] overflow-y-auto scroll-thin pr-1">
+   274→            {grouped.map(([label, items]) => (
+   275→              <div key={label} className="space-y-1">
+   276→                <div className="text-[11px] uppercase tracking-wide text-muted-foreground px-1 sticky top-0 bg-card py-1">
+   277→                  {label}
+   278→                </div>
+   279→                {items.map((p) => {
+   280→                  const d = new Date(p.date);
+   281→                  const dateLabel = d.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" });
+   282→                  const isBullish = p.dailyBias === "bullish" || p.weeklyBias === "bullish";
+   283→                  const isBearish = p.dailyBias === "bearish" || p.weeklyBias === "bearish";
+   284→                  return (
+   285→                    <button
+   286→                      key={p.id}
+   287→                      onClick={() => setSelectedId(p.id)}
+   288→                      className={cn(
+   289→                        "w-full text-left p-2 rounded-md border border-border hover:bg-muted/40 transition-colors",
+   290→                        selectedId === p.id && "ring-2 ring-primary border-primary/30",
+   291→                      )}
+   292→                    >
+   293→                      <div className="flex items-center gap-2">
+   294→                        <span className="font-medium text-sm">{dateLabel}</span>
+   295→                        {p.session && (
+   296→                          <Badge variant="outline" className="text-[10px] uppercase">{p.session.replace("_", " ")}</Badge>
+   297→                        )}
+   298→                        <div className="ml-auto flex items-center gap-1">
+   299→                          {isBullish && <Badge variant="outline" className="text-[10px] text-profit border-profit/40">Bull</Badge>}
+   300→                          {isBearish && <Badge variant="outline" className="text-[10px] text-loss border-loss/40">Bear</Badge>}
+   301→                        </div>
+   302→                      </div>
+   303→                      <div className="text-xs text-muted-foreground mt-1 line-clamp-1">
+   304→                        {p.instruments || "No instruments"} · {p.setupConditions || "No setup conditions"}
+   305→                      </div>
+   306→                    </button>
+   307→                  );
+   308→                })}
+   309→              </div>
+   310→            ))}
+   311→          </div>
+   312→        )}
+   313→      </Card>
+   314→
+   315→      {/* Detail */}
+   316→      <div className="lg:col-span-2 space-y-4">
+   317→        {!selected ? (
+   318→          <Card className="p-8 text-center">
+   319→            <ClipboardList className="h-8 w-8 mx-auto text-muted-foreground mb-3" />
+   320→            <h3 className="font-medium">Select a daily plan</h3>
+   321→            <p className="text-sm text-muted-foreground mt-1">
+   322→              Daily plans capture your pre-market work: bias, key HTF levels, liquidity targets, session focus, and the rules that invalidate the thesis.
+   323→            </p>
+   324→          </Card>
+   325→        ) : (
+   326→          <PlanDetail
+   327→            plan={selected}
+   328→            onEdit={() => openEdit(selected)}
+   329→            onDeleted={() => { setSelectedId(null); qc.invalidateQueries({ queryKey: ["daily-plans"] }); }}
+   330→          />
+   331→        )}
+   332→      </div>
+   333→    </div>
+   334→  );
+   335→}
+   336→
+   337→// ---------------------------------------------------------------------------
+   338→// Detail panel
+   339→// ---------------------------------------------------------------------------
+   340→
+   341→function PlanDetail({ plan, onEdit, onDeleted }: { plan: DailyPlan; onEdit: () => void; onDeleted: () => void }) {
+   342→  const [deleting, setDeleting] = useState(false);
+   343→  const { navigate } = useNav();
+   344→  const d = new Date(plan.date);
+   345→  const dateLabel = d.toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric", year: "numeric" });
+   346→
+   347→  async function handleDelete() {
+   348→    if (!confirm("Delete this daily plan? Trades linked to it will be unlinked but kept.")) return;
+   349→    setDeleting(true);
+   350→    try {
+   351→      const res = await fetch(`/api/daily-plans/${plan.id}`, { method: "DELETE" });
+   352→      if (res.ok) {
+   353→        toast.success("Daily plan deleted.");
+   354→        onDeleted();
+   355→      } else {
+   356→        const d = await res.json().catch(() => null);
+   357→        toast.error(d?.error ?? "Failed to delete plan.");
+   358→      }
+   359→    } finally {
+   360→      setDeleting(false);
+   361→    }
+   362→  }
+   363→
+   364→  return (
+   365→    <Card className="p-4 md:p-6 space-y-4">
+   366→      <div className="flex items-start gap-3">
+   367→        <div className="flex-1 min-w-0">
+   368→          <div className="text-xs uppercase tracking-wide text-muted-foreground">Daily Plan</div>
+   369→          <h2 className="text-xl font-semibold tracking-tight">{dateLabel}</h2>
+   370→          <div className="flex flex-wrap items-center gap-2 mt-2">
+   371→            {plan.weeklyBias && <BiasBadge label="Weekly" value={plan.weeklyBias} />}
+   372→            {plan.dailyBias && <BiasBadge label="Daily" value={plan.dailyBias} />}
+   373→            {plan.session && (
+   374→              <Badge variant="outline" className="uppercase text-xs">
+   375→                {plan.session.replace("_", " ")}
+   376→              </Badge>
+   377→            )}
+   378→            {plan.maxTrades != null && (
+   379→              <Badge variant="outline" className="text-xs">Max {plan.maxTrades} trades</Badge>
+   380→            )}
+   381→            {plan.maxDailyRiskPct && (
+   382→              <Badge variant="outline" className="text-xs">Risk {(Number(plan.maxDailyRiskPct) * 100).toFixed(1)}%</Badge>
+   383→            )}
+   384→          </div>
+   385→        </div>
+   386→        <div className="flex items-center gap-1">
+   387→          <Button
+   388→            size="sm"
+   389→            variant="default"
+   390→            onClick={() => navigate("tradeNew", { dailyPlanId: plan.id })}
+   391→          >
+   392→            <TrendingUp className="h-3.5 w-3.5" /> Create Trade From Plan
+   393→          </Button>
+   394→          <Button size="sm" variant="outline" onClick={onEdit}>
+   395→            <Pencil className="h-3.5 w-3.5" /> Edit
+   396→          </Button>
+   397→          <Button
+   398→            size="icon"
+   399→            variant="ghost"
+   400→            className="h-8 w-8 text-muted-foreground hover:text-loss"
+   401→            onClick={handleDelete}
+   402→            disabled={deleting}
+   403→            aria-label="Delete plan"
+   404→          >
+   405→            {deleting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}
+   406→          </Button>
+   407→        </div>
+   408→      </div>
+   409→
+   410→      <Separator />
+   411→
+   412→      <div className="grid sm:grid-cols-2 gap-4">
+   413→        <Field label="Instruments" value={plan.instruments} />
+   414→        <Field label="Session Focus" value={plan.session ? plan.session.replace("_", " ").toUpperCase() : null} />
+   415→      </div>
+   416→
+   417→      <div>
+   418→        <h3 className="text-sm font-medium mb-2">Key Levels</h3>
+   419→        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+   420→          <LevelField label="PWH" value={plan.pwh} />
+   421→          <LevelField label="PWL" value={plan.pwl} />
+   422→          <LevelField label="PDH" value={plan.pdh} />
+   423→          <LevelField label="PDL" value={plan.pdl} />
+   424→        </div>
+   425→      </div>
+   426→
+   427→      {plan.liquidityTargets && (
+   428→        <div>
+   429→          <h3 className="text-sm font-medium mb-1">Liquidity Targets</h3>
+   430→          <p className="text-sm text-muted-foreground whitespace-pre-wrap">{plan.liquidityTargets}</p>
+   431→        </div>
+   432→      )}
+   433→
+   434→      {plan.htfLevelsJson && (
+   435→        <div>
+   436→          <h3 className="text-sm font-medium mb-1">HTF Levels</h3>
+   437→          <p className="text-sm text-muted-foreground whitespace-pre-wrap">{plan.htfLevelsJson}</p>
+   438→        </div>
+   439→      )}
+   440→
+   441→      {plan.setupConditions && (
+   442→        <div>
+   443→          <h3 className="text-sm font-medium mb-1">Setup Conditions</h3>
+   444→          <p className="text-sm text-muted-foreground whitespace-pre-wrap">{plan.setupConditions}</p>
+   445→        </div>
+   446→      )}
+   447→
+   448→      {plan.invalidation && (
+   449→        <div>
+   450→          <h3 className="text-sm font-medium mb-1">Invalidation</h3>
+   451→          <p className="text-sm text-muted-foreground whitespace-pre-wrap">{plan.invalidation}</p>
+   452→        </div>
+   453→      )}
+   454→
+   455→      {plan.notes && (
+   456→        <div>
+   457→          <h3 className="text-sm font-medium mb-1">Notes</h3>
+   458→          <p className="text-sm text-muted-foreground whitespace-pre-wrap">{plan.notes}</p>
+   459→        </div>
+   460→      )}
+   461→
+   462→      <div className="text-xs text-muted-foreground pt-2 border-t border-border">
+   463→        Created {new Date(plan.createdAt).toLocaleString()} · Updated {new Date(plan.updatedAt).toLocaleString()}
+   464→      </div>
+   465→    </Card>
+   466→  );
+   467→}
+   468→
+   469→function BiasBadge({ label, value }: { label: string; value: string }) {
+   470→  const v = value.toLowerCase();
+   471→  const tone = v === "bullish" ? "text-profit border-profit/40" : v === "bearish" ? "text-loss border-loss/40" : "";
+   472→  return (
+   473→    <Badge variant="outline" className={cn("text-xs", tone)}>
+   474→      {label}: <span className="capitalize ml-1">{value}</span>
+   475→    </Badge>
+   476→  );
+   477→}
+   478→
+   479→function Field({ label, value }: { label: string; value?: string | null }) {
+   480→  return (
+   481→    <div>
+   482→      <div className="text-xs uppercase tracking-wide text-muted-foreground">{label}</div>
+   483→      <div className="text-sm mt-0.5">{value || <span className="text-muted-foreground">—</span>}</div>
+   484→    </div>
+   485→  );
+   486→}
+   487→
+   488→function LevelField({ label, value }: { label: string; value?: string | null }) {
+   489→  return (
+   490→    <div className="p-2 rounded-md border border-border bg-muted/20">
+   491→      <div className="text-[10px] uppercase tracking-wide text-muted-foreground">{label}</div>
+   492→      <div className="text-sm font-medium tnum mt-0.5">{value || <span className="text-muted-foreground">—</span>}</div>
+   493→    </div>
+   494→  );
+   495→}
+   496→
+   497→function prettyJson(s: string): string {
+   498→  try {
+   499→    return JSON.stringify(JSON.parse(s), null, 2);
+   500→  } catch {
+   501→    return s;
+   502→  }
+   503→}
+   504→
+   505→// ---------------------------------------------------------------------------
+   506→// Create / edit dialog
+   507→// ---------------------------------------------------------------------------
+   508→
+   509→function PlanFormDialog({
+   510→  plan,
+   511→  initialDate,
+   512→  onClose,
+   513→  onSaved,
+   514→}: {
+   515→  plan: DailyPlan | null;
+   516→  initialDate?: string | null;
+   517→  onClose: () => void;
+   518→  onSaved: () => void;
+   519→}) {
+   520→  const [form, setForm] = useState<PlanFormState>(EMPTY_FORM);
+   521→  const [saving, setSaving] = useState(false);
+   522→
+   523→  useEffect(() => {
+   524→    if (plan) {
+   525→      setForm(planToForm(plan));
+   526→    } else {
+   527→      // Pre-fill the date with the deep-linked `initialDate` (e.g. when the
+   528→      // calendar's "Create Plan" button passes `?date=YYYY-MM-DD`); fall
+   529→      // back to today's date when none was provided.
+   530→      const date = initialDate ?? new Date().toISOString().slice(0, 10);
+   531→      setForm({ ...EMPTY_FORM, date });
+   532→    }
+   533→  }, [plan, initialDate]);
+   534→
+   535→  function setField<K extends keyof PlanFormState>(key: K, value: PlanFormState[K]) {
+   536→    setForm((f) => ({ ...f, [key]: value }));
+   537→  }
+   538→
+   539→  async function submit() {
+   540→    if (!form.date) {
+   541→      toast.error("Date is required.");
+   542→      setTimeout(() => document.getElementById("field-plan-date")?.scrollIntoView({ behavior: "smooth", block: "center" }), 100);
+   543→      return;
+   544→    }
+   545→    setSaving(true);
+   546→    try {
+   547→      const res = await fetch("/api/daily-plans", {
+   548→        method: "POST",
+   549→        headers: { "Content-Type": "application/json" },
+   550→        body: JSON.stringify(formToPayload(form)),
+   551→      });
+   552→      if (res.ok) {
+   553→        toast.success(plan ? "Daily plan updated." : "Daily plan created.");
+   554→        onSaved();
+   555→      } else {
+   556→        const d = await res.json().catch(() => null);
+   557→        toast.error(d?.error ?? "Failed to save plan.");
+   558→      }
+   559→    } finally {
+   560→      setSaving(false);
+   561→    }
+   562→  }
+   563→
+   564→  return (
+   565→    <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto scroll-thin">
+   566→      <DialogHeader>
+   567→        <DialogTitle>{plan ? "Edit Daily Plan" : "New Daily Plan"}</DialogTitle>
+   568→      </DialogHeader>
+   569→
+   570→      <div className="space-y-4">
+   571→        {/* Basics */}
+   572→        <div className="grid sm:grid-cols-2 gap-3">
+   573→          <div className="space-y-2" id="field-plan-date">
+   574→            <FieldLabel required>Date</FieldLabel>
+   575→            <Input
+   576→              type="date"
+   577→              value={form.date}
+   578→              onChange={(e) => setField("date", e.target.value)}
+   579→            />
+   580→            <p className="text-[11px] text-muted-foreground">
+   581→              Plans are keyed by date — saving on an existing date will update it.
+   582→            </p>
+   583→          </div>
+   584→          <div className="space-y-2">
+   585→            <FieldLabel hint="Primary trading session">Session Focus</FieldLabel>
+   586→            <Select value={form.session || "__none"} onValueChange={(v) => setField("session", v)}>
+   587→              <SelectTrigger><SelectValue /></SelectTrigger>
+   588→              <SelectContent>
+   589→                <SelectItem value="__none">Any</SelectItem>
+   590→                <SelectItem value="asia">Asia</SelectItem>
+   591→                <SelectItem value="london">London</SelectItem>
+   592→                <SelectItem value="ny_am">New York AM</SelectItem>
+   593→                <SelectItem value="ny_pm">New York PM</SelectItem>
+   594→                <SelectItem value="mixed">Mixed</SelectItem>
+   595→              </SelectContent>
+   596→            </Select>
+   597→          </div>
+   598→        </div>
+   599→
+   600→        <div className="grid sm:grid-cols-2 gap-3">
+   601→          <div className="space-y-2">
+   602→            <FieldLabel hint="Overall weekly direction">Weekly Bias</FieldLabel>
+   603→            <Select value={form.weeklyBias || "__none"} onValueChange={(v) => setField("weeklyBias", v === "__none" ? "" : v)}>
+   604→              <SelectTrigger><SelectValue /></SelectTrigger>
+   605→              <SelectContent>
+   606→                <SelectItem value="__none">None</SelectItem>
+   607→                <SelectItem value="bullish">Bullish</SelectItem>
+   608→                <SelectItem value="bearish">Bearish</SelectItem>
+   609→                <SelectItem value="neutral">Neutral</SelectItem>
+   610→              </SelectContent>
+   611→            </Select>
+   612→          </div>
+   613→          <div className="space-y-2">
+   614→            <FieldLabel hint="Today expected direction">Daily Bias</FieldLabel>
+   615→            <Select value={form.dailyBias || "__none"} onValueChange={(v) => setField("dailyBias", v === "__none" ? "" : v)}>
+   616→              <SelectTrigger><SelectValue /></SelectTrigger>
+   617→              <SelectContent>
+   618→                <SelectItem value="__none">None</SelectItem>
+   619→                <SelectItem value="bullish">Bullish</SelectItem>
+   620→                <SelectItem value="bearish">Bearish</SelectItem>
+   621→                <SelectItem value="neutral">Neutral</SelectItem>
+   622→              </SelectContent>
+   623→            </Select>
+   624→          </div>
+   625→        </div>
+   626→
+   627→        <div className="space-y-2">
+   628→          <FieldLabel hint="Comma-separated symbols">Instruments</FieldLabel>
+   629→          <Input
+   630→            value={form.instruments}
+   631→            onChange={(e) => setField("instruments", e.target.value)}
+   632→           
+   633→          />
+   634→        </div>
+   635→
+   636→        {/* Key levels */}
+   637→        <div>
+   638→          <Label className="mb-2 block">Key Levels (prices)</Label>
+   639→          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+   640→            <div className="space-y-1">
+   641→              <Label className="text-[11px] text-muted-foreground">PWH</Label>
+   642→              <Input value={form.pwh} onChange={(e) => setField("pwh", e.target.value)} />
+   643→            </div>
+   644→            <div className="space-y-1">
+   645→              <Label className="text-[11px] text-muted-foreground">PWL</Label>
+   646→              <Input value={form.pwl} onChange={(e) => setField("pwl", e.target.value)} />
+   647→            </div>
+   648→            <div className="space-y-1">
+   649→              <Label className="text-[11px] text-muted-foreground">PDH</Label>
+   650→              <Input value={form.pdh} onChange={(e) => setField("pdh", e.target.value)} />
+   651→            </div>
+   652→            <div className="space-y-1">
+   653→              <Label className="text-[11px] text-muted-foreground">PDL</Label>
+   654→              <Input value={form.pdl} onChange={(e) => setField("pdl", e.target.value)} />
+   655→            </div>
+   656→          </div>
+   657→        </div>
+   658→
+   659→        {/* HTF levels */}
+   660→        <div className="space-y-2">
+   661→          <FieldLabel hint="One level per line (e.g. D1 supply: 2015)">HTF Levels</FieldLabel>
+   662→          <Textarea
+   663→            value={form.htfLevelsJson}
+   664→            onChange={(e) => setField("htfLevelsJson", e.target.value)}
+   665→           
+   666→            rows={3}
+   667→          />
+   668→          <p className="text-[11px] text-muted-foreground">Optional. Enter one level per line (e.g. "D1 supply: 2015").</p>
+   669→        </div>
+   670→
+   671→        {/* Liquidity targets */}
+   672→        <div className="space-y-2">
+   673→          <FieldLabel hint="Key liquidity levels">Liquidity Targets</FieldLabel>
+   674→          <Textarea
+   675→            value={form.liquidityTargets}
+   676→            onChange={(e) => setField("liquidityTargets", e.target.value)}
+   677→           
+   678→            rows={3}
+   679→          />
+   680→        </div>
+   681→
+   682→        {/* Setup conditions */}
+   683→        <div className="space-y-2">
+   684→          <FieldLabel hint="What setup are you waiting for">Setup Conditions</FieldLabel>
+   685→          <Textarea
+   686→            value={form.setupConditions}
+   687→            onChange={(e) => setField("setupConditions", e.target.value)}
+   688→           
+   689→            rows={3}
+   690→          />
+   691→        </div>
+   692→
+   693→        {/* Invalidation */}
+   694→        <div className="space-y-2">
+   695→          <FieldLabel hint="What invalidates the plan">Invalidation</FieldLabel>
+   696→          <Textarea
+   697→            value={form.invalidation}
+   698→            onChange={(e) => setField("invalidation", e.target.value)}
+   699→           
+   700→            rows={2}
+   701→          />
+   702→        </div>
+   703→
+   704→        {/* Risk limits */}
+   705→        <div className="grid sm:grid-cols-2 gap-3">
+   706→          <div className="space-y-2">
+   707→            <FieldLabel hint="Maximum trades for the day">Max Trades</FieldLabel>
+   708→            <Input
+   709→              type="number"
+   710→              min={0}
+   711→              value={form.maxTrades}
+   712→              onChange={(e) => setField("maxTrades", e.target.value)}
+   713→             
+   714→            />
+   715→          </div>
+   716→          <div className="space-y-2">
+   717→            <FieldLabel hint="Maximum risk as decimal (0.01 = 1%)">Max Daily Risk %</FieldLabel>
+   718→            <Input
+   719→              value={form.maxDailyRiskPct}
+   720→              onChange={(e) => setField("maxDailyRiskPct", e.target.value)}
+   721→             
+   722→            />
+   723→            <p className="text-[11px] text-muted-foreground">Decimal fraction (0.01 = 1%).</p>
+   724→          </div>
+   725→        </div>
+   726→
+   727→        {/* Notes */}
+   728→        <div className="space-y-2">
+   729→          <FieldLabel hint="Additional notes">Notes</FieldLabel>
+   730→          <Textarea
+   731→            value={form.notes}
+   732→            onChange={(e) => setField("notes", e.target.value)}
+   733→           
+   734→            rows={3}
+   735→          />
+   736→        </div>
+   737→      </div>
+   738→
+   739→      <div className="flex items-center justify-end gap-2 pt-2">
+   740→        <Button variant="ghost" onClick={onClose} disabled={saving}>Cancel</Button>
+   741→        <Button onClick={submit} disabled={saving}>
+   742→          {saving && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+   743→          {plan ? "Save Changes" : "Create Plan"}
+   744→        </Button>
+   745→      </div>
+   746→    </DialogContent>
+   747→  );
+   748→}
+   749→

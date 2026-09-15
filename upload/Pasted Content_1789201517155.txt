@@ -1,0 +1,1552 @@
+I need you to perform a COMPLETE, DEEP, NON-DESTRUCTIVE SYSTEM-WIDE QA AUDIT of the current DnD application.
+
+The purpose of this task is to find EVERY problem related to:
+
+1. Data not saving
+2. Data saving incorrectly
+3. Data being lost between steps
+4. Data being transformed incorrectly
+5. Data being saved to the wrong database field
+6. Data being saved but not reloaded
+7. Data being displayed differently from what was saved
+8. Incorrect calculations
+9. Incorrect financial formulas
+10. Incorrect R/R calculations
+11. Incorrect P&L calculations
+12. Incorrect partial-exit calculations
+13. Incorrect percentages
+14. Incorrect dashboard/analytics aggregation
+15. Incorrect date/time/session calculations
+16. Incorrect strategy/checklist scoring
+17. Incorrect account/instrument-specific calculations
+18. State synchronization bugs
+19. API/database mismatches
+20. Neon/PostgreSQL persistence problems
+21. Authentication/user isolation problems
+22. Responsive/mobile regressions
+23. Any other feature that appears functional but is actually broken
+
+This is NOT a superficial UI test.
+
+I want you to test the APPLICATION AS A REAL USER AND AS A DATABASE/API SYSTEM.
+
+==================================================
+CRITICAL RULES
+==================================================
+
+1. Use the CURRENT codebase exactly as it exists now.
+2. Use the CURRENT Neon PostgreSQL database exactly as it exists now.
+3. Do not assume old schema, old migrations, old components, old route names, or old behavior.
+4. Inspect the actual current implementation before testing.
+5. Do not blindly trust existing tests.
+6. Do not assume that because an API returns 200 the feature is correct.
+7. Do not assume that because a UI displays a value the value is persisted.
+8. Verify actual database records whenever possible.
+9. Verify the exact values before save and after reload.
+10. Verify calculations independently using mathematically correct reference calculations.
+11. Do not silently change expected product behavior.
+12. Do not redesign the application.
+13. Do not remove existing functionality.
+14. Do not restore intentionally removed features.
+15. Do not introduce Daily Plans, Reviews, Media Library, CSV Import UI, Notifications, Audit UI, or server-side backup restore UI.
+16. Do not change unrelated architecture.
+17. Do not repeatedly restart the server without diagnosing why it stopped.
+18. Do not claim PASS without evidence.
+19. If something cannot be tested because of the environment, mark it BLOCKED.
+20. If you discover a real defect, reproduce it at least once before fixing it.
+21. After fixing a defect, rerun the exact failing test and a regression test.
+22. Keep a precise record of every defect found.
+23. Prefer fixing root causes rather than patching symptoms.
+24. Do NOT perform a destructive reset of the real database.
+25. Create temporary test users/data only when necessary.
+26. At the end, delete ONLY the temporary test users and test data created by this QA run.
+27. Preserve existing real user data.
+28. Do not create demo/test data that remains in Neon after the audit.
+
+==================================================
+PHASE 1: CURRENT SYSTEM DISCOVERY
+==================================================
+
+Before testing anything, inspect the current application.
+
+Determine and document:
+
+- Next.js version
+- React version
+- TypeScript version
+- Tailwind version
+- Prisma version
+- Database provider
+- Actual Neon connection target
+- Current Prisma schema
+- Current migrations/schema synchronization state
+- Current API route structure
+- Current server actions
+- Current client state architecture
+- Zustand stores
+- React Query usage
+- Form libraries/validation
+- Calculation utilities
+- Instrument catalog/resolver
+- Strategy models
+- Checklist models
+- Trade models
+- TradeTarget/partial-exit models
+- Trading account models
+- Settings models
+- Analytics implementation
+- Dashboard aggregation implementation
+- Calendar implementation
+- Authentication/session implementation
+- Media storage implementation
+- Market clock implementation
+
+Inspect the actual schema and actual API payloads.
+
+Create a mental map of:
+
+UI field
+→ local state
+→ form submission
+→ request payload
+→ API/server action
+→ validation
+→ calculation
+→ Prisma write
+→ database
+→ Prisma read
+→ API response
+→ client state
+→ rendered UI
+
+I specifically want you to identify places where any link in this chain can lose or mutate data.
+
+==================================================
+PHASE 2: DATABASE SCHEMA INTEGRITY
+==================================================
+
+Inspect the current Prisma schema and Neon database.
+
+Verify:
+
+- all expected tables exist
+- expected columns exist
+- column types are correct
+- nullable vs required fields are correct
+- default values are correct
+- enum values are correct
+- relationships are correct
+- foreign keys are correct
+- unique constraints are correct
+- indexes are correct
+- cascade behavior is correct
+- decimal/numeric precision is appropriate
+- integer/cents representation is correct
+- timestamps are appropriate
+- JSON fields are consistent
+- strategy version relationships are correct
+- checklist evaluation relationships are correct
+- trade target relationships are correct
+- account relationships are correct
+- instrument relationships are correct
+- settings relationships are correct
+
+Pay special attention to:
+
+- numeric vs integer values
+- cents vs dollars
+- points vs currency
+- percentages vs decimal fractions
+- nullable values
+- Date vs DateTime
+- timezone handling
+- enum serialization
+- arrays / JSON structures
+- Prisma mapping names
+- fields that exist in TypeScript but not DB
+- fields that exist in DB but are no longer used
+- stale or orphaned models
+
+Verify that the running application is using the same schema that the code assumes.
+
+==================================================
+PHASE 3: FIELD-BY-FIELD PERSISTENCE AUDIT
+==================================================
+
+This is one of the most important parts.
+
+For EVERY major form in the application, test each meaningful field individually.
+
+The principle is:
+
+ENTER VALUE
+→ SAVE
+→ DATABASE
+→ RELOAD
+→ VERIFY EXACT SAME VALUE
+
+Do not only test the form as a whole.
+
+Test at minimum:
+
+A. User profile
+B. Settings
+C. Trading account
+D. Instruments
+E. Strategy
+F. Strategy version
+G. Strategy rules/checklist
+H. New trade
+I. Trade execution
+J. Partial exits
+K. Trade close
+L. Psychology fields
+M. ICT/setup fields
+N. Notes/journal fields that currently exist
+O. Media metadata
+P. Calendar-relevant dates
+Q. Dashboard-relevant fields
+
+For every field verify:
+
+- field accepts input
+- correct client state
+- correct serialized value
+- correct API payload
+- correct server parsing
+- correct validation
+- correct DB field
+- correct DB type
+- correct DB value
+- correct API response
+- correct UI display
+- correct value after page reload
+- correct value after logout/login
+- correct value after navigating away and back
+
+Look specifically for:
+
+- fields omitted from payload
+- fields renamed between frontend/backend
+- null replacing an actual value
+- empty string replacing null
+- number converted to string
+- string converted incorrectly to number
+- decimal truncation
+- boolean conversion bugs
+- unchecked checkbox values disappearing
+- arrays being serialized incorrectly
+- nested objects being dropped
+- optional fields accidentally overwritten
+- update endpoints resetting fields not included in the request
+- PATCH behaving like PUT
+- stale Zustand state
+- stale React Query cache
+- optimistic updates that are never persisted
+- UI displaying temporary local state
+- save returning success while some fields fail silently
+
+==================================================
+PHASE 4: NEW TRADE WIZARD DEEP TEST
+==================================================
+
+Test the complete current New Trade flow step by step.
+
+Current expected structure:
+
+1. Trade Info
+2. Setup Checklist
+3. Risk & Sizing
+4. Partial Exits
+5. Review & Save
+
+Do NOT assume these exact fields without inspecting the current implementation.
+
+For EVERY field:
+
+Enter a deliberately distinctive test value.
+
+Example:
+
+symbol = NQ
+direction = LONG
+entry = 20000
+stop = 19950
+target = 20100
+risk = etc.
+
+Use distinctive values that make accidental substitutions obvious.
+
+After each step:
+
+- inspect form state
+- inspect submitted payload where possible
+- inspect server processing
+- verify data is still present when moving to next step
+
+Especially test:
+
+- going backward and forward between steps
+- refreshing during the form
+- changing one field after entering another
+- changing direction
+- changing instrument
+- changing account
+- changing strategy
+- changing risk
+- changing partial targets
+- editing checklist conditions
+- clearing optional fields
+- adding optional values
+- saving with optional fields blank
+- saving with all fields populated
+
+Verify that step transitions do not accidentally reset data.
+
+==================================================
+PHASE 5: TRADE INFORMATION TEST
+==================================================
+
+Test every trade-information field.
+
+Verify:
+
+- account
+- instrument
+- symbol
+- direction
+- trade date
+- session
+- timeframe
+- strategy
+- setup
+- status
+- entry price
+- stop loss
+- take profit
+- planned risk
+- notes
+- any current metadata fields
+
+Test both LONG and SHORT.
+
+Test multiple instruments.
+
+Test FX, gold, indices, and any other currently supported instrument categories.
+
+Verify that the selected instrument is represented by the correct internal instrument ID when the backend expects one.
+
+Do not allow a displayed symbol to silently fall back to generic instrument metadata.
+
+==================================================
+PHASE 6: FINANCIAL CALCULATION AUDIT
+==================================================
+
+This is CRITICAL.
+
+Do not merely compare the application's output with another application.
+
+Independently calculate expected values from the actual input values.
+
+For each test case calculate:
+
+- price movement
+- point/tick movement
+- monetary movement
+- gross P&L
+- fees if supported
+- net P&L
+- risk amount
+- R multiple
+- reward amount
+- risk/reward ratio
+- position size
+- percentage return where applicable
+
+Use exact arithmetic where appropriate.
+
+Avoid floating-point assumptions.
+
+Use the correct instrument metadata:
+
+- tick size
+- tick value
+- point value
+- contract size
+- pip value
+- currency conversion where applicable
+
+Verify that the application uses the correct metadata for the selected account + instrument.
+
+==================================================
+PHASE 7: CALCULATION TEST MATRIX
+==================================================
+
+Create a deterministic matrix of test trades.
+
+At minimum test:
+
+CASE 1:
+LONG
+Entry 100
+Stop 90
+Target 120
+
+CASE 2:
+SHORT
+Entry 100
+Stop 110
+Target 80
+
+CASE 3:
+LONG
+Entry 100
+Stop 99
+Exit 101
+
+CASE 4:
+SHORT
+Entry 100
+Stop 101
+Exit 99
+
+CASE 5:
+Zero movement
+
+CASE 6:
+Very small movement
+
+CASE 7:
+Large movement
+
+CASE 8:
+Partial exit
+
+CASE 9:
+Multiple partial exits
+
+CASE 10:
+Different position size
+
+CASE 11:
+Different account balance
+
+CASE 12:
+Different risk percentage
+
+CASE 13:
+Gold
+
+CASE 14:
+NQ
+
+CASE 15:
+ES
+
+CASE 16:
+A supported FX pair
+
+Use realistic metadata from the CURRENT instrument catalog/database, not guessed constants.
+
+For every case produce:
+
+INPUTS
+EXPECTED RESULT
+APPLICATION RESULT
+MATCH: YES/NO
+
+Do not hide discrepancies.
+
+==================================================
+PHASE 8: RISK & POSITION SIZE AUDIT
+==================================================
+
+Verify every risk-related calculation.
+
+Test:
+
+- risk amount
+- risk percentage
+- account balance
+- position size
+- stop distance
+- point/tick distance
+- monetary risk
+- reward
+- planned R
+- actual R
+
+Test edge cases:
+
+- 0 risk
+- negative risk
+- zero stop distance
+- extremely large stop
+- very small stop
+- fractional position size
+- unsupported precision
+- account balance changes
+- risk percentage changes
+- account selection changes
+
+Verify validation prevents mathematically invalid trades.
+
+Important:
+
+Never allow a UI value to look correct while the stored numeric value is different.
+
+==================================================
+PHASE 9: PARTIAL EXIT AUDIT
+==================================================
+
+Test partial exits deeply.
+
+Create a trade with:
+
+TP1
+TP2
+TP3
+
+Use different quantities/percentages.
+
+Verify:
+
+- every target saves
+- target ordering saves
+- prices save
+- percentages save
+- quantities save
+- realized P&L is correct
+- remaining quantity is correct
+- remaining risk is correct where applicable
+- actual R is correct
+- aggregate realized P&L is correct
+- reopening trade detail returns the same targets
+- editing the trade does not erase targets
+- closing the trade updates the correct target/execution fields
+
+Test:
+
+- one target
+- two targets
+- three targets
+- all targets
+- partial close
+- full close
+- uneven percentages
+- exact 100%
+- values totaling below 100%
+- invalid values above 100%
+
+Check whether percentages and quantities are interpreted consistently.
+
+==================================================
+PHASE 10: TRADE EXECUTION STATE MACHINE
+==================================================
+
+Verify all current trade states.
+
+Test valid transitions such as:
+
+DRAFT → PLANNED
+PLANNED → OPEN
+OPEN → WIN
+OPEN → LOSS
+OPEN → BREAKEVEN
+OPEN → PARTIAL_WIN
+OPEN → PARTIAL_LOSS
+
+Verify invalid transitions are rejected.
+
+Verify:
+
+- status is persisted
+- status survives reload
+- status survives logout/login
+- execution data is stored correctly
+- close data is stored correctly
+- partial execution does not corrupt planned data
+- reopening detail shows the correct state
+- Dashboard reflects the new state
+- Calendar reflects the correct date
+- Analytics reflects the correct result
+
+==================================================
+PHASE 11: STRATEGY + CHECKLIST AUDIT
+==================================================
+
+Test strategy creation.
+
+Test:
+
+- strategy name
+- description
+- active/inactive
+- version
+- version number
+- rules
+- conditions
+- weights
+- required conditions
+- checklist values
+
+Verify immutable strategy version behavior.
+
+Then create a trade using that strategy.
+
+Verify:
+
+- correct strategy attached
+- correct strategy version attached
+- checklist generated from correct version
+- actual checklist values save
+- score is calculated server-side
+- client cannot manipulate the final score
+- snapshot stores the evaluated result
+- snapshot references the correct strategy version
+
+Test anti-cheat:
+
+Send a deliberately false client score.
+
+Verify server ignores it and recomputes the correct score.
+
+==================================================
+PHASE 12: PSYCHOLOGY / TRADE DOCUMENTATION AUDIT
+==================================================
+
+Test every existing psychology/documentation field.
+
+For each:
+
+- enter value
+- save
+- reload
+- verify exact value
+- logout/login
+- verify again
+
+Check for fields that appear in the UI but are not actually persisted.
+
+This is a likely source of the current user-reported saving problems.
+
+==================================================
+PHASE 13: EDIT EXISTING TRADE AUDIT
+==================================================
+
+This is critical.
+
+Create a trade with EVERY important field populated.
+
+Save it.
+
+Reload.
+
+Then edit ONLY ONE field.
+
+Save.
+
+Verify that:
+
+- changed field changed
+- unchanged fields remained unchanged
+- optional fields remained intact
+- targets remained intact
+- checklist remained intact
+- strategy/version remained intact
+- media remained intact
+- calculations remained correct
+
+Repeat by editing different fields individually.
+
+Look specifically for PATCH requests that unintentionally overwrite unrelated fields.
+
+==================================================
+PHASE 14: NAVIGATION / CACHE / STATE AUDIT
+==================================================
+
+Test:
+
+1. Create data.
+2. Navigate away.
+3. Return.
+4. Reload.
+5. Open another view.
+6. Return.
+7. Sign out.
+8. Sign back in.
+9. Check the data again.
+
+Test:
+
+- Zustand persistence
+- React Query cache
+- invalidation
+- refetch
+- stale data
+- optimistic updates
+- server response synchronization
+
+The UI must never display data that exists only in client memory.
+
+==================================================
+PHASE 15: DASHBOARD AUDIT
+==================================================
+
+Create a controlled dataset.
+
+Example:
+
+Trade 1 = +$100
+Trade 2 = -$50
+Trade 3 = +$200
+Trade 4 = breakeven
+
+Then independently calculate:
+
+- total trades
+- wins
+- losses
+- breakevens
+- win rate
+- total P&L
+- average win
+- average loss
+- profit factor
+- average R
+- best trade
+- worst trade
+- other currently displayed metrics
+
+Compare dashboard output against independently calculated expected values.
+
+Check filtering by:
+
+- account
+- instrument
+- date
+- strategy
+- status
+
+Ensure filters modify calculations correctly.
+
+==================================================
+PHASE 16: ANALYTICS AUDIT
+==================================================
+
+Perform the same controlled-dataset approach.
+
+Verify all currently displayed analytics.
+
+Check:
+
+- aggregation
+- grouping
+- date boundaries
+- strategy grouping
+- instrument grouping
+- account grouping
+- session grouping
+- win rate
+- R multiple
+- P&L
+- drawdown if currently implemented
+- equity metrics if currently implemented
+
+Every chart/table number must be traceable to real database data.
+
+==================================================
+PHASE 17: CALENDAR AUDIT
+==================================================
+
+Create trades on known dates.
+
+Verify:
+
+- correct date placement
+- correct timezone
+- correct month boundaries
+- correct week boundaries
+- correct session/date conversion
+- trade counts
+- P&L values
+- selected-date detail
+
+Test around midnight and timezone boundaries where possible.
+
+==================================================
+PHASE 18: ACCOUNT AUDIT
+==================================================
+
+Test account CRUD.
+
+For each account verify:
+
+- create
+- read
+- update
+- delete if supported
+
+Then create trades tied to different accounts.
+
+Verify account filtering affects:
+
+- trade list
+- dashboard
+- analytics
+- calendar
+- metrics
+
+Verify changing account does not modify previously stored trades.
+
+==================================================
+PHASE 19: SETTINGS PERSISTENCE AUDIT
+==================================================
+
+Test every currently available Settings field.
+
+For each:
+
+SET VALUE
+→ SAVE
+→ RELOAD
+→ LOGOUT
+→ LOGIN
+→ VERIFY
+
+Test:
+
+- profile fields
+- timezone
+- date format
+- time format
+- week start
+- theme
+- density
+- larger text
+- reduced motion
+- trading defaults
+- risk defaults
+- instrument preferences
+- any current settings fields
+
+Do not test removed settings as if they still belong in the product.
+
+==================================================
+PHASE 20: MARKET CLOCK AUDIT
+==================================================
+
+Verify that market clock uses America/New_York correctly.
+
+Test:
+
+- current date
+- current time
+- UTC offset
+- DST
+- session classification
+- session boundaries
+- daylight-saving transition dates
+
+Verify displayed values match New York wall-clock time.
+
+Do not reintroduce a manual UTC-4 / UTC-5 selector.
+
+==================================================
+PHASE 21: AUTHENTICATION AND DATA ISOLATION
+==================================================
+
+Create TWO temporary users.
+
+User A creates:
+
+- account
+- strategy
+- trade
+- media if possible
+- settings
+
+User B logs in.
+
+Verify User B cannot see:
+
+- User A trades
+- User A strategies
+- User A accounts
+- User A settings
+- User A media
+- User A checklist evaluations
+- User A targets
+- any other user-owned records
+
+Then verify direct API access attempts return proper authorization failures.
+
+Also test:
+
+- unauthenticated access
+- expired/invalid session
+- protected route access
+
+==================================================
+PHASE 22: MEDIA PERSISTENCE
+==================================================
+
+Test current media implementation.
+
+Verify:
+
+upload
+→ progress
+→ storage
+→ DB metadata
+→ trade association
+→ display
+→ reload
+→ logout/login
+→ display again
+
+Then test deletion where supported.
+
+Confirm no orphan records/files remain.
+
+==================================================
+PHASE 23: MOBILE / RESPONSIVE TEST
+==================================================
+
+Test the application at realistic mobile viewport sizes.
+
+Verify:
+
+- login
+- signup
+- onboarding
+- dashboard
+- trade list
+- new trade
+- trade detail
+- trade editing
+- calendar
+- analytics
+- settings
+- profile
+- bottom navigation
+- modals
+- dropdowns
+- forms
+
+Look for:
+
+- clipped values
+- hidden fields
+- broken scrolling
+- fixed navigation covering inputs
+- calculations wrapping incorrectly
+- unusable dialogs
+- input reset
+- accidental horizontal overflow
+
+==================================================
+PHASE 24: API CONTRACT AUDIT
+==================================================
+
+For every major API endpoint:
+
+Verify:
+
+REQUEST
+→ VALIDATION
+→ SERVER LOGIC
+→ DATABASE WRITE
+→ DATABASE READ
+→ RESPONSE
+
+Compare:
+
+TypeScript request types
+against
+actual payload
+
+and
+
+Prisma model fields
+against
+API response fields
+
+Look for naming mismatches such as:
+
+symbol vs instrumentId
+strategyId vs strategyVersionId
+score vs calculatedScore
+amount vs amountCents
+price vs entryPrice
+percentage vs decimal
+etc.
+
+Do not assume these exact mismatches exist. Find the actual ones.
+
+==================================================
+PHASE 25: NUMBER REPRESENTATION AUDIT
+==================================================
+
+This is extremely important.
+
+Search the entire application for:
+
+- parseFloat
+- Number(...)
+- unary +
+- toFixed
+- Math.round
+- Math.floor
+- Math.ceil
+- floating-point arithmetic
+- dollars/cents conversions
+- price/tick conversions
+- percentage conversions
+- R calculations
+
+Identify places where precision may be lost.
+
+For every monetary calculation determine:
+
+- source unit
+- intermediate unit
+- final unit
+
+Example:
+
+$100
+10000 cents
+
+Make sure conversions are deliberate and consistent.
+
+Do the same for:
+
+- percentage
+- ratio
+- price
+- points
+- ticks
+- quantity
+
+==================================================
+PHASE 26: EDGE CASE TESTING
+==================================================
+
+Test:
+
+- zero
+- negative values
+- extremely large values
+- very small decimals
+- decimal prices
+- integer prices
+- blank values
+- null values
+- undefined values
+- optional fields
+- maximum lengths
+- invalid enums
+- invalid IDs
+- duplicate records
+- duplicate names
+- invalid account
+- invalid strategy
+- invalid instrument
+- invalid target
+- invalid percentage
+- invalid risk
+- equal entry/stop
+- negative stop distance
+- negative reward
+- 0R
+- fractional R
+- large R
+- partial percentages summing to 100%
+- percentages below 100%
+- percentages above 100%
+
+Verify the application handles these intentionally.
+
+==================================================
+PHASE 27: SAVE/RELOAD CONSISTENCY TEST
+==================================================
+
+For the most important objects perform this exact sequence:
+
+CREATE
+→ SAVE
+→ READ FROM DATABASE
+→ RELOAD PAGE
+→ READ FROM API
+→ RENDER UI
+→ LOGOUT
+→ LOGIN
+→ RENDER UI
+→ EDIT
+→ SAVE
+→ READ DATABASE
+→ RELOAD
+→ VERIFY AGAIN
+
+Perform this independently for:
+
+- user settings
+- account
+- strategy
+- strategy version
+- trade
+- checklist
+- psychology data
+- targets
+- execution/close data
+- media metadata
+
+This test should expose most persistence bugs.
+
+==================================================
+PHASE 28: CONTROLLED GOLDEN TEST DATASET
+==================================================
+
+Create a temporary test dataset specifically for mathematical verification.
+
+Choose values whose expected results are easy to calculate manually.
+
+For example:
+
+Account balance:
+$10,000
+
+Risk:
+1%
+
+Risk amount:
+$100
+
+Trade:
+NQ LONG
+
+Entry:
+20,000
+
+Stop:
+19,950
+
+Exit:
+20,100
+
+Use the CURRENT actual NQ instrument metadata.
+
+Independently calculate:
+
+stop distance
+point movement
+tick movement
+money per point
+gross P&L
+risk
+R multiple
+reward/risk
+
+Then compare every corresponding DnD value.
+
+Repeat for:
+
+- NQ LONG
+- NQ SHORT
+- ES LONG
+- ES SHORT
+- Gold LONG
+- Gold SHORT
+- one FX pair LONG
+- one FX pair SHORT
+
+==================================================
+PHASE 29: CROSS-SCREEN CONSISTENCY
+==================================================
+
+A trade's values must remain consistent everywhere.
+
+Take one known trade and compare:
+
+Trade Detail
+Trade List
+Dashboard
+Analytics
+Calendar
+Edit form
+
+Check:
+
+- symbol
+- direction
+- entry
+- stop
+- exit
+- risk
+- reward
+- P&L
+- R
+- status
+- date
+- account
+- strategy
+
+There must be exactly one source of truth.
+
+If one screen says:
+
++$1,000
+
+and another says:
+
++$999.99
+
+that is a defect.
+
+==================================================
+PHASE 30: ERROR HANDLING
+==================================================
+
+Test failed saves intentionally.
+
+Examples:
+
+- invalid price
+- invalid account
+- invalid strategy
+- missing required field
+- invalid target
+- unauthorized request
+- malformed API body
+- database constraint failure
+
+Verify:
+
+- meaningful error shown
+- no false success toast
+- no partially corrupted record
+- failed transactions roll back where required
+- UI state does not pretend the data was saved
+
+==================================================
+PHASE 31: TRANSACTIONAL INTEGRITY
+==================================================
+
+For multi-record operations verify atomicity.
+
+Example:
+
+Trade creation may involve:
+
+Trade
++ checklist
++ checklist evaluation
++ targets
++ execution-related records
++ media metadata
+
+Simulate a failure during one component.
+
+Verify the system does not leave half-created orphan records unless intentionally designed to do so.
+
+Use database transactions where required.
+
+==================================================
+PHASE 32: CODE-LEVEL STATIC AUDIT
+==================================================
+
+Search for:
+
+- TODO
+- FIXME
+- temporary hacks
+- hardcoded values
+- stale model names
+- dead API fields
+- unused calculations
+- duplicate calculation logic
+- duplicate instrument metadata
+- duplicated conversion formulas
+- silent catch blocks
+- swallowed errors
+- console-only error handling
+- ignored TypeScript errors
+- `any`
+- build-error suppression
+- fallback values that hide missing data
+- hardcoded database assumptions
+- hardcoded user IDs
+- hardcoded demo/test data
+
+Pay special attention to calculation duplication.
+
+There should ideally be one authoritative financial calculation engine.
+
+==================================================
+PHASE 33: BROWSER CONSOLE / NETWORK AUDIT
+==================================================
+
+During browser testing inspect:
+
+- console errors
+- failed requests
+- 4xx
+- 5xx
+- hydration errors
+- serialization errors
+- React warnings
+- stale requests
+- duplicate requests
+- aborted requests
+- failed media requests
+- failed API responses
+
+A UI that appears to save successfully while the network request fails must be treated as FAIL.
+
+==================================================
+PHASE 34: NEON DATABASE VERIFICATION
+==================================================
+
+For every major test object:
+
+Compare UI
+against API
+against actual Neon database.
+
+Do not use only one source.
+
+Example:
+
+UI says:
+
+gross P&L = 10000
+
+API says:
+
+grossPnlCents = 1000000
+
+Neon says:
+
+grossPnlCents = 1000000
+
+That is consistent.
+
+If the UI says 10,000 but Neon contains 9,999.99, FAIL.
+
+==================================================
+PHASE 35: FIXING DEFECTS
+==================================================
+
+When a defect is found:
+
+1. Document the exact reproduction.
+2. Identify root cause.
+3. Fix only the necessary code.
+4. Run the failing test again.
+5. Run relevant regression tests.
+6. Check related screens.
+7. Confirm database value.
+8. Confirm reload value.
+9. Confirm logout/login value.
+10. Confirm no unrelated behavior changed.
+
+Do not just patch the displayed number.
+
+Fix the underlying data/calc/persistence flow.
+
+==================================================
+PHASE 36: FINAL CLEANUP
+==================================================
+
+After all tests:
+
+1. Delete all temporary users.
+2. Delete all temporary accounts.
+3. Delete all temporary strategies.
+4. Delete all temporary versions.
+5. Delete all temporary trades.
+6. Delete all temporary checklist records.
+7. Delete all temporary targets.
+8. Delete all temporary media metadata.
+9. Delete all temporary media files.
+10. Remove all other temporary test records.
+
+DO NOT delete real user data.
+
+Then verify no temporary records remain.
+
+==================================================
+PHASE 37: FINAL REPORT
+==================================================
+
+Produce a detailed but factual report.
+
+Do NOT say "everything works" unless everything was actually tested.
+
+Use this structure:
+
+# DnD Full System QA Report
+
+## A. Environment
+- Next.js
+- React
+- TypeScript
+- Prisma
+- Database provider
+- Neon database
+- Environment
+- Server status
+
+## B. Executive Result
+- PASS count
+- FAIL count
+- BLOCKED count
+- Critical defects
+- Major defects
+- Minor defects
+
+## C. Persistence Audit
+For every major feature:
+
+Feature
+→ Save
+→ DB
+→ Reload
+→ Login/reload
+→ Result
+
+## D. Calculation Audit
+
+For every calculation test:
+
+Test Case
+Inputs
+Expected
+Actual
+Difference
+PASS/FAIL
+
+## E. Trade Lifecycle Audit
+
+List tested states and transitions.
+
+## F. Strategy/Checklist Audit
+
+Include server-side score verification.
+
+## G. Dashboard Audit
+
+Expected vs actual metrics.
+
+## H. Analytics Audit
+
+Expected vs actual metrics.
+
+## I. Calendar Audit
+
+Expected vs actual values.
+
+## J. Settings Audit
+
+Every setting tested.
+
+## K. Account Audit
+
+CRUD and filtering.
+
+## L. Authentication/Data Isolation
+
+User A vs User B.
+
+## M. Media
+
+Upload/save/reload/delete result.
+
+## N. Mobile
+
+Responsive results.
+
+## O. API Contract Problems
+
+List any mismatches.
+
+## P. Database Problems
+
+List any schema/persistence problems.
+
+## Q. Calculation Problems
+
+List every mathematical discrepancy.
+
+## R. Code Problems
+
+List relevant implementation defects.
+
+## S. Fixes Applied
+
+For every fix:
+
+Problem
+Root Cause
+File(s) Changed
+Fix
+Regression Test
+
+## T. Remaining Problems
+
+Only real unresolved issues.
+
+## U. Final Data State
+
+- temporary users remaining
+- temporary records remaining
+- orphan media remaining
+- real user data preserved
+
+==================================================
+FINAL REQUIREMENT
+==================================================
+
+I am specifically concerned that:
+
+1. some fields are not being saved
+2. some saved values disappear after reload
+3. some numbers are being calculated incorrectly
+
+Therefore, prioritize those three areas above visual polish.
+
+DO NOT stop after checking that buttons work.
+
+I want proof that:
+
+UI INPUT
+=
+REQUEST PAYLOAD
+=
+SERVER VALUE
+=
+DATABASE VALUE
+=
+RELOADED VALUE
+=
+DISPLAYED VALUE
+
+and:
+
+INPUTS
+→ AUTHORITATIVE CALCULATION ENGINE
+→ DATABASE RESULT
+→ DISPLAYED RESULT
+
+must all agree.
+
+If they do not agree, find exactly where the value changes and fix that layer.
+
+Do not hide discrepancies.
+
+Do not fabricate successful tests.
+
+Do not reset the Neon database.
+
+Perform the audit systematically from start to finish.
