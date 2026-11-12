@@ -21,6 +21,7 @@
 
 import { useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
+import { useNavStore } from "@/lib/nav-store";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
@@ -89,6 +90,7 @@ function autoMapHeaders(headers: string[]): Record<string, string> {
 
 export function BackupView() {
   const qc = useQueryClient();
+  const setSelectedAccountId = useNavStore((s) => s.setSelectedAccountId);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const csvInputRef = useRef<HTMLInputElement>(null);
   const [exporting, setExporting] = useState(false);
@@ -423,99 +425,30 @@ export function BackupView() {
   async function handleLoadDemoData() {
     setDemoLoading(true);
     try {
-      // 1) Create a sample account.
-      const accountRes = await fetch("/api/accounts", {
+      const res = await fetch("/api/demo-data", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          name: "Demo Prop Account",
-          broker: "FTMO",
-          accountType: "prop",
-          currency: "USD",
-          startingBalanceCents: 1_000_000, // $10,000
-          isDefault: false,
-        }),
       });
-      if (!accountRes.ok) {
-        toast.error("Failed to create demo account.");
+      const data = await res.json();
+      if (!res.ok) {
+        toast.error(data?.error ?? "Failed to load demo data.");
         return;
       }
-      const account = await accountRes.json();
 
-      // 2) Create a sample setup (strategy v1.0).
-      const strategyRes = await fetch("/api/strategies", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          name: "Demo Liquidity Sweep",
-          description:
-            "Wait for a liquidity grab above/below a prior session high/low, then enter on the retest.",
-          purpose: "Capture reversals after stop hunts.",
-          instruments: "XAUUSD, EURUSD",
-          market: "forex",
-          timeframe: "5m - 15m",
-          session: "london",
-          rules: [
-            { title: "Liquidity sweep above prior high", required: true, description: "Price wicks above the prior session high then closes back below." },
-            { title: "Displacement candle", required: true, description: "A strong impulse candle in the opposite direction confirms the reversal." },
-            { title: "Retest entry", required: false, description: "Enter on the retest of the swept level." },
-          ],
-        }),
-      });
-      const strategy = strategyRes.ok ? await strategyRes.json() : null;
-
-      // 3) Create a sample trade referencing the account (and the setup, if
-      // created successfully). Server-side calc will compute P&L.
-      const now = new Date();
-      const entryTime = new Date(now.getTime() - 4 * 60 * 60 * 1000); // 4h ago
-      const exitTime = new Date(now.getTime() - 3 * 60 * 60 * 1000); // 3h ago
-      const tradeRes = await fetch("/api/trades", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          accountId: account.id,
-          instrumentSymbol: "XAUUSD",
-          market: "gold",
-          direction: "long",
-          session: "london",
-          strategyId: strategy?.id ?? null,
-          setupGrade: "A",
-          tags: ["demo"],
-          plannedEntryPrice: "2350.00",
-          plannedStopPrice: "2347.50",
-          plannedTargetPrice: "2357.50",
-          executions: [
-            {
-              kind: "entry",
-              price: "2350.00",
-              quantity: "0.5",
-              timestamp: entryTime.toISOString(),
-            },
-            {
-              kind: "exit",
-              price: "2357.00",
-              quantity: "0.5",
-              timestamp: exitTime.toISOString(),
-            },
-          ],
-          feesCents: 0,
-          commissionCents: 0,
-          swapCents: 0,
-          entryTime: entryTime.toISOString(),
-          exitTime: exitTime.toISOString(),
-          tradingTimezone: "UTC",
-          notes: "Demo trade — clean liquidity sweep below Asia low, displacement candle confirmed.",
-          behaviorFlags: [],
-          status: "win",
-        }),
-      });
-
-      if (tradeRes.ok) {
-        toast.success("Demo data loaded: 1 account, 1 setup, 1 trade.");
-      } else {
-        toast.success("Demo data loaded: 1 account, 1 setup. (Trade creation skipped.)");
+      if (data.account?.id) {
+        setSelectedAccountId(data.account.id);
       }
-      qc.invalidateQueries();
+
+      toast.success(
+        `Demo data loaded: 1 account, ${data.summary?.strategies ?? 4} trading models, and ${data.summary?.trades ?? 18} realistic trades!`,
+      );
+      await qc.invalidateQueries({ queryKey: ["accounts"] });
+      await qc.invalidateQueries({ queryKey: ["trades"] });
+      await qc.invalidateQueries({ queryKey: ["dashboard"] });
+      await qc.invalidateQueries({ queryKey: ["analytics"] });
+      await qc.invalidateQueries({ queryKey: ["calendar"] });
+      await qc.invalidateQueries({ queryKey: ["strategies"] });
+      await qc.invalidateQueries();
     } catch (err) {
       console.error(err);
       toast.error("Failed to load demo data.");
@@ -847,9 +780,9 @@ export function BackupView() {
             <div className="min-w-0 flex-1">
               <SectionHeading>Demo Data Generator</SectionHeading>
               <p className="text-sm text-muted-foreground mt-1">
-                Quickly load a sample dataset (Account, Setup, Trade) directly
-                into the database. Useful for testing the app without manually
-                creating records.
+                Quickly load a rich institutional dataset: 1 funded prop account ($100k FTMO challenge),
+                4 trading models (ICT Silver Bullet, London Judas Swing, Nasdaq Momentum, Crypto Mean Reversion),
+                and 17 realistic trades (10 wins, 5 losses, 2 breakevens) with full execution fills and behavioral metrics.
               </p>
               <div className="mt-4">
                 <Button

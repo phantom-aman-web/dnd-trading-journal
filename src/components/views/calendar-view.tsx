@@ -112,8 +112,8 @@ export function CalendarView() {
   const [year, setYear] = useState(now.getFullYear());
   const [month, setMonth] = useState(now.getMonth() + 1); // 1..12
   const [selectedDay, setSelectedDay] = useState<CalendarDay | null>(null);
-  const { navigate, params } = useNav();
-  const accountId = params.accountId || undefined;
+  const { navigate, params, selectedAccountId } = useNav();
+  const accountId = selectedAccountId || params.accountId || undefined;
 
   const { data, isLoading } = useQuery({
     queryKey: ["calendar", year, month, accountId],
@@ -450,9 +450,10 @@ function DayDetailModal({
   // Fetch this day's trades from /api/trades with fromDate/toDate params
   // (covering the whole day in UTC). The calendar's day cells are keyed by
   // YYYY-MM-DD strings, so we construct a [start, end] window.
-  const { params: navParams } = useNav();
+  const { params: navParams, selectedAccountId } = useNav();
+  const effectiveAccountId = selectedAccountId || navParams.accountId;
   const { data: tradesData, isLoading } = useQuery({
-    queryKey: ["day-detail-trades", day?.date, navParams.accountId],
+    queryKey: ["day-detail-trades", day?.date, effectiveAccountId],
     queryFn: async () => {
       if (!day) return { items: [] as DayTradeRow[] };
       // The day's window: from YYYY-MM-DDT00:00:00.000Z to YYYY-MM-DDT23:59:59.999Z
@@ -465,7 +466,7 @@ function DayDetailModal({
         sortBy: "entryTime",
         sortDir: "asc",
       });
-      if (navParams.accountId) params.set("accountId", navParams.accountId);
+      if (effectiveAccountId) params.set("accountId", effectiveAccountId);
       const res = await fetch(`/api/trades?${params.toString()}`, { cache: "no-store" });
       if (!res.ok) return { items: [] as DayTradeRow[] };
       const data = await res.json();

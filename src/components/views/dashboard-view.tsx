@@ -202,8 +202,8 @@ function formatDate(iso: string | null): string {
 
 export function DashboardView() {
   const [preset, setPreset] = useState<string>("thisMonth");
-  const { navigate, params } = useNav();
-  const accountId = params.accountId || undefined;
+  const { navigate, params, selectedAccountId } = useNav();
+  const accountId = selectedAccountId || params.accountId || undefined;
 
   const { data: dash, isLoading: dashLoading } = useQuery({
     queryKey: ["dashboard", preset, accountId],

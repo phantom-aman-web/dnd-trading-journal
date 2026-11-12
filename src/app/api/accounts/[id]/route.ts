@@ -2,6 +2,8 @@ import { NextRequest } from "next/server";
 import { db } from "@/lib/db";
 import { requireUser } from "@/lib/auth";
 import { ok, bad, notFound, toApiError, parseJson } from "@/lib/api";
+import { invalidateCache } from "@/lib/server-cache";
+import { audit } from "@/lib/audit";
 
 export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
   let user;
@@ -44,14 +46,49 @@ export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: strin
   return ok(updated);
 }
 
-export async function DELETE(_req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
+export async function DELETE(req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
   let user;
   try { user = await requireUser(); } catch (e) { return toApiError(e); }
   const { id } = await ctx.params;
   const account = await db.tradingAccount.findFirst({ where: { id, userId: user.id } });
   if (!account) return notFound("Account not found");
+
+  const url = new URL(req.url);
+  const cascade = url.searchParams.get("cascade") === "true";
+
   const tradeCount = await db.trade.count({ where: { accountId: id } });
-  if (tradeCount > 0) return bad("Cannot delete an account with trades. Archive it instead.");
+  if (tradeCount > 0 && !cascade) {
+    return bad(
+      `Cannot delete: ${tradeCount} trade${tradeCount === 1 ? "" : "s"} linked to this account. Pass cascade=true to delete account along with all its trades.`,
+    );
+  }
+
+  // If cascade and trades exist, clean up trade child relations first
+  if (tradeCount > 0) {
+    const trades = await db.trade.findMany({ where: { accountId: id }, select: { id: true } });
+    const tradeIds = trades.map((t) => t.id);
+
+    await db.tradeExecution.deleteMany({ where: { tradeId: { in: tradeIds } } });
+    await db.tradeTarget.deleteMany({ where: { tradeId: { in: tradeIds } } });
+    await db.tradeChecklistEvaluation.deleteMany({ where: { tradeId: { in: tradeIds } } });
+    await db.tradeMedia.deleteMany({ where: { tradeId: { in: tradeIds } } });
+    await db.reviewTradeLink.deleteMany({ where: { tradeId: { in: tradeIds } } });
+    await db.trade.deleteMany({ where: { accountId: id } });
+  }
+
   await db.tradingAccount.delete({ where: { id } });
-  return ok({ ok: true });
+
+  invalidateCache(`accounts:${user.id}`);
+  invalidateCache(`trades:${user.id}`);
+  invalidateCache(`dashboard:${user.id}`);
+  invalidateCache(`analytics:${user.id}`);
+  invalidateCache(`calendar:${user.id}`);
+  invalidateCache(`me:${user.id}`);
+
+  await audit("account.deleted", "tradingAccount", id, {
+    accountName: account.name,
+    tradesDeleted: tradeCount,
+  });
+
+  return ok({ ok: true, tradesDeleted: tradeCount });
 }

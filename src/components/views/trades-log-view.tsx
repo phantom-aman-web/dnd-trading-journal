@@ -126,11 +126,11 @@ function setupName(t: TradeRow): string | null {
 /* ------------------------------------------------------------------ */
 
 export function TradesLogView() {
-  const { navigate, params, setParams } = useNav();
+  const { navigate, params, setParams, selectedAccountId, setSelectedAccountId } = useNav();
 
-  const accountFilter = params.accountId || "all";
+  const accountFilter = selectedAccountId || params.accountId || "all";
   function setAccountFilter(v: string) {
-    setParams({ accountId: v === "all" ? "" : v });
+    setSelectedAccountId(v === "all" ? "" : v);
   }
   const [setupFilter, setSetupFilter] = useState<string>(params.strategyId || "all");
   const [directionFilter, setDirectionFilter] = useState<string>(params.direction || "all");

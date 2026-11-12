@@ -24,12 +24,14 @@ export type ViewKey =
 interface NavState {
   view: ViewKey;
   params: Record<string, string>;
+  selectedAccountId: string; // Persistent account filter ("" = all accounts)
   scrollPositions: Record<string, number>;
   sidebarCollapsed: boolean;
   commandOpen: boolean;
   tradeFormOpen: boolean;
   navigate: (view: ViewKey, params?: Record<string, string>) => void;
   setParams: (params: Record<string, string>) => void;
+  setSelectedAccountId: (accountId: string) => void;
   toggleSidebar: () => void;
   setCommandOpen: (open: boolean) => void;
   setTradeFormOpen: (open: boolean) => void;
@@ -43,12 +45,37 @@ export const useNav = create<NavState>()(
     (set, get) => ({
       view: "dashboard",
       params: {},
+      selectedAccountId: "",
       scrollPositions: {},
       sidebarCollapsed: false,
       commandOpen: false,
       tradeFormOpen: false,
-      navigate: (view, params = {}) => set({ view, params }),
-      setParams: (params) => set((s) => ({ params: { ...s.params, ...params } })),
+      navigate: (view, newParams = {}) =>
+        set((s) => ({
+          view,
+          params: {
+            ...(s.selectedAccountId ? { accountId: s.selectedAccountId } : {}),
+            ...newParams,
+          },
+        })),
+      setSelectedAccountId: (accountId: string) =>
+        set((s) => {
+          const cleanId = !accountId || accountId === "all" ? "" : accountId;
+          return {
+            selectedAccountId: cleanId,
+            params: {
+              ...s.params,
+              accountId: cleanId,
+            },
+          };
+        }),
+      setParams: (newParams) =>
+        set((s) => ({
+          params: { ...s.params, ...newParams },
+          ...(newParams.accountId !== undefined
+            ? { selectedAccountId: newParams.accountId === "all" ? "" : newParams.accountId }
+            : {}),
+        })),
       toggleSidebar: () => set((s) => ({ sidebarCollapsed: !s.sidebarCollapsed })),
       setCommandOpen: (open) => set({ commandOpen: open }),
       setTradeFormOpen: (open) => set({ tradeFormOpen: open }),
@@ -68,9 +95,13 @@ export const useNav = create<NavState>()(
       partialize: (s) => ({
         view: s.view,
         params: s.params,
+        selectedAccountId: s.selectedAccountId,
         sidebarCollapsed: s.sidebarCollapsed,
         scrollPositions: s.scrollPositions,
       }),
     },
   ),
 );
+
+export const useNavStore = useNav;
+

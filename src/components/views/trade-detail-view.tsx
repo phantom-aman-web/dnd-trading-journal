@@ -41,6 +41,7 @@ import { useState, useMemo } from "react";
 import { ImageViewer } from "@/components/trade/image-viewer";
 import { CloseTradeModal } from "@/components/trade/close-trade-modal";
 import { ExecuteTradeModal } from "@/components/trade/execute-trade-modal";
+import { TradeReplay } from "@/components/trade/trade-replay";
 import { useRouter } from "next/navigation";
 import { TIMEFRAME_GROUPS, getTimeframeGroup, getTimeframeLabel } from "@/lib/timeframes";
 
@@ -283,6 +284,7 @@ export function TradeDetailView() {
           <TabsTrigger value="overview">Overview</TabsTrigger>
           <TabsTrigger value="setup">Setup</TabsTrigger>
           <TabsTrigger value="execution">Execution</TabsTrigger>
+          <TabsTrigger value="replay">Replay</TabsTrigger>
           <TabsTrigger value="psychology">Psychology</TabsTrigger>
           <TabsTrigger value="evidence">Evidence</TabsTrigger>
           <TabsTrigger value="review">Review</TabsTrigger>
@@ -619,6 +621,10 @@ export function TradeDetailView() {
               </div>
             )}
           </Card>
+        </TabsContent>
+
+        <TabsContent value="replay" className="space-y-4 mt-3">
+          <TradeReplay trade={trade} />
         </TabsContent>
 
         <TabsContent value="psychology" className="space-y-4 mt-3">

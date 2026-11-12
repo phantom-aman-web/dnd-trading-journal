@@ -24,6 +24,7 @@ import { Plus, PencilLine, Trash2, Wallet, Loader2, AlertTriangle, ShieldAlert }
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { formatSignedCents } from "@/lib/money";
+import { useNavStore } from "@/lib/nav-store";
 
 /* ------------------------------------------------------------------ */
 /* Types & constants                                                   */
@@ -114,6 +115,8 @@ async function fetchTrades(): Promise<TradeRow[]> {
 
 export function AccountsView() {
   const qc = useQueryClient();
+  const selectedAccountId = useNavStore((s) => s.selectedAccountId);
+  const setSelectedAccountId = useNavStore((s) => s.setSelectedAccountId);
   const { data: accountsData, isLoading } = useQuery({
     queryKey: ["accounts"],
     queryFn: fetchAccounts,
@@ -348,17 +351,29 @@ export function AccountsView() {
                     </button>
                     <button
                       onClick={async () => {
-                        if (tradesCount > 0) {
-                          toast.error(
-                            `Cannot delete: ${tradesCount} trade${tradesCount === 1 ? "" : "s"} linked to this account. Archive trades first.`,
-                          );
-                          return;
-                        }
-                        if (!confirm("Delete this account?")) return;
-                        const res = await fetch(`/api/accounts/${a.id}`, { method: "DELETE" });
+                        const message =
+                          tradesCount > 0
+                            ? `Delete "${a.name}" and all ${tradesCount} trade${tradesCount === 1 ? "" : "s"} linked to it? This action cannot be undone.`
+                            : `Delete "${a.name}"? This action cannot be undone.`;
+
+                        if (!confirm(message)) return;
+
+                        const url = `/api/accounts/${a.id}${tradesCount > 0 ? "?cascade=true" : ""}`;
+                        const res = await fetch(url, { method: "DELETE" });
                         if (res.ok) {
-                          toast.success("Account deleted.");
-                          qc.invalidateQueries({ queryKey: ["accounts"] });
+                          toast.success(
+                            tradesCount > 0
+                              ? `Account and ${tradesCount} linked trade${tradesCount === 1 ? "" : "s"} deleted.`
+                              : "Account deleted.",
+                          );
+                          if (selectedAccountId === a.id) {
+                            setSelectedAccountId("");
+                          }
+                          await qc.invalidateQueries({ queryKey: ["accounts"] });
+                          await qc.invalidateQueries({ queryKey: ["trades"] });
+                          await qc.invalidateQueries({ queryKey: ["dashboard"] });
+                          await qc.invalidateQueries({ queryKey: ["analytics"] });
+                          await qc.invalidateQueries({ queryKey: ["calendar"] });
                         } else {
                           const d = await res.json().catch(() => null);
                           toast.error(d?.error ?? "Failed to delete account.");

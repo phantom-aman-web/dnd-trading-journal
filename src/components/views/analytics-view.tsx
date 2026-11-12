@@ -100,10 +100,10 @@ async function fetchAccountsList() {
 
 export function AnalyticsView() {
   const [tab, setTab] = useState<TabKey>("overall");
-  const { params, setParams, navigate } = useNav();
-  const accountId = params.accountId || "all";
+  const { params, setParams, navigate, selectedAccountId, setSelectedAccountId } = useNav();
+  const accountId = selectedAccountId || params.accountId || "all";
   function setAccountId(v: string) {
-    setParams({ accountId: v === "all" ? "" : v });
+    setSelectedAccountId(v === "all" ? "" : v);
   }
 
   const { data: accountsData } = useQuery({

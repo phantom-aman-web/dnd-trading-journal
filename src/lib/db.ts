@@ -38,6 +38,23 @@ if (typeof window === "undefined") {
 
 // ─── PrismaClient ────────────────────────────────────────────────────────
 
+function getTunedDatabaseUrl(): string | undefined {
+  const url = process.env.DATABASE_URL;
+  if (!url) return undefined;
+  try {
+    const parsed = new URL(url);
+    if (!parsed.searchParams.has("connect_timeout")) {
+      parsed.searchParams.set("connect_timeout", "30");
+    }
+    if (!parsed.searchParams.has("pool_timeout")) {
+      parsed.searchParams.set("pool_timeout", "30");
+    }
+    return parsed.toString();
+  } catch {
+    return url;
+  }
+}
+
 const globalForPrisma = globalThis as unknown as {
   prisma: PrismaClient | undefined;
 };
@@ -45,6 +62,11 @@ const globalForPrisma = globalThis as unknown as {
 export const db =
   globalForPrisma.prisma ??
   new PrismaClient({
+    datasources: {
+      db: {
+        url: getTunedDatabaseUrl(),
+      },
+    },
     log: process.env.NODE_ENV === "production" ? ["error"] : ["error", "warn"],
   });
 

@@ -41,23 +41,25 @@ async function fetchAccounts() {
 }
 
 export function TopBar({ onOpenMobileNav }: { onOpenMobileNav?: () => void }) {
-  const { navigate, setCommandOpen, params, setParams } = useNav();
+  const { navigate, setCommandOpen, params, selectedAccountId, setSelectedAccountId } = useNav();
   const { user, signOut } = useAuth();
   const { theme: currentTheme, setTheme: applyTheme } = useTheme();
   const qc = useQueryClient();
 
   const { data: accountsData } = useQuery({
-    queryKey: ["accounts"],
+    queryKey: ["accounts", user?.id],
     queryFn: fetchAccounts,
+    enabled: !!user?.id,
   });
-  const accounts = Array.isArray(accountsData)
+  const accounts: any[] = Array.isArray(accountsData)
     ? accountsData
     : ((accountsData as any)?.items ?? (Array.isArray((accountsData as any)?.accounts) ? (accountsData as any).accounts : []));
 
-  const accountFilter = params.accountId ?? "all";
+  const validAccountSelected = selectedAccountId && accounts.some((a: any) => a.id === selectedAccountId);
+  const accountFilter = validAccountSelected ? selectedAccountId : "all";
 
   function setAccountFilter(v: string) {
-    setParams({ accountId: v === "all" ? "" : v });
+    setSelectedAccountId(v === "all" ? "" : v);
   }
 
   const themeOptions = [
@@ -77,12 +79,12 @@ export function TopBar({ onOpenMobileNav }: { onOpenMobileNav?: () => void }) {
       </button>
 
       <Select value={accountFilter} onValueChange={setAccountFilter}>
-        <SelectTrigger className="hidden sm:flex w-auto h-9 text-sm font-medium border-input bg-card">
-          <SelectValue />
+        <SelectTrigger className="hidden sm:flex w-auto min-w-[160px] h-9 text-sm font-medium border-input bg-card">
+          <SelectValue placeholder="All Accounts" />
         </SelectTrigger>
         <SelectContent>
-          <SelectItem value="all">All Accounts ({accounts?.length ?? 0})</SelectItem>
-          {accounts?.map((a: any) => (
+          <SelectItem value="all">All Accounts ({accounts.length})</SelectItem>
+          {accounts.map((a: any) => (
             <SelectItem key={a.id} value={a.id}>
               {a.name} (${((a.startingBalanceCents ?? 0) / 100).toLocaleString()})
             </SelectItem>
