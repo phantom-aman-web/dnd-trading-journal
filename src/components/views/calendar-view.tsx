@@ -95,8 +95,10 @@ interface CalendarResponse {
   days: CalendarDay[];
 }
 
-async function fetchCalendar(year: number, month: number): Promise<CalendarResponse> {
-  const res = await fetch(`/api/calendar?year=${year}&month=${month}`, { cache: "no-store" });
+async function fetchCalendar(year: number, month: number, accountId?: string): Promise<CalendarResponse> {
+  const qs = new URLSearchParams({ year: String(year), month: String(month) });
+  if (accountId) qs.set("accountId", accountId);
+  const res = await fetch(`/api/calendar?${qs.toString()}`, { cache: "no-store" });
   if (!res.ok) throw new Error("Failed to load calendar");
   return res.json();
 }
@@ -110,11 +112,12 @@ export function CalendarView() {
   const [year, setYear] = useState(now.getFullYear());
   const [month, setMonth] = useState(now.getMonth() + 1); // 1..12
   const [selectedDay, setSelectedDay] = useState<CalendarDay | null>(null);
-  const { navigate } = useNav();
+  const { navigate, params } = useNav();
+  const accountId = params.accountId || undefined;
 
   const { data, isLoading } = useQuery({
-    queryKey: ["calendar", year, month],
-    queryFn: () => fetchCalendar(year, month),
+    queryKey: ["calendar", year, month, accountId],
+    queryFn: () => fetchCalendar(year, month, accountId),
   });
 
   const days: CalendarDay[] = data?.days ?? [];
@@ -447,8 +450,9 @@ function DayDetailModal({
   // Fetch this day's trades from /api/trades with fromDate/toDate params
   // (covering the whole day in UTC). The calendar's day cells are keyed by
   // YYYY-MM-DD strings, so we construct a [start, end] window.
+  const { params: navParams } = useNav();
   const { data: tradesData, isLoading } = useQuery({
-    queryKey: ["day-detail-trades", day?.date],
+    queryKey: ["day-detail-trades", day?.date, navParams.accountId],
     queryFn: async () => {
       if (!day) return { items: [] as DayTradeRow[] };
       // The day's window: from YYYY-MM-DDT00:00:00.000Z to YYYY-MM-DDT23:59:59.999Z
@@ -461,6 +465,7 @@ function DayDetailModal({
         sortBy: "entryTime",
         sortDir: "asc",
       });
+      if (navParams.accountId) params.set("accountId", navParams.accountId);
       const res = await fetch(`/api/trades?${params.toString()}`, { cache: "no-store" });
       if (!res.ok) return { items: [] as DayTradeRow[] };
       const data = await res.json();

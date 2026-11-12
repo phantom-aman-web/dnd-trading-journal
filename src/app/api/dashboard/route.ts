@@ -2,6 +2,7 @@ import { NextRequest } from "next/server";
 import { db } from "@/lib/db";
 import { requireUser } from "@/lib/auth";
 import { ok, toApiError } from "@/lib/api";
+import { getCached, setCached } from "@/lib/server-cache";
 import {
   TradeMetricRow,
   computeAggregateMetrics,
@@ -43,8 +44,8 @@ async function loadTrades(userId: string, from?: Date, to?: Date, accountId?: st
     status: (["win","loss","breakeven"].includes(t.status) ? "closed" : t.status) as any,
     outcome: t.status as any,
     direction: t.direction,
-    entryTime: t.entryTime,
-    exitTime: t.exitTime,
+    entryTime: t.entryTime ? t.entryTime.toISOString() : null,
+    exitTime: t.exitTime ? t.exitTime.toISOString() : null,
     setupGrade: t.setupGrade,
     instrumentSymbol: t.instrumentSymbol,
     session: t.session,
@@ -110,6 +111,11 @@ export async function GET(req: NextRequest) {
   const { from, to, preset } = rangeFromQuery(req);
   const url = new URL(req.url);
   const accountId = url.searchParams.get("accountId") ?? undefined;
+
+  const cacheKey = `dashboard:${user.id}:${preset}:${accountId ?? "all"}:${from?.toISOString() ?? ""}:${to?.toISOString() ?? ""}`;
+  const cached = getCached<any>(cacheKey);
+  if (cached) return ok(cached);
+
   const trades = await loadTrades(user.id, from, to, accountId);
 
   // Account starting balance for equity curve baseline. Computed BEFORE
@@ -128,8 +134,18 @@ export async function GET(req: NextRequest) {
   // Group breakdowns
   const byInstrument = groupBy(trades, (t) => t.instrumentSymbol);
   const bySession = groupBy(trades, (t) => t.session, (k) => {
-    const map: Record<string, string> = { asia: "Asia", london: "London", ny_am: "New York AM", ny_pm: "New York PM", custom: "Custom" };
-    return map[k] ?? k;
+    const map: Record<string, string> = {
+      asian_range: "Asian Range",
+      asia: "Asia",
+      london_open: "London Open",
+      london: "London",
+      ny_am: "New York AM",
+      ny_lunch: "New York Lunch",
+      ny_pm: "New York PM",
+      off_hours: "Off Hours",
+      custom: "Custom",
+    };
+    return map[k] ?? k.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
   });
   const byStrategy = groupBy(trades, (t) => t.strategyId);
   // Resolve strategy names
@@ -139,6 +155,68 @@ export async function GET(req: NextRequest) {
     strats.forEach((s) => strategyMap.set(s.id, s.name));
   }
   byStrategy.forEach((g) => (g.label = strategyMap.get(g.key) ?? "Unknown"));
+
+  // Long vs Short breakdown
+  const longs = trades.filter((t) => t.direction === "long");
+  const shorts = trades.filter((t) => t.direction === "short");
+  const longMetrics = computeAggregateMetrics(longs, null);
+  const shortMetrics = computeAggregateMetrics(shorts, null);
+  const longVsShort = {
+    long: {
+      trades: longMetrics.totalTrades,
+      closedTrades: longMetrics.closedTrades,
+      wins: longMetrics.wins,
+      losses: longMetrics.losses,
+      winRate: longMetrics.winRate,
+      avgR: longMetrics.avgR,
+      profitFactor: longMetrics.profitFactor,
+      expectancyR: longMetrics.expectancyR,
+      pnlCents: longMetrics.netPnlCents,
+    },
+    short: {
+      trades: shortMetrics.totalTrades,
+      closedTrades: shortMetrics.closedTrades,
+      wins: shortMetrics.wins,
+      losses: shortMetrics.losses,
+      winRate: shortMetrics.winRate,
+      avgR: shortMetrics.avgR,
+      profitFactor: shortMetrics.profitFactor,
+      expectancyR: shortMetrics.expectancyR,
+      pnlCents: shortMetrics.netPnlCents,
+    },
+  };
+
+  // Period comparison (current vs previous equivalent period)
+  let comparison: {
+    prevNetPnlCents: number;
+    pnlChangeCents: number;
+    prevWinRate: string | null;
+    winRateDelta: string | null;
+    prevTrades: number;
+    tradesDelta: number;
+  } | null = null;
+
+  if (from && to) {
+    try {
+      const msDiff = to.getTime() - from.getTime();
+      const prevTo = new Date(from.getTime() - 1);
+      const prevFrom = new Date(prevTo.getTime() - msDiff);
+      const prevTrades = await loadTrades(user.id, prevFrom, prevTo, accountId);
+      const prevAgg = computeAggregateMetrics(prevTrades, null);
+      const curWin = aggregate.winRate ? parseFloat(aggregate.winRate) : null;
+      const prevWin = prevAgg.winRate ? parseFloat(prevAgg.winRate) : null;
+      comparison = {
+        prevNetPnlCents: prevAgg.netPnlCents,
+        pnlChangeCents: aggregate.netPnlCents - prevAgg.netPnlCents,
+        prevWinRate: prevAgg.winRate ?? null,
+        winRateDelta: curWin != null && prevWin != null ? (curWin - prevWin).toFixed(1) + "%" : null,
+        prevTrades: prevAgg.totalTrades,
+        tradesDelta: aggregate.totalTrades - prevAgg.totalTrades,
+      };
+    } catch {
+      comparison = null;
+    }
+  }
 
   // Behavior analytics
   const behaviorFlags = new Set<string>();
@@ -159,16 +237,18 @@ export async function GET(req: NextRequest) {
   // A+ vs non-A+ (spec section 74)
   const aplus = trades.filter((t) => t.setupGrade === "A+");
   const nonAplus = trades.filter((t) => t.setupGrade && t.setupGrade !== "A+" && t.setupGrade !== "Invalid");
-  const aplusMetrics = computeAggregateMetrics(aplus);
+  const aplusMetrics = computeAggregateMetrics(aplus, null);
   const nonAplusMetrics = computeAggregateMetrics(nonAplus, null);
 
   // Insights (spec section 23, 24)
   const insights = generateInsights(trades);
 
-  return ok({
+  const responsePayload = {
     preset,
     range: from && to ? { from: from.toISOString(), to: to.toISOString() } : null,
     aggregate,
+    comparison,
+    longVsShort,
     startingBalanceCents: startingBalance,
     equityCurve,
     dailyPnl,
@@ -197,5 +277,8 @@ export async function GET(req: NextRequest) {
     },
     insights,
     totalTrades: trades.length,
-  });
+  };
+
+  setCached(cacheKey, responsePayload, 30_000);
+  return ok(responsePayload);
 }

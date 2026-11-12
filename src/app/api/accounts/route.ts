@@ -3,18 +3,26 @@ import { db } from "@/lib/db";
 import { requireUser } from "@/lib/auth";
 import { ok, bad, toApiError, parseJson } from "@/lib/api";
 import { audit } from "@/lib/audit";
+import { getCached, setCached, invalidateCache } from "@/lib/server-cache";
 
 export async function GET(req: NextRequest) {
   let user;
   try { user = await requireUser(); } catch (e) { return toApiError(e); }
   const url = new URL(req.url);
   const isDefault = url.searchParams.get("default") === "true";
+
+  const cacheKey = `accounts:${user.id}:${isDefault ? "default" : "all"}`;
+  const cached = getCached<any>(cacheKey);
+  if (cached) return ok(cached);
+
   const where = { userId: user.id, ...(isDefault ? { isDefault: true } : {}) };
   const items = await db.tradingAccount.findMany({
     where,
     orderBy: { createdAt: "asc" },
   });
-  return ok({ items });
+  const result = { items };
+  setCached(cacheKey, result, 30_000);
+  return ok(result);
 }
 
 export async function POST(req: NextRequest) {
@@ -52,5 +60,6 @@ export async function POST(req: NextRequest) {
     },
   });
   await audit("account.created", "trading_account", account.id);
+  invalidateCache(`accounts:${user.id}`);
   return ok(account);
 }

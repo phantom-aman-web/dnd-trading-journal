@@ -2,6 +2,7 @@ import { NextRequest } from "next/server";
 import { db } from "@/lib/db";
 import { requireUser } from "@/lib/auth";
 import { ok, toApiError } from "@/lib/api";
+import { getCached, setCached } from "@/lib/server-cache";
 import { TradeMetricRow, computeAggregateMetrics, groupBy, safeParsePsychTags } from "@/lib/financial-engine";
 
 function safeParseArr(json: string | null): string[] {
@@ -17,6 +18,11 @@ export async function GET(req: NextRequest) {
   const fromStr = url.searchParams.get("from");
   const toStr = url.searchParams.get("to");
   const accountId = url.searchParams.get("accountId") ?? undefined;
+
+  const cacheKey = `analytics:${user.id}:${dimension}:${accountId ?? "all"}:${fromStr ?? ""}:${toStr ?? ""}`;
+  const cached = getCached<any>(cacheKey);
+  if (cached) return ok(cached);
+
   const where: any = { userId: user.id, isArchived: false };
   if (accountId) where.accountId = accountId;
   // SPEC v3 §18.8: realized performance analytics use EXIT time, not entry time.
@@ -31,6 +37,14 @@ export async function GET(req: NextRequest) {
       where.exitTime.lt = endExclusive;
     }
   }
+  let startingBalanceCents: number | null = null;
+  if (accountId) {
+    const acc = await db.tradingAccount.findUnique({
+      where: { id: accountId },
+      select: { startingBalanceCents: true },
+    });
+    if (acc) startingBalanceCents = acc.startingBalanceCents;
+  }
   const trades = await db.trade.findMany({ where, orderBy: { exitTime: "asc" } });
   const rows: TradeMetricRow[] = trades.map((t) => ({
     id: t.id,
@@ -40,8 +54,8 @@ export async function GET(req: NextRequest) {
     status: (["win","loss","breakeven"].includes(t.status) ? "closed" : t.status) as any,
     outcome: t.status as any,
     direction: t.direction,
-    entryTime: t.entryTime,
-    exitTime: t.exitTime,
+    entryTime: t.entryTime ? t.entryTime.toISOString() : null,
+    exitTime: t.exitTime ? t.exitTime.toISOString() : null,
     setupGrade: t.setupGrade,
     instrumentSymbol: t.instrumentSymbol,
     session: t.session,
@@ -52,14 +66,86 @@ export async function GET(req: NextRequest) {
     ruleCompliant: !(safeParseArr(t.behaviorFlagsJson).length > 0),
   }));
 
-  if (dimension === "overview") {
-    return ok({ aggregate: computeAggregateMetrics(rows) });
+  // Holding duration calculation (closed trades with entry & exit times)
+  const tradesWithDuration = trades.filter((t) => t.entryTime && t.exitTime);
+  let avgHoldMinutesAll: number | null = null;
+  let avgHoldMinutesWins: number | null = null;
+  let avgHoldMinutesLosses: number | null = null;
+
+  if (tradesWithDuration.length > 0) {
+    const getMinutes = (t: any) =>
+      Math.max(0, (new Date(t.exitTime!).getTime() - new Date(t.entryTime!).getTime()) / 60000);
+    const winTrades = tradesWithDuration.filter((t) => t.status === "win");
+    const lossTrades = tradesWithDuration.filter((t) => t.status === "loss");
+
+    const totalMin = tradesWithDuration.reduce((s, t) => s + getMinutes(t), 0);
+    avgHoldMinutesAll = Math.round(totalMin / tradesWithDuration.length);
+
+    if (winTrades.length > 0) {
+      avgHoldMinutesWins = Math.round(
+        winTrades.reduce((s, t) => s + getMinutes(t), 0) / winTrades.length,
+      );
+    }
+    if (lossTrades.length > 0) {
+      avgHoldMinutesLosses = Math.round(
+        lossTrades.reduce((s, t) => s + getMinutes(t), 0) / lossTrades.length,
+      );
+    }
   }
-  if (dimension === "instrument", null) {
-    return ok({ items: groupBy(rows, (t) => t.instrumentSymbol) });
+
+  // Excursion (MAE / MFE) calculations per DND_FINANCIAL_METRICS.md §5
+  let mfeSum = 0;
+  let maeSum = 0;
+  let mfeCount = 0;
+  let maeCount = 0;
+  let retentionSum = 0;
+  let retentionCount = 0;
+
+  for (const t of trades) {
+    if (!t.planAdherenceJson) continue;
+    try {
+      const pa = JSON.parse(t.planAdherenceJson);
+      if (pa.mfeR != null && Number.isFinite(Number(pa.mfeR))) {
+        mfeSum += Number(pa.mfeR);
+        mfeCount++;
+        if (t.status === "win" && t.actualR && Number(pa.mfeR) > 0) {
+          const ret = (Number(t.actualR) / Number(pa.mfeR)) * 100;
+          retentionSum += Math.min(100, Math.max(0, ret));
+          retentionCount++;
+        }
+      }
+      if (pa.maeR != null && Number.isFinite(Number(pa.maeR))) {
+        maeSum += Number(pa.maeR);
+        maeCount++;
+      }
+    } catch {}
+  }
+
+  const excursion = {
+    avgMfeR: mfeCount > 0 ? (mfeSum / mfeCount).toFixed(2) : null,
+    avgMaeR: maeCount > 0 ? (maeSum / maeCount).toFixed(2) : null,
+    avgProfitRetentionPct: retentionCount > 0 ? Math.round(retentionSum / retentionCount) : null,
+    tradesWithExcursionCount: Math.max(mfeCount, maeCount),
+  };
+
+  const send = (data: any) => ok(setCached(cacheKey, data, 30_000));
+
+  if (dimension === "overview") {
+    return send({
+      aggregate: computeAggregateMetrics(rows, startingBalanceCents),
+      holdingDuration: {
+        avgAllMinutes: avgHoldMinutesAll,
+        avgWinMinutes: avgHoldMinutesWins,
+        avgLossMinutes: avgHoldMinutesLosses,
+      },
+      excursion,
+    });
+  }
+  if (dimension === "instrument") {
+    return send({ items: groupBy(rows, (t) => t.instrumentSymbol) });
   }
   if (dimension === "session") {
-    return ok({
+    return send({
       items: groupBy(rows, (t) => t.session, (k) => {
         const map: Record<string, string> = { asia: "Asia", london: "London", ny_am: "New York AM", ny_pm: "New York PM", custom: "Custom" };
         return map[k] ?? k;
@@ -75,17 +161,17 @@ export async function GET(req: NextRequest) {
     });
     const strategyMap = new Map<string, string>();
     strats.forEach((s) => strategyMap.set(s.id, s.name));
-    return ok({
+    return send({
       items: groupBy(rows, (t) => t.strategyId, (k) => strategyMap.get(k) ?? "Unknown"),
     });
   }
   if (dimension === "setupGrade") {
-    return ok({ items: groupBy(rows, (t) => t.setupGrade, (k) => k ?? "Ungraded") });
+    return send({ items: groupBy(rows, (t) => t.setupGrade, (k) => k ?? "Ungraded") });
   }
   if (dimension === "behavior") {
     const flags = new Set<string>();
     rows.forEach((t) => t.behaviorFlags?.forEach((f) => flags.add(f)));
-    return ok({
+    return send({
       items: [...flags].map((flag) => {
         const withFlag = rows.filter((t) => t.behaviorFlags?.includes(flag));
         const m = computeAggregateMetrics(withFlag, null);
@@ -129,7 +215,7 @@ export async function GET(req: NextRequest) {
       (weekdayMap.get(wd) ?? weekdayMap.set(wd, []).get(wd)!).push(t);
       (hourMap.get(hr) ?? hourMap.set(hr, []).get(hr)!).push(t);
     }
-    return ok({
+    return send({
       weekday: [...weekdayMap.entries()].map(([k, arr]) => ({
         label: k, items: computeAggregateMetrics(arr, null),
       })),
@@ -138,5 +224,5 @@ export async function GET(req: NextRequest) {
       })),
     });
   }
-  return ok({ aggregate: computeAggregateMetrics(rows) }, null);
+  return send({ aggregate: computeAggregateMetrics(rows, startingBalanceCents) });
 }

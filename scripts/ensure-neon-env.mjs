@@ -54,30 +54,42 @@ function main() {
   const current = getCurrentEnv();
 
   if (hasValidPostgresUrl(current)) {
-    // .env already has a valid PostgreSQL URL — no action needed.
-    // But verify SESSION_SECRET and STORAGE_SECRET are also present.
-    if (
-      current.includes("SESSION_SECRET=") &&
-      current.includes("STORAGE_SECRET=")
-    ) {
-      console.log("✓ .env has valid Neon PostgreSQL DATABASE_URL — no fix needed.");
-      return;
+    let updated = current;
+    let modified = false;
+    if (!current.includes("SESSION_SECRET=")) {
+      updated += `\nSESSION_SECRET=${SESSION_SECRET}\n`;
+      modified = true;
     }
+    if (!current.includes("STORAGE_SECRET=")) {
+      updated += `\nSTORAGE_SECRET=${STORAGE_SECRET}\n`;
+      modified = true;
+    }
+    if (modified) {
+      writeFileSync(ENV_PATH, updated, { mode: 0o644 });
+      console.log("✓ .env updated with missing secrets while preserving other variables.");
+    } else {
+      console.log("✓ .env has valid Neon PostgreSQL DATABASE_URL — no fix needed.");
+    }
+    return;
   }
 
-  // .env is missing, has SQLite URL, or is missing secrets — restore the authoritative Neon config.
-  console.log("⚠️  .env has invalid or missing DATABASE_URL — restoring Neon PostgreSQL config.");
+  // .env is missing or has SQLite URL — update/restore Neon config while preserving other keys.
+  console.log("⚠️  .env has invalid or missing DATABASE_URL — updating Neon PostgreSQL config.");
 
-  const reason = !current
-    ? ".env file does not exist"
-    : current.includes("file:")
-      ? ".env has SQLite URL (file:...) — the sandbox platform reverted it"
-      : ".env has non-postgresql DATABASE_URL";
+  let newContent = current || "";
+  if (/^DATABASE_URL=.*$/m.test(newContent)) {
+    newContent = newContent.replace(/^DATABASE_URL=.*$/m, `DATABASE_URL=${NEON_DATABASE_URL}`);
+  } else {
+    newContent = `DATABASE_URL=${NEON_DATABASE_URL}\n` + newContent;
+  }
+  if (!newContent.includes("SESSION_SECRET=")) {
+    newContent += `\nSESSION_SECRET=${SESSION_SECRET}`;
+  }
+  if (!newContent.includes("STORAGE_SECRET=")) {
+    newContent += `\nSTORAGE_SECRET=${STORAGE_SECRET}`;
+  }
 
-  console.log(`   Reason: ${reason}`);
-  console.log("   Restoring authoritative Neon PostgreSQL URL...");
-
-  writeFileSync(ENV_PATH, REQUIRED_ENV_CONTENT, { mode: 0o644 });
+  writeFileSync(ENV_PATH, newContent.trim() + "\n", { mode: 0o644 });
 
   // Verify the fix
   const fixed = readFileSync(ENV_PATH, "utf8");

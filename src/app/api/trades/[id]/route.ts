@@ -16,11 +16,17 @@ import {
 } from "@/lib/checklist-evaluation";
 import { buildSignedUrl } from "@/lib/storage";
 import { audit } from "@/lib/audit";
+import { invalidateCache, getCached, setCached } from "@/lib/server-cache";
 
 export async function GET(_req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
   let user;
   try { user = await requireUser(); } catch (e) { return toApiError(e); }
   const { id } = await ctx.params;
+
+  const cacheKey = `trade:${user.id}:${id}`;
+  const cached = getCached<any>(cacheKey);
+  if (cached) return ok(cached);
+
   const trade = await db.trade.findFirst({
     where: { id, userId: user.id },
     include: {
@@ -51,6 +57,7 @@ export async function GET(_req: NextRequest, ctx: { params: Promise<{ id: string
     ...trade,
     media: await Promise.all(trade.media.map(async (m) => ({ ...m, url: await buildSignedUrl(m.storedPath) }))),
   };
+  setCached(cacheKey, tradeWithUrls, 30_000);
   return ok(tradeWithUrls);
 }
 
@@ -73,7 +80,7 @@ export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: strin
     "setupGrade", "setupScore", "plannedEntryPrice", "plannedStopPrice", "plannedTargetPrice",
     "plannedRiskPct", "entryTime", "exitTime", "tradingTimezone",
     "feesCents", "commissionCents", "swapCents", "slippageCents",
-    "notes", "lessons", "isDraft", "isArchived",
+    "notes", "lessons", "isDraft", "isArchived", "positionSize",
   ];
   for (const f of fields) {
     if (f in body) {
@@ -197,6 +204,9 @@ export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: strin
     allowed.actualR = engineResult.actualR;
     allowed.plannedRiskAmountCents = engineResult.plannedRiskAmountCents;
     allowed.plannedRR = engineResult.plannedRR;
+    if (engineResult.entryQuantity && engineResult.entryQuantity !== "0") {
+      allowed.positionSize = engineResult.entryQuantity;
+    }
     // SPEC v3 §8.2: status is DERIVED, never stored as user input.
     // When there's a real EXIT execution, the engine's outcome (win/loss/breakeven/
     // partial_*) is AUTHORITATIVE — body.status from the client is IGNORED.
@@ -341,11 +351,11 @@ export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: strin
     );
     if (validExits.length > 0) {
       await db.tradeTarget.createMany({
-        data: validExits.map((tp: any, idx: number) => ({
+        data: validExits.map((tp: any, idx: number, arr: any[]) => ({
           tradeId: id,
           label: tp.name || `TP${idx + 1}`,
           price: String(tp.price),
-          quantityPct: "0",
+          quantityPct: tp.quantityPct ? String(tp.quantityPct) : (arr.length > 0 ? (100 / arr.length).toFixed(0) : "0"),
         })),
       });
     }
@@ -361,6 +371,9 @@ export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: strin
       },
     });
     await audit("trade.updated", "trade", id);
+    invalidateCache(`dashboard:${user.id}`);
+    invalidateCache(`analytics:${user.id}`);
+    invalidateCache(`trade:${user.id}:${id}`);
     return ok(updated);
   } catch (err: any) {
     if (err?.code === "P2003") {
@@ -378,6 +391,9 @@ export async function DELETE(_req: NextRequest, ctx: { params: Promise<{ id: str
   if (!trade) return notFound("Trade not found");
   await db.trade.delete({ where: { id } });
   await audit("trade.deleted", "trade", id);
+  invalidateCache(`dashboard:${user.id}`);
+  invalidateCache(`analytics:${user.id}`);
+  invalidateCache(`trade:${user.id}:${id}`);
   return ok({ ok: true });
 }
 

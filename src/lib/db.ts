@@ -12,26 +12,28 @@ import { PrismaClient } from "@prisma/client";
 // This guard runs BEFORE PrismaClient instantiation. If DATABASE_URL is
 // missing or not postgresql://, the app refuses to start.
 
-const DATABASE_URL = process.env.DATABASE_URL;
+if (typeof window === "undefined") {
+  const DATABASE_URL = process.env.DATABASE_URL;
 
-if (!DATABASE_URL) {
-  throw new Error(
-    "FATAL: DATABASE_URL is not set. The application requires Neon PostgreSQL. " +
-    "Set DATABASE_URL=postgresql://... in your .env file. " +
-    "The application will NOT start without a valid PostgreSQL connection.",
-  );
-}
+  if (!DATABASE_URL) {
+    throw new Error(
+      "FATAL: DATABASE_URL is not set. The application requires Neon PostgreSQL. " +
+      "Set DATABASE_URL=postgresql://... in your .env file. " +
+      "The application will NOT start without a valid PostgreSQL connection.",
+    );
+  }
 
-if (
-  !DATABASE_URL.startsWith("postgresql://") &&
-  !DATABASE_URL.startsWith("postgres://")
-) {
-  throw new Error(
-    "FATAL: DATABASE_URL must be a PostgreSQL connection string (postgresql://... or postgres://...). " +
-    `Received: "${DATABASE_URL.slice(0, 30)}..." ` +
-    "The application does NOT support SQLite fallback. " +
-    "Set DATABASE_URL to a valid Neon PostgreSQL URL in your .env file.",
-  );
+  if (
+    !DATABASE_URL.startsWith("postgresql://") &&
+    !DATABASE_URL.startsWith("postgres://")
+  ) {
+    throw new Error(
+      "FATAL: DATABASE_URL must be a PostgreSQL connection string (postgresql://... or postgres://...). " +
+      `Received: "${DATABASE_URL.slice(0, 30)}..." ` +
+      "The application does NOT support SQLite fallback. " +
+      "Set DATABASE_URL to a valid Neon PostgreSQL URL in your .env file.",
+    );
+  }
 }
 
 // ─── PrismaClient ────────────────────────────────────────────────────────

@@ -3,7 +3,21 @@ import { db } from "@/lib/db";
 import { requireUser } from "@/lib/auth";
 import { ok, bad, notFound, toApiError, parseJson } from "@/lib/api";
 import { calculateTradeMetrics } from "@/lib/financial-engine";
+import { resolveInstrumentForServer } from "@/lib/instrument-resolver";
 import { audit } from "@/lib/audit";
+
+// Get import preview and row statuses
+export async function GET(_req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
+  let user;
+  try { user = await requireUser(); } catch (e) { return toApiError(e); }
+  const { id } = await ctx.params;
+  const importRecord = await db.import.findFirst({
+    where: { id, userId: user.id },
+    include: { rows: true },
+  });
+  if (!importRecord) return notFound("Import not found");
+  return ok(importRecord);
+}
 
 // Apply mapping and validate rows (spec section 84, 86, 87)
 export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
@@ -75,11 +89,20 @@ export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: strin
     let imported = 0;
     for (const row of rows) {
       const mapped = JSON.parse(row.mappedJson ?? "{}");
-      // Find or create instrument
-      let instr = await db.instrument.findFirst({ where: { userId: user.id, symbol: mapped.instrumentSymbol } });
+      const resolved = await resolveInstrumentForServer(mapped.instrumentSymbol, user.id);
+      let instr = await db.instrument.findFirst({ where: { userId: user.id, symbol: resolved.def.symbol } });
       if (!instr) {
         instr = await db.instrument.create({
-          data: { userId: user.id, symbol: mapped.instrumentSymbol, market: mapped.market ?? "custom", pipSize: "0.0001", tickSize: "0.0001", contractSize: "1", pricePrecision: 5 },
+          data: {
+            userId: user.id,
+            symbol: resolved.def.symbol,
+            name: resolved.def.displayName,
+            market: resolved.def.market,
+            pipSize: resolved.def.pipSize,
+            tickSize: resolved.def.tickSize,
+            contractSize: resolved.def.contractSize,
+            pricePrecision: resolved.def.pricePrecision,
+          },
         });
       }
       const calcInput: any = {
@@ -95,17 +118,9 @@ export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: strin
         commissionCents: parseInt(mapped.commissionCents ?? "0") || 0,
         swapCents: parseInt(mapped.swapCents ?? "0") || 0,
         slippageCents: parseInt(mapped.slippageCents ?? "0") || 0,
-        contractSize: instr.contractSize,
-        pipSize: instr.pipSize,
-        // Instrument-aware point value (spec §31, §7): use the instrument's
-        // stored spec rather than the legacy hardcoded 100. For imported
-        // forex/metals/indices rows this gives correct per-pip/tick values;
-        // for crypto/stocks (contractSize 1) it falls back to 100.
-        pointValueCents: 100 || computePointValueCents(
-          instr.contractSize,
-          instr.tickSize,
-          instr.pipSize,
-        ),
+        contractSize: resolved.def.contractSize,
+        pipSize: resolved.def.pipSize,
+        pointValueCents: resolved.def.pointValueCents,
       };
       const calc = calculateTradeMetrics(calcInput as any);
       await db.trade.create({

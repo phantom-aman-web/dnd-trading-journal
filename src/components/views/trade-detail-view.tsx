@@ -42,6 +42,8 @@ import { ImageViewer } from "@/components/trade/image-viewer";
 import { CloseTradeModal } from "@/components/trade/close-trade-modal";
 import { ExecuteTradeModal } from "@/components/trade/execute-trade-modal";
 import { useRouter } from "next/navigation";
+import { TIMEFRAME_GROUPS, getTimeframeGroup, getTimeframeLabel } from "@/lib/timeframes";
+
 
 async function fetchTrade(id: string) {
   const res = await fetch(`/api/trades/${id}`, { cache: "no-store" });
@@ -161,8 +163,13 @@ export function TradeDetailView() {
               {trade.status}
             </Badge>
           </div>
-          <div className="mt-1 text-sm text-muted-foreground">
-            {trade.entryTime ? new Date(trade.entryTime).toLocaleString() : "Open"} · {trade.session ?? "-"}
+          <div className="mt-1 text-sm text-muted-foreground flex items-center gap-2 flex-wrap">
+            <span>{trade.entryTime ? new Date(trade.entryTime).toLocaleString() : "Open"} · {trade.session ?? "-"}</span>
+            {trade.newsEvent && trade.newsEvent !== "none" && (
+              <Badge variant="outline" className="text-[10px] bg-destructive/10 text-destructive border-destructive/20 h-5">
+                {trade.newsEvent.split('_').map((w: string) => w.charAt(0).toUpperCase() + w.slice(1)).join(' ')} News
+              </Badge>
+            )}
           </div>
         </div>
         <div className="text-right">
@@ -297,6 +304,7 @@ export function TradeDetailView() {
             <div className="mt-3 grid sm:grid-cols-2 gap-2 text-sm">
               {thesis?.liquidityTarget && <div><span className="text-muted-foreground">Liquidity target:</span> {thesis.liquidityTarget}</div>}
               {thesis?.target && <div><span className="text-muted-foreground">Target:</span> {thesis.target}</div>}
+              {thesis?.earlyExit && <div><span className="text-muted-foreground">Early exit triggers:</span> {thesis.earlyExit}</div>}
             </div>
             {thesis?.confirms && Array.isArray(thesis.confirms) && thesis.confirms.length > 0 && (
               <div className="mt-3 text-sm">
@@ -325,23 +333,21 @@ export function TradeDetailView() {
             </Card>
           )}
 
-          {behaviorFlags.length > 0 && (
-            <Card className="p-4 border-warning/50">
-              <h3 className="font-medium mb-2 flex items-center gap-2"><AlertTriangle className="h-4 w-4 text-warning" /> Behavior Flags</h3>
-              <div className="flex flex-wrap gap-1">
-                {behaviorFlags.map((f) => (
-                  <Badge key={f} variant="outline" className="text-warning">
-                    {f.split("_").map((w) => w.charAt(0).toUpperCase() + w.slice(1)).join(" ")}
-                  </Badge>
-                ))}
-              </div>
-            </Card>
-          )}
-
           {trade.notes && (
             <Card className="p-4">
               <h3 className="font-medium mb-2">Notes</h3>
               <p className="text-sm text-muted-foreground whitespace-pre-wrap leading-relaxed">{trade.notes}</p>
+            </Card>
+          )}
+
+          {behaviorFlags.length > 0 && (
+            <Card className="p-4">
+              <h3 className="font-medium mb-3">Behavior Flags</h3>
+              <div className="flex flex-wrap gap-2">
+                {behaviorFlags.map(f => (
+                  <Badge key={f} variant="outline" className="bg-destructive/10 text-destructive border-destructive/20">{f}</Badge>
+                ))}
+              </div>
             </Card>
           )}
         </TabsContent>
@@ -354,7 +360,9 @@ export function TradeDetailView() {
               <SetupSection title="Liquidity" data={setup?.liquidity} isList />
               <SetupSection title="Structure" data={setup?.structure} isList />
               <SetupSection title="Entry Model" data={setup?.entryModel} />
+              <SetupSection title="Market" data={trade.market} />
               <SetupSection title="Session" data={setup?.session} />
+              <SetupSection title="Timeframe" data={setup?.timeframe} />
               <SetupSection title="Setup Score" data={trade.setupScore ? `${(dToNumber(trade.setupScore) * 100).toFixed(0)}%` : null} hint="Calculated from the weighted rules defined by your strategy" />
             </div>
           </Card>
@@ -655,37 +663,90 @@ export function TradeDetailView() {
                 No evidence uploaded yet. Add screenshots or videos to build a chronological story of this trade.
               </div>
             ) : (
-              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2">
-                {evidenceMedia.map((m: any) => {
-                  const isVideo = m.kind === "video";
+              <div className="space-y-6">
+                {TIMEFRAME_GROUPS.map((group) => {
+                  const groupMedia = evidenceMedia.filter((m: any) => getTimeframeGroup(m.timeframe) === group);
+                  if (groupMedia.length === 0) return null;
                   return (
-                    <div key={m.id}>
-                    <button
-                      onClick={() => {
-                        // m.url is already populated by the trade detail API
-                        // (signed URL inlined server-side), so we no longer need
-                        // to fan out a GET /api/media/[id] request here.
-                        if (isVideo) return; // video has inline controls; don't open the image modal
-                        const imgIdx = images.findIndex((im: any) => im.id === m.id);
-                        if (imgIdx >= 0) {
-                          setViewerIndex(imgIdx);
-                          setViewerOpen(true);
-                        }
-                      }}
-                      className="aspect-video rounded-md border border-border overflow-hidden bg-muted hover:opacity-80 transition-opacity text-left w-full"
-                    >
-                      {isVideo && m.url ? (
-                        <video src={m.url} className="w-full h-full object-cover" preload="metadata" controls />
-                      ) : (
-                        <img src={m.url || `/api/media/file?token=placeholder`} alt={m.caption || "Evidence"} className="w-full h-full object-cover" />
-                      )}
-                    </button>
-                    {m.caption && (
-                      <p className="text-xs text-muted-foreground mt-1 line-clamp-2">{m.caption}</p>
-                    )}
+                    <div key={group} className="space-y-3">
+                      <h4 className="text-sm font-medium text-muted-foreground">{group}</h4>
+                      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2">
+                        {groupMedia.map((m: any) => {
+                          const isVideo = m.kind === "video";
+                          return (
+                            <div key={m.id}>
+                              <button
+                                onClick={() => {
+                                  if (isVideo) return;
+                                  const imgIdx = images.findIndex((im: any) => im.id === m.id);
+                                  if (imgIdx >= 0) {
+                                    setViewerIndex(imgIdx);
+                                    setViewerOpen(true);
+                                  }
+                                }}
+                                className="aspect-video rounded-md border border-border overflow-hidden bg-muted hover:opacity-80 transition-opacity text-left w-full relative"
+                              >
+                                {m.timeframe && (
+                                  <Badge variant="secondary" className="absolute top-1 right-1 z-10 text-[10px] py-0 px-1.5 opacity-80 backdrop-blur-sm">
+                                    {getTimeframeLabel(m.timeframe)}
+                                  </Badge>
+                                )}
+                                {isVideo && m.url ? (
+                                  <video src={m.url} className="w-full h-full object-cover" preload="metadata" controls />
+                                ) : (
+                                  <img src={m.url || `/api/media/file?token=placeholder`} alt={m.caption || "Evidence"} className="w-full h-full object-cover" />
+                                )}
+                              </button>
+                              {m.caption && (
+                                <p className="text-xs text-muted-foreground mt-1 line-clamp-2">{m.caption}</p>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
                     </div>
                   );
                 })}
+                
+                {/* Media without a timeframe or unknown timeframe */}
+                {(() => {
+                  const otherMedia = evidenceMedia.filter((m: any) => !getTimeframeGroup(m.timeframe));
+                  if (otherMedia.length === 0) return null;
+                  return (
+                    <div className="space-y-3">
+                      <h4 className="text-sm font-medium text-muted-foreground">Other / Unspecified</h4>
+                      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2">
+                        {otherMedia.map((m: any) => {
+                          const isVideo = m.kind === "video";
+                          return (
+                            <div key={m.id}>
+                              <button
+                                onClick={() => {
+                                  if (isVideo) return;
+                                  const imgIdx = images.findIndex((im: any) => im.id === m.id);
+                                  if (imgIdx >= 0) {
+                                    setViewerIndex(imgIdx);
+                                    setViewerOpen(true);
+                                  }
+                                }}
+                                className="aspect-video rounded-md border border-border overflow-hidden bg-muted hover:opacity-80 transition-opacity text-left w-full"
+                              >
+                                {isVideo && m.url ? (
+                                  <video src={m.url} className="w-full h-full object-cover" preload="metadata" controls />
+                                ) : (
+                                  <img src={m.url || `/api/media/file?token=placeholder`} alt={m.caption || "Evidence"} className="w-full h-full object-cover" />
+                                )}
+                              </button>
+                              {m.caption && (
+                                <p className="text-xs text-muted-foreground mt-1 line-clamp-2">{m.caption}</p>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  );
+                })()}
               </div>
             )}
           </Card>

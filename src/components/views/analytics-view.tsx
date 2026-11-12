@@ -51,11 +51,15 @@ import {
   Calendar,
   CheckCircle2,
   XCircle,
+  Compass,
+  Gauge,
+  Timer,
 } from "lucide-react";
 
 const TABS = [
   { key: "overall", label: "Overall Metrics" },
-  { key: "setup", label: "By Setup & Account" },
+  { key: "instruments", label: "By Instrument" },
+  { key: "setup", label: "By Setup & Strategy" },
   { key: "checklist", label: "Checklist Adherence" },
   { key: "violations", label: "Rule Violations" },
   { key: "sessions", label: "Sessions & Weekdays" },
@@ -66,6 +70,7 @@ type TabKey = (typeof TABS)[number]["key"];
 /** Maps each tab to the analytics API dimension it needs. */
 const TAB_DIMENSION: Record<TabKey, string> = {
   overall: "overview",
+  instruments: "instrument",
   setup: "strategy",
   checklist: "strategy",
   violations: "behavior",
@@ -95,7 +100,7 @@ async function fetchAccountsList() {
 
 export function AnalyticsView() {
   const [tab, setTab] = useState<TabKey>("overall");
-  const { params, setParams } = useNav();
+  const { params, setParams, navigate } = useNav();
   const accountId = params.accountId || "all";
   function setAccountId(v: string) {
     setParams({ accountId: v === "all" ? "" : v });
@@ -133,7 +138,7 @@ export function AnalyticsView() {
               Analytics Engine
             </h1>
             <p className="text-sm text-muted-foreground mt-1">
-              Decompose your performance by setup, behavior, session, and time.
+              Decompose your performance by setup, instrument, behavior, session, and time.
             </p>
           </div>
           <div className="w-full sm:w-64">
@@ -143,7 +148,7 @@ export function AnalyticsView() {
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">All Accounts</SelectItem>
-                {(Array.isArray(accountsData) ? accountsData : (accountsData?.items ?? [])).map((a: any) => (
+                {(Array.isArray(accountsData) ? accountsData : ((accountsData as any)?.items ?? [])).map((a: any) => (
                   <SelectItem key={a.id} value={a.id}>
                     {a.name}
                   </SelectItem>
@@ -177,7 +182,22 @@ export function AnalyticsView() {
             {loading ? (
               <AnalyticsSkeleton />
             ) : (
-              <OverallMetrics aggregate={data?.aggregate} />
+              <OverallMetrics
+                aggregate={data?.aggregate}
+                holdingDuration={data?.holdingDuration}
+                excursion={data?.excursion}
+              />
+            )}
+          </TabsContent>
+
+          <TabsContent value="instruments" className="mt-6 focus-visible:outline-none">
+            {loading ? (
+              <AnalyticsSkeleton />
+            ) : (
+              <InstrumentBreakdown
+                items={(data as any)?.items ?? []}
+                onSelectSymbol={(sym) => navigate("tradesLog", { symbol: sym })}
+              />
             )}
           </TabsContent>
 
@@ -185,7 +205,10 @@ export function AnalyticsView() {
             {loading ? (
               <AnalyticsSkeleton />
             ) : (
-              <SetupBreakdown items={(data as any)?.items ?? []} />
+              <SetupBreakdown
+                items={(data as any)?.items ?? []}
+                onSelectStrategy={(stratId) => navigate("tradesLog", { strategyId: stratId })}
+              />
             )}
           </TabsContent>
 
@@ -201,7 +224,10 @@ export function AnalyticsView() {
             {loading ? (
               <AnalyticsSkeleton />
             ) : (
-              <RuleViolations items={(data as any)?.items ?? []} />
+              <RuleViolations
+                items={(data as any)?.items ?? []}
+                onSelectRule={(flag) => navigate("tradesLog", { search: flag })}
+              />
             )}
           </TabsContent>
 
@@ -223,10 +249,44 @@ export function AnalyticsView() {
 }
 
 // ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+function formatDurationMinutes(mins: number | null | undefined): string {
+  if (mins == null || mins <= 0) return "—";
+  if (mins < 60) return `${mins}m`;
+  const hrs = Math.floor(mins / 60);
+  const remainingMins = mins % 60;
+  if (hrs < 24) {
+    return remainingMins > 0 ? `${hrs}h ${remainingMins}m` : `${hrs}h`;
+  }
+  const days = Math.floor(hrs / 24);
+  const remHrs = hrs % 24;
+  return remHrs > 0 ? `${days}d ${remHrs}h` : `${days}d`;
+}
+
+// ---------------------------------------------------------------------------
 // Tab 1 — Overall Metrics
 // ---------------------------------------------------------------------------
 
-function OverallMetrics({ aggregate: m }: { aggregate: any }) {
+function OverallMetrics({
+  aggregate: m,
+  holdingDuration,
+  excursion,
+}: {
+  aggregate: any;
+  holdingDuration?: {
+    avgAllMinutes: number | null;
+    avgWinMinutes: number | null;
+    avgLossMinutes: number | null;
+  };
+  excursion?: {
+    avgMfeR: string | null;
+    avgMaeR: string | null;
+    avgProfitRetentionPct: number | null;
+    tradesWithExcursionCount: number;
+  };
+}) {
   if (!m || m.totalTrades === 0) {
     return <NoDataState message="Your analytics will appear here once you have closed trades." />;
   }
@@ -257,7 +317,7 @@ function OverallMetrics({ aggregate: m }: { aggregate: any }) {
         />
         <BigMetric
           label="Expectancy"
-          value={formatR(m.expectancyR)}
+          value={m.expectancyR ? `${formatR(m.expectancyR)} / trade` : "N/A"}
           tone={expectancy != null && expectancy > 0 ? "profit" : "loss"}
           icon={TrendingUp}
         />
@@ -279,29 +339,96 @@ function OverallMetrics({ aggregate: m }: { aggregate: any }) {
           />
           <DistributionMetric
             label="Largest Win"
-            value={formatSignedCents(m.largestWinCents).text}
+            value={m.largestWinCents != null ? formatSignedCents(m.largestWinCents).text : "N/A"}
             tone="profit"
           />
           <DistributionMetric
             label="Largest Loss"
-            value={formatSignedCents(m.largestLossCents).text}
+            value={m.largestLossCents != null ? formatSignedCents(m.largestLossCents).text : "N/A"}
             tone="loss"
           />
         </div>
       </Card>
 
-      {/* Secondary metrics — full overview grid */}
+      {/* Execution & Streak Statistics */}
       <Card>
-        <SectionHeading>Full Overview</SectionHeading>
+        <SectionHeading>Execution & Streak Statistics</SectionHeading>
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4 mt-4">
           <DistributionMetric label="Net P&L" value={formatSignedCents(m.netPnlCents).text} tone={m.netPnlCents >= 0 ? "profit" : "loss"} />
-          <DistributionMetric label="Avg P&L" value={m.avgPnlCents != null ? formatSignedCents(m.avgPnlCents).text : "N/A"} tone={(m.avgPnlCents ?? 0) >= 0 ? "profit" : "loss"} />
+          <DistributionMetric label="Expectancy ($)" value={m.expectancyCents != null ? formatSignedCents(m.expectancyCents).text : "N/A"} tone={(m.expectancyCents ?? 0) >= 0 ? "profit" : "loss"} />
           <DistributionMetric label="Avg R" value={formatR(m.avgR)} tone={m.avgR && dToNumber(m.avgR) > 0 ? "profit" : "loss"} />
+          <DistributionMetric label="Total R" value={formatR(m.totalR)} tone={m.totalR && dToNumber(m.totalR) > 0 ? "profit" : "loss"} />
           <DistributionMetric label="Wins / Losses / BE" value={`${m.wins} / ${m.losses} / ${m.breakevens}`} />
-          <DistributionMetric label="Win Streak" value={String(m.consecutiveWins ?? 0)} tone="profit" />
-          <DistributionMetric label="Loss Streak" value={String(m.consecutiveLosses ?? 0)} tone="loss" />
-          <DistributionMetric label="Max Drawdown" value={formatSignedCents(-Math.abs(m.maxDrawdownCents ?? 0)).text} tone="loss" />
-          <DistributionMetric label="Total Trades" value={String(m.totalTrades ?? 0)} />
+          <DistributionMetric
+            label="Win Streak"
+            value={`${m.currentWinStreak ?? 0} (Max ${m.maxWinStreak ?? 0})`}
+            tone="profit"
+          />
+          <DistributionMetric
+            label="Loss Streak"
+            value={`${m.currentLossStreak ?? 0} (Max ${m.maxLossStreak ?? 0})`}
+            tone="loss"
+          />
+          <DistributionMetric
+            label="Max Drawdown"
+            value={m.maxDrawdownCents != null ? formatSignedCents(-Math.abs(m.maxDrawdownCents)).text : "N/A"}
+            tone="loss"
+          />
+        </div>
+      </Card>
+
+      {/* Trade Duration & Holding Time Analysis */}
+      <Card>
+        <div className="flex items-center justify-between">
+          <SectionHeading>Trade Duration & Holding Time Analysis</SectionHeading>
+          <Timer className="h-4 w-4 text-muted-foreground" />
+        </div>
+        <p className="text-xs text-muted-foreground mt-1">
+          Measure how long positions are held to identify behavioral disparities between winners and losers.
+        </p>
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mt-4">
+          <DistributionMetric
+            label="Avg Hold Time (All Trades)"
+            value={formatDurationMinutes(holdingDuration?.avgAllMinutes)}
+          />
+          <DistributionMetric
+            label="Avg Win Hold Time"
+            value={formatDurationMinutes(holdingDuration?.avgWinMinutes)}
+            tone="profit"
+          />
+          <DistributionMetric
+            label="Avg Loss Hold Time"
+            value={formatDurationMinutes(holdingDuration?.avgLossMinutes)}
+            tone="loss"
+          />
+        </div>
+      </Card>
+
+      {/* Excursion & Execution Efficiency (MAE / MFE) */}
+      <Card>
+        <div className="flex items-center justify-between">
+          <SectionHeading>Excursion & Execution Efficiency (MAE / MFE)</SectionHeading>
+          <Gauge className="h-4 w-4 text-muted-foreground" />
+        </div>
+        <p className="text-xs text-muted-foreground mt-1">
+          Maximum Favorable Excursion (MFE) and Maximum Adverse Excursion (MAE) track peak unrealized gains and drawdowns during trade life.
+        </p>
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mt-4">
+          <DistributionMetric
+            label="Avg MFE (Peak Potential)"
+            value={excursion?.avgMfeR ? `${excursion.avgMfeR} R` : "—"}
+            tone="profit"
+          />
+          <DistributionMetric
+            label="Avg MAE (Peak Drawdown)"
+            value={excursion?.avgMaeR ? `${excursion.avgMaeR} R` : "—"}
+            tone="loss"
+          />
+          <DistributionMetric
+            label="Avg Profit Retention"
+            value={excursion?.avgProfitRetentionPct != null ? `${excursion.avgProfitRetentionPct}%` : "—"}
+            tone={excursion?.avgProfitRetentionPct && excursion.avgProfitRetentionPct >= 70 ? "profit" : "neutral"}
+          />
         </div>
       </Card>
     </div>
@@ -385,10 +512,111 @@ function DistributionMetric({
 }
 
 // ---------------------------------------------------------------------------
-// Tab 2 — By Setup & Account
+// Tab 2 — By Instrument
 // ---------------------------------------------------------------------------
 
-function SetupBreakdown({ items }: { items: any[] }) {
+function InstrumentBreakdown({
+  items,
+  onSelectSymbol,
+}: {
+  items: any[];
+  onSelectSymbol: (symbol: string) => void;
+}) {
+  if (items.length === 0) {
+    return <NoDataState message="No instrument data recorded yet. Log trades to see instrument rankings and edge." />;
+  }
+
+  return (
+    <div className="space-y-6">
+      <Card>
+        <SectionHeading>Avg R by Instrument</SectionHeading>
+        <div className="mt-4">
+          <GroupBarChart
+            data={items.map((s) => ({
+              label: s.label,
+              value: dToNumber(s.avgR),
+              count: s.trades,
+            }))}
+            valueLabel="Avg R"
+          />
+        </div>
+      </Card>
+
+      <Card>
+        <div className="flex items-center justify-between">
+          <SectionHeading>Instrument Performance Rankings</SectionHeading>
+          <span className="text-[10px] uppercase font-mono text-muted-foreground">Click row to filter trades</span>
+        </div>
+        <div className="overflow-x-auto mt-4 -mx-2">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="text-[10px] uppercase tracking-wide text-muted-foreground font-semibold border-b border-border">
+                <th className="px-3 py-2 text-left">Instrument</th>
+                <th className="px-3 py-2 text-right">Trades</th>
+                <th className="px-3 py-2 text-right">Wins</th>
+                <th className="px-3 py-2 text-right">Win Rate</th>
+                <th className="px-3 py-2 text-right">Avg R</th>
+                <th className="px-3 py-2 text-right">Expectancy</th>
+                <th className="px-3 py-2 text-right">Net P&amp;L</th>
+              </tr>
+            </thead>
+            <tbody>
+              {items.map((s, i) => {
+                const avgR = s.avgR ? dToNumber(s.avgR) : 0;
+                return (
+                  <tr
+                    key={i}
+                    onClick={() => onSelectSymbol(s.key)}
+                    className="border-b border-border last:border-0 hover:bg-muted/40 cursor-pointer transition-colors"
+                  >
+                    <td className="px-3 py-3 font-semibold text-foreground">{s.label}</td>
+                    <td className="px-3 py-3 text-right font-mono text-foreground">{s.trades}</td>
+                    <td className="px-3 py-3 text-right font-mono text-foreground">{s.wins}</td>
+                    <td className="px-3 py-3 text-right font-mono text-foreground">
+                      {s.winRate ? formatPct(s.winRate) : "N/A"}
+                    </td>
+                    <td
+                      className={cn(
+                        "px-3 py-3 text-right font-mono font-medium",
+                        avgR > 0 ? "text-profit" : avgR < 0 ? "text-loss" : "text-foreground",
+                      )}
+                    >
+                      {formatR(s.avgR)}
+                    </td>
+                    <td className="px-3 py-3 text-right font-mono text-foreground">
+                      {formatR(s.expectancyR)}
+                      {s.expectancyCents != null ? ` (${formatSignedCents(s.expectancyCents).text})` : ""}
+                    </td>
+                    <td
+                      className={cn(
+                        "px-3 py-3 text-right font-mono font-semibold",
+                        s.pnlCents > 0 ? "text-profit" : s.pnlCents < 0 ? "text-loss" : "text-foreground",
+                      )}
+                    >
+                      {formatSignedCents(s.pnlCents).text}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      </Card>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Tab 3 — By Setup & Strategy
+// ---------------------------------------------------------------------------
+
+function SetupBreakdown({
+  items,
+  onSelectStrategy,
+}: {
+  items: any[];
+  onSelectStrategy: (strategyId: string) => void;
+}) {
   if (items.length === 0) {
     return <NoDataState message="No setups recorded yet. Tag your trades with a setup to see breakdowns here." />;
   }
@@ -408,7 +636,10 @@ function SetupBreakdown({ items }: { items: any[] }) {
         </div>
       </Card>
       <Card>
-        <SectionHeading>Setup Performance</SectionHeading>
+        <div className="flex items-center justify-between">
+          <SectionHeading>Setup Performance &amp; Expectancy</SectionHeading>
+          <span className="text-[10px] uppercase font-mono text-muted-foreground">Click row to filter trades</span>
+        </div>
         <div className="overflow-x-auto mt-4 -mx-2">
           <table className="w-full text-sm">
             <thead>
@@ -418,31 +649,40 @@ function SetupBreakdown({ items }: { items: any[] }) {
                 <th className="px-3 py-2 text-right">Wins</th>
                 <th className="px-3 py-2 text-right">Win Rate</th>
                 <th className="px-3 py-2 text-right">Avg R</th>
-                <th className="px-3 py-2 text-right">Net P&L</th>
+                <th className="px-3 py-2 text-right">Expectancy</th>
+                <th className="px-3 py-2 text-right">Net P&amp;L</th>
               </tr>
             </thead>
             <tbody>
               {items.map((s, i) => {
                 const avgR = s.avgR ? dToNumber(s.avgR) : 0;
                 return (
-                  <tr key={i} className="border-b border-border last:border-0">
+                  <tr
+                    key={i}
+                    onClick={() => onSelectStrategy(s.key)}
+                    className="border-b border-border last:border-0 hover:bg-muted/40 cursor-pointer transition-colors"
+                  >
                     <td className="px-3 py-3 font-medium text-foreground">{s.label}</td>
-                    <td className="px-3 py-3 text-right tabular-nums text-foreground">{s.trades}</td>
-                    <td className="px-3 py-3 text-right tabular-nums text-foreground">{s.wins}</td>
-                    <td className="px-3 py-3 text-right tabular-nums text-foreground">
+                    <td className="px-3 py-3 text-right font-mono text-foreground">{s.trades}</td>
+                    <td className="px-3 py-3 text-right font-mono text-foreground">{s.wins}</td>
+                    <td className="px-3 py-3 text-right font-mono text-foreground">
                       {s.winRate ? formatPct(s.winRate) : "N/A"}
                     </td>
                     <td
                       className={cn(
-                        "px-3 py-3 text-right tabular-nums font-medium",
+                        "px-3 py-3 text-right font-mono font-medium",
                         avgR > 0 ? "text-profit" : avgR < 0 ? "text-loss" : "text-foreground",
                       )}
                     >
                       {formatR(s.avgR)}
                     </td>
+                    <td className="px-3 py-3 text-right font-mono text-foreground">
+                      {formatR(s.expectancyR)}
+                      {s.expectancyCents != null ? ` (${formatSignedCents(s.expectancyCents).text})` : ""}
+                    </td>
                     <td
                       className={cn(
-                        "px-3 py-3 text-right tabular-nums font-medium",
+                        "px-3 py-3 text-right font-mono font-medium",
                         s.pnlCents > 0 ? "text-profit" : s.pnlCents < 0 ? "text-loss" : "text-foreground",
                       )}
                     >
@@ -556,10 +796,16 @@ function ChecklistAdherence({ items }: { items: any[] }) {
 }
 
 // ---------------------------------------------------------------------------
-// Tab 4 — Rule Violations
+// Tab 5 — Rule Violations
 // ---------------------------------------------------------------------------
 
-function RuleViolations({ items }: { items: any[] }) {
+function RuleViolations({
+  items,
+  onSelectRule,
+}: {
+  items: any[];
+  onSelectRule: (ruleKey: string) => void;
+}) {
   if (items.length === 0) {
     return (
       <NoDataState
@@ -576,7 +822,10 @@ function RuleViolations({ items }: { items: any[] }) {
   return (
     <div className="space-y-6">
       <Card>
-        <SectionHeading>Most-Violated Rules</SectionHeading>
+        <div className="flex items-center justify-between">
+          <SectionHeading>Most-Violated Rules</SectionHeading>
+          <span className="text-[10px] uppercase font-mono text-muted-foreground">Click card to filter trades</span>
+        </div>
         <p className="text-xs text-muted-foreground mt-1">
           Behavior flags recorded on your trades, ranked by frequency. Each flag represents a rule break that impacted the trade's outcome.
         </p>
@@ -584,7 +833,11 @@ function RuleViolations({ items }: { items: any[] }) {
           {sorted.map((s, i) => {
             const avgR = s.avgR ? dToNumber(s.avgR) : 0;
             return (
-              <div key={i} className="rounded-lg border border-border p-4">
+              <div
+                key={i}
+                onClick={() => onSelectRule(s.key)}
+                className="rounded-lg border border-border p-4 hover:bg-muted/40 cursor-pointer transition-colors"
+              >
                 <div className="flex items-start justify-between gap-3">
                   <div className="flex items-start gap-3 min-w-0">
                     <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-red-50 border border-red-200">

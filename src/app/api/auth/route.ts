@@ -19,10 +19,10 @@ const SignUpSchema = z.object({
   password: z.string().min(8).max(128),
   name: z.string().min(1).max(80).optional(),
   agreeTerms: z.literal(true, {
-    errorMap: () => ({ message: "You must agree to the Terms of Service." }),
+    message: "You must agree to the Terms of Service.",
   }),
   acknowledgePrivacy: z.literal(true, {
-    errorMap: () => ({ message: "You must acknowledge the Privacy Policy." }),
+    message: "You must acknowledge the Privacy Policy.",
   }),
   // Versions are informational — we always pin to CURRENT_VERSIONS on the
   // server, so a client cannot claim to have accepted a different version.

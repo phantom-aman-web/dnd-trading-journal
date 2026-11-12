@@ -19,6 +19,7 @@ import { cn } from "@/lib/utils";
 import { formatSignedCents, formatR } from "@/lib/money";
 import { dToNumber } from "@/lib/decimal";
 import { useQueryClient } from "@tanstack/react-query";
+import { resolveInstrument } from "@/lib/instrument-catalog";
 
 interface CloseTradeModalProps {
   tradeId: string | null;
@@ -120,10 +121,12 @@ export function CloseTradeModal({ tradeId, onClose }: CloseTradeModalProps) {
     const remainingAfter = remainingBefore - qty;
     const isFullClose = remainingAfter <= 0.0001;
 
-    // Estimated P&L for this exit portion
+    // Estimated P&L for this exit portion (respects instrument economics)
     const direction = trade.direction === "long" ? 1 : -1;
     const priceDiff = (exPrice - parseFloat(entryPrice || "0")) * direction;
-    const estimatedPnl = priceDiff * qty;
+    const instr = resolveInstrument(trade.instrumentSymbol);
+    const pointMultiplier = (instr?.pointValueCents ?? 100) / 100;
+    const estimatedPnl = priceDiff * qty * pointMultiplier;
 
     // Estimated R
     const riskAmount = trade.plannedRiskAmountCents ?? 0;

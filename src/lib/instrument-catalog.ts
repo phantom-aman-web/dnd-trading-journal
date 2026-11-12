@@ -380,6 +380,102 @@ export const INSTRUMENT_CATALOG: InstrumentDef[] = [
     contractSize: "100",
     pointValueCents: 10000, // $100 per $1 move per contract
   },
+  // MGC: $10 per $1 move per contract (10 oz)
+  {
+    symbol: "MGC",
+    displayName: "Micro Gold Futures (COMEX)",
+    market: "futures",
+    category: "Metal Futures",
+    pricePrecision: 1,
+    pipSize: "0.1",
+    tickSize: "0.1",
+    contractSize: "10",
+    pointValueCents: 1000, // $10 per $1 move per contract
+  },
+  // SI: $5,000 per $1 move per 5,000 oz contract
+  {
+    symbol: "SI",
+    displayName: "Silver Futures (COMEX)",
+    market: "futures",
+    category: "Metal Futures",
+    pricePrecision: 3,
+    pipSize: "0.005",
+    tickSize: "0.005",
+    contractSize: "5000",
+    pointValueCents: 500000, // $5,000 per $1 move per contract
+  },
+  // SIL: $1,000 per $1 move per 1,000 oz contract
+  {
+    symbol: "SIL",
+    displayName: "Micro Silver Futures (COMEX)",
+    market: "futures",
+    category: "Metal Futures",
+    pricePrecision: 3,
+    pipSize: "0.005",
+    tickSize: "0.005",
+    contractSize: "1000",
+    pointValueCents: 100000, // $1,000 per $1 move per contract
+  },
+  // MNQ: $2 per point per contract
+  {
+    symbol: "MNQ",
+    displayName: "Micro E-mini Nasdaq 100 Futures",
+    market: "futures",
+    category: "Equity Index Futures",
+    pricePrecision: 2,
+    pipSize: "0.25",
+    tickSize: "0.25",
+    contractSize: "2",
+    pointValueCents: 200, // $2 per point per contract
+  },
+  // MES: $5 per point per contract
+  {
+    symbol: "MES",
+    displayName: "Micro E-mini S&P 500 Futures",
+    market: "futures",
+    category: "Equity Index Futures",
+    pricePrecision: 2,
+    pipSize: "0.25",
+    tickSize: "0.25",
+    contractSize: "5",
+    pointValueCents: 500, // $5 per point per contract
+  },
+  // MYM: $0.50 per point per contract
+  {
+    symbol: "MYM",
+    displayName: "Micro E-mini Dow Futures",
+    market: "futures",
+    category: "Equity Index Futures",
+    pricePrecision: 0,
+    pipSize: "1",
+    tickSize: "1",
+    contractSize: "0.5",
+    pointValueCents: 50, // $0.50 per point per contract
+  },
+  // RTY: $50 per point per contract
+  {
+    symbol: "RTY",
+    displayName: "E-mini Russell 2000 Futures",
+    market: "futures",
+    category: "Equity Index Futures",
+    pricePrecision: 1,
+    pipSize: "0.1",
+    tickSize: "0.1",
+    contractSize: "50",
+    pointValueCents: 5000, // $50 per point per contract
+  },
+  // M2K: $5 per point per contract
+  {
+    symbol: "M2K",
+    displayName: "Micro E-mini Russell 2000 Futures",
+    market: "futures",
+    category: "Equity Index Futures",
+    pricePrecision: 1,
+    pipSize: "0.1",
+    tickSize: "0.1",
+    contractSize: "5",
+    pointValueCents: 500, // $5 per point per contract
+  },
 
   /* ── Crypto ───────────────────────────────────────────────────── */
   // Crypto: 1:1 with price ($1 per $1 move per 1 unit)
@@ -405,6 +501,17 @@ export const INSTRUMENT_CATALOG: InstrumentDef[] = [
     contractSize: "1",
     pointValueCents: 100, // $1 per $1 move per 1 ETH
   },
+  {
+    symbol: "SOLUSD",
+    displayName: "Solana / US Dollar",
+    market: "crypto",
+    category: "Crypto",
+    pricePrecision: 2,
+    pipSize: "0.01",
+    tickSize: "0.01",
+    contractSize: "1",
+    pointValueCents: 100, // $1 per $1 move per 1 SOL
+  },
 ];
 
 /* ------------------------------------------------------------------ */
@@ -419,9 +526,36 @@ const CATALOG_BY_SYMBOL: ReadonlyMap<string, InstrumentDef> = new Map(
 /* Helpers                                                             */
 /* ------------------------------------------------------------------ */
 
+const SYMBOL_ALIASES: Record<string, string> = {
+  GOLD: "XAUUSD",
+  SILVER: "XAGUSD",
+  US100: "NAS100",
+  USTEC: "NAS100",
+  NASDAQ: "NAS100",
+  US500: "SPX500",
+  SPX: "SPX500",
+  DJ30: "US30",
+  WS30: "US30",
+  DOW: "US30",
+  DE40: "GER40",
+  DAX: "GER40",
+  DAX40: "GER40",
+  FTSE: "UK100",
+  FTSE100: "UK100",
+  BTCUSDT: "BTCUSD",
+  XBTUSD: "BTCUSD",
+  ETHUSDT: "ETHUSD",
+  SOLUSDT: "SOLUSD",
+};
+
 export function normalizeSymbol(symbol: string | null | undefined): string {
   if (symbol == null) return "";
-  return String(symbol).trim().toUpperCase();
+  let clean = String(symbol).trim().toUpperCase();
+  // Strip slashes, dots, underscores, dashes (e.g. "EUR/USD" -> "EURUSD")
+  clean = clean.replace(/[\/\-_]/g, "");
+  // Strip common broker suffixes
+  clean = clean.replace(/\.(PRO|RAW|M|CASH|ECN)$/i, "");
+  return SYMBOL_ALIASES[clean] ?? clean;
 }
 
 export function findInstrument(

@@ -1497,9 +1497,10 @@ export interface GroupBreakdown {
   label: string;
   trades: number;
   wins: number;
-  winRate: Decimal | null;
-  avgR: Decimal | null;
-  expectancyR: Decimal | null;
+  winRate: string | null;
+  avgR: string | null;
+  expectancyR: string | null;
+  expectancyCents?: number | null;
   pnlCents: number;
 }
 
@@ -1526,6 +1527,7 @@ export function groupBy<T extends TradeMetricRow>(
       winRate: m.winRate,
       avgR: m.avgR,
       expectancyR: m.expectancyR,
+      expectancyCents: m.expectancyCents,
       pnlCents: m.netPnlCents,
     };
   }).sort((a, b) => b.trades - a.trades);

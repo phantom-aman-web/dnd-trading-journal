@@ -49,8 +49,13 @@ const BASE_COMMANDS: CommandEntry[] = [
   { id: "backup", label: "Open Backup / Restore", view: "backup", icon: DatabaseBackup, keywords: ["backup", "restore", "export", "import", "json"] },
 ];
 
-async function fetchTradesForSearch() {
-  const res = await fetch("/api/trades?limit=200", { cache: "no-store" });
+async function fetchTradesForSearch(searchQuery: string) {
+  const qs = new URLSearchParams();
+  qs.set("limit", "50");
+  if (searchQuery.trim()) {
+    qs.set("search", searchQuery.trim());
+  }
+  const res = await fetch(`/api/trades?${qs.toString()}`, { cache: "no-store" });
   if (!res.ok) return [];
   const data = await res.json();
   return data.items ?? [];
@@ -60,10 +65,10 @@ export function CommandPalette() {
   const { commandOpen, setCommandOpen, navigate } = useNav();
   const [query, setQuery] = useState("");
 
-  // Fetch trades for search (only when palette is open)
+  // Fetch trades with server-side query (only when palette is open)
   const { data: trades } = useQuery({
-    queryKey: ["trades-search"],
-    queryFn: fetchTradesForSearch,
+    queryKey: ["trades-search", query.trim()],
+    queryFn: () => fetchTradesForSearch(query),
     enabled: commandOpen,
   });
 

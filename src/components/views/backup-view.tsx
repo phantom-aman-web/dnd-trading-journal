@@ -23,20 +23,74 @@ import { useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Badge } from "@/components/ui/badge";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { toast } from "sonner";
 import {
   Download,
   Upload,
   Database,
   FileJson,
+  FileSpreadsheet,
   Loader2,
   CheckCircle2,
+  AlertTriangle,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+
+const DND_FIELDS = [
+  { key: "instrumentSymbol", label: "Instrument / Symbol", required: true },
+  { key: "direction", label: "Direction (Long / Short)", required: true },
+  { key: "entryPrice", label: "Entry Price", required: true },
+  { key: "exitPrice", label: "Exit Price", required: false },
+  { key: "entryTime", label: "Entry Date & Time", required: false },
+  { key: "exitTime", label: "Exit Date & Time", required: false },
+  { key: "quantity", label: "Position Size / Lots", required: false },
+  { key: "stopPrice", label: "Stop Loss Price", required: false },
+  { key: "targetPrice", label: "Take Profit Price", required: false },
+  { key: "feesCents", label: "Fees / Commission", required: false },
+  { key: "session", label: "Session", required: false },
+];
+
+function autoMapHeaders(headers: string[]): Record<string, string> {
+  const map: Record<string, string> = {};
+  for (const h of headers) {
+    const lower = h.toLowerCase().trim();
+    if (lower.includes("symbol") || lower.includes("pair") || lower.includes("ticker") || lower === "item") {
+      map[h] = "instrumentSymbol";
+    } else if (lower.includes("direction") || lower.includes("type") || lower.includes("side") || lower === "cmd") {
+      map[h] = "direction";
+    } else if (lower.includes("open price") || lower.includes("entry price") || lower === "open" || lower === "entry") {
+      map[h] = "entryPrice";
+    } else if (lower.includes("close price") || lower.includes("exit price") || lower === "close" || lower === "exit") {
+      map[h] = "exitPrice";
+    } else if (lower.includes("open time") || lower.includes("entry time") || lower === "date" || lower === "time") {
+      map[h] = "entryTime";
+    } else if (lower.includes("close time") || lower.includes("exit time")) {
+      map[h] = "exitTime";
+    } else if (lower.includes("volume") || lower.includes("size") || lower.includes("lot") || lower.includes("qty")) {
+      map[h] = "quantity";
+    } else if (lower.includes("stop") || lower === "sl") {
+      map[h] = "stopPrice";
+    } else if (lower.includes("target") || lower === "tp") {
+      map[h] = "targetPrice";
+    } else if (lower.includes("fee") || lower.includes("commission") || lower.includes("swap")) {
+      map[h] = "feesCents";
+    }
+  }
+  return map;
+}
 
 export function BackupView() {
   const qc = useQueryClient();
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const csvInputRef = useRef<HTMLInputElement>(null);
   const [exporting, setExporting] = useState(false);
   const [importing, setImporting] = useState(false);
   const [demoLoading, setDemoLoading] = useState(false);
@@ -45,6 +99,26 @@ export function BackupView() {
     strategies: number;
     trades: number;
   } | null>(null);
+
+  // CSV Import state
+  const [csvUploading, setCsvUploading] = useState(false);
+  const [csvValidating, setCsvValidating] = useState(false);
+  const [csvImporting, setCsvImporting] = useState(false);
+  const [activeImport, setActiveImport] = useState<{
+    id: string;
+    filename: string;
+    rowCount: number;
+    headers: string[];
+    sampleRows: Record<string, string>[];
+  } | null>(null);
+  const [columnMapping, setColumnMapping] = useState<Record<string, string>>({});
+  const [validationResult, setValidationResult] = useState<{
+    valid: number;
+    invalid: number;
+    duplicates: number;
+    issues: string[];
+  } | null>(null);
+  const [csvImportResult, setCsvImportResult] = useState<{ imported: number } | null>(null);
 
   // --- Export -------------------------------------------------------------
   async function handleExport() {
@@ -251,6 +325,97 @@ export function BackupView() {
     } finally {
       setImporting(false);
       if (fileInputRef.current) fileInputRef.current.value = "";
+    }
+  }
+
+  // --- CSV Import with Column Mapping & Duplicate Detection ----------------
+  async function handleSelectCsv(file: File) {
+    setCsvUploading(true);
+    setValidationResult(null);
+    setCsvImportResult(null);
+    try {
+      const content = await file.text();
+      const res = await fetch("/api/imports", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          filename: file.name,
+          source: "csv",
+          content,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        toast.error(data?.error ?? "Failed to upload CSV file.");
+        return;
+      }
+      let summary: any = {};
+      try { summary = JSON.parse(data.summaryJson); } catch {}
+      const headers = summary.headers ?? [];
+      const sampleRows = summary.sampleRows ?? [];
+      setActiveImport({
+        id: data.id,
+        filename: data.filename,
+        rowCount: data.rowCount,
+        headers,
+        sampleRows,
+      });
+      setColumnMapping(autoMapHeaders(headers));
+      toast.success(`Uploaded ${file.name} (${data.rowCount} rows detected).`);
+    } catch {
+      toast.error("Network error uploading CSV.");
+    } finally {
+      setCsvUploading(false);
+    }
+  }
+
+  async function handleValidateMapping() {
+    if (!activeImport) return;
+    setCsvValidating(true);
+    try {
+      const res = await fetch(`/api/imports/${activeImport.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "map", mapping: columnMapping }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        toast.error(data?.error ?? "Validation failed.");
+        return;
+      }
+      setValidationResult(data);
+      toast.info(`Validation: ${data.valid} valid, ${data.duplicates} duplicates, ${data.invalid} invalid.`);
+    } catch {
+      toast.error("Network error during validation.");
+    } finally {
+      setCsvValidating(false);
+    }
+  }
+
+  async function handleConfirmCsvImport() {
+    if (!activeImport) return;
+    setCsvImporting(true);
+    try {
+      const res = await fetch(`/api/imports/${activeImport.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "confirm" }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        toast.error(data?.error ?? "Failed to import trades.");
+        return;
+      }
+      setCsvImportResult(data);
+      toast.success(`Successfully imported ${data.imported} trades!`);
+      qc.invalidateQueries({ queryKey: ["trades"] });
+      qc.invalidateQueries({ queryKey: ["dashboard"] });
+      qc.invalidateQueries({ queryKey: ["accounts"] });
+      qc.invalidateQueries({ queryKey: ["analytics"] });
+    } catch {
+      toast.error("Network error during trade import.");
+    } finally {
+      setCsvImporting(false);
     }
   }
 
@@ -473,7 +638,207 @@ export function BackupView() {
           </div>
         </BackupCard>
 
-        {/* Card 3 — Demo Data Generator */}
+        {/* Card 3 — Import Broker Trades (CSV) */}
+        <BackupCard>
+          <div className="flex items-start gap-4">
+            <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-emerald-600 dark:text-emerald-400">
+              <FileSpreadsheet className="h-5 w-5" />
+            </div>
+            <div className="min-w-0 flex-1 space-y-4">
+              <div>
+                <SectionHeading>Import Broker Trades (CSV)</SectionHeading>
+                <p className="text-sm text-muted-foreground mt-1">
+                  Upload CSV trade histories from MetaTrader (MT4/MT5), TradingView, cTrader, or custom brokers. Map columns visually and inspect duplicate detection before importing.
+                </p>
+              </div>
+
+              {/* Hidden file input */}
+              <input
+                ref={csvInputRef}
+                type="file"
+                accept=".csv,text/csv"
+                className="sr-only"
+                onChange={(e) => {
+                  const f = e.target.files?.[0];
+                  if (f) handleSelectCsv(f);
+                }}
+              />
+
+              {!activeImport ? (
+                <div>
+                  <Button
+                    variant="outline"
+                    onClick={() => csvInputRef.current?.click()}
+                    disabled={csvUploading}
+                    className="border-input text-foreground hover:bg-muted/50 rounded-lg flex items-center gap-2"
+                  >
+                    {csvUploading ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <Upload className="h-4 w-4" />
+                    )}
+                    Select Broker CSV File
+                  </Button>
+                </div>
+              ) : (
+                <div className="space-y-4 pt-2 border-t border-border">
+                  {/* File status */}
+                  <div className="flex items-center justify-between text-xs font-mono">
+                    <span className="font-semibold text-foreground">{activeImport.filename}</span>
+                    <span className="text-muted-foreground">{activeImport.rowCount} rows detected</span>
+                  </div>
+
+                  {/* Column Mapper */}
+                  <div className="space-y-2">
+                    <div className="text-xs font-medium text-foreground">Column Mapping</div>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
+                      {DND_FIELDS.map((field) => {
+                        const currentMappedCol = Object.entries(columnMapping).find(
+                          ([_, val]) => val === field.key,
+                        )?.[0] ?? "none";
+
+                        return (
+                          <div
+                            key={field.key}
+                            className="flex items-center justify-between gap-2 p-2 rounded-lg bg-muted/40 border border-border"
+                          >
+                            <span className="font-medium text-foreground truncate">
+                              {field.label} {field.required && <span className="text-rose-500">*</span>}
+                            </span>
+                            <Select
+                              value={currentMappedCol}
+                              onValueChange={(csvCol) => {
+                                setColumnMapping((prev) => {
+                                  const next = { ...prev };
+                                  for (const [k, v] of Object.entries(next)) {
+                                    if (v === field.key) delete next[k];
+                                  }
+                                  if (csvCol !== "none") {
+                                    next[csvCol] = field.key;
+                                  }
+                                  return next;
+                                });
+                                setValidationResult(null);
+                              }}
+                            >
+                              <SelectTrigger className="h-7 w-36 text-[11px] bg-background">
+                                <SelectValue placeholder="Unmapped" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="none">— Not Mapped —</SelectItem>
+                                {activeImport.headers.map((h) => (
+                                  <SelectItem key={h} value={h} className="text-xs">
+                                    {h}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  {/* Actions */}
+                  <div className="flex items-center gap-3 pt-2">
+                    <Button
+                      size="sm"
+                      onClick={handleValidateMapping}
+                      disabled={csvValidating || csvImporting}
+                      className="bg-primary text-primary-foreground text-xs"
+                    >
+                      {csvValidating ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1.5" /> : null}
+                      Validate &amp; Check Duplicates
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => {
+                        setActiveImport(null);
+                        setValidationResult(null);
+                        setCsvImportResult(null);
+                      }}
+                      className="text-xs text-muted-foreground hover:text-foreground"
+                    >
+                      Cancel / Select Another File
+                    </Button>
+                  </div>
+
+                  {/* Validation Result & Duplicate Review */}
+                  {validationResult && (
+                    <div className="p-3.5 rounded-xl border border-border bg-muted/30 space-y-3">
+                      <div className="flex items-center gap-2 flex-wrap text-xs">
+                        <Badge
+                          variant="outline"
+                          className="bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/30 font-mono"
+                        >
+                          ✓ {validationResult.valid} Valid Trades
+                        </Badge>
+                        <Badge
+                          variant="outline"
+                          className={cn(
+                            "font-mono",
+                            validationResult.duplicates > 0
+                              ? "bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/30"
+                              : "bg-muted text-muted-foreground border-border",
+                          )}
+                        >
+                          {validationResult.duplicates} Duplicates (Auto-Skipped)
+                        </Badge>
+                        {validationResult.invalid > 0 && (
+                          <Badge
+                            variant="outline"
+                            className="bg-rose-500/10 text-rose-600 dark:text-rose-400 border-rose-500/30 font-mono"
+                          >
+                            ✕ {validationResult.invalid} Invalid Rows
+                          </Badge>
+                        )}
+                      </div>
+
+                      {validationResult.duplicates > 0 && (
+                        <p className="text-[11px] text-amber-600 dark:text-amber-400">
+                          ℹ️ {validationResult.duplicates} trades matched existing journal records within ±60 seconds and will be automatically skipped to prevent double-counting.
+                        </p>
+                      )}
+
+                      {validationResult.issues.length > 0 && (
+                        <div className="text-[11px] text-rose-500 space-y-0.5">
+                          {validationResult.issues.slice(0, 3).map((iss, i) => (
+                            <div key={i}>· {iss}</div>
+                          ))}
+                        </div>
+                      )}
+
+                      {validationResult.valid > 0 && (
+                        <div className="pt-2">
+                          <Button
+                            size="sm"
+                            onClick={handleConfirmCsvImport}
+                            disabled={csvImporting}
+                            className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold"
+                          >
+                            {csvImporting ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1.5" /> : null}
+                            Confirm &amp; Import {validationResult.valid} Trades
+                          </Button>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Import Success */}
+                  {csvImportResult && (
+                    <div className="p-3 rounded-lg bg-emerald-500/10 border border-emerald-500/30 text-xs text-emerald-600 dark:text-emerald-400 flex items-center gap-2">
+                      <CheckCircle2 className="h-4 w-4" />
+                      <span>Successfully imported {csvImportResult.imported} trades into your trading journal!</span>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
+        </BackupCard>
+
+        {/* Card 4 — Demo Data Generator */}
         <BackupCard>
           <div className="flex items-start gap-4">
             <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg bg-amber-50 border border-amber-200">

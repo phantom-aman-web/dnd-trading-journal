@@ -20,7 +20,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Plus, PencilLine, Trash2, Wallet, Loader2 } from "lucide-react";
+import { Plus, PencilLine, Trash2, Wallet, Loader2, AlertTriangle, ShieldAlert } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { formatSignedCents } from "@/lib/money";
@@ -50,6 +50,8 @@ interface TradeRow {
   netPnlCents: number;
   isDraft: boolean;
   status: string;
+  entryTime?: string | null;
+  exitTime?: string | null;
 }
 
 const ACCOUNT_TYPES = [
@@ -124,8 +126,8 @@ export function AccountsView() {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editing, setEditing] = useState<TradingAccount | null>(null);
 
-  const accounts: TradingAccount[] = Array.isArray(accountsData) ? accountsData : (accountsData?.items ?? (Array.isArray(accountsData?.accounts) ? accountsData.accounts : []));
-  const trades: TradeRow[] = Array.isArray(tradesData) ? tradesData : (tradesData?.items ?? (Array.isArray(tradesData?.trades) ? tradesData.trades : []));
+  const accounts: TradingAccount[] = Array.isArray(accountsData) ? accountsData : ((accountsData as any)?.items ?? (Array.isArray((accountsData as any)?.accounts) ? (accountsData as any).accounts : []));
+  const trades: TradeRow[] = Array.isArray(tradesData) ? tradesData : ((tradesData as any)?.items ?? (Array.isArray((tradesData as any)?.trades) ? (tradesData as any).trades : []));
 
   // Group trades by account and compute per-account stats.
   const statsByAccount = useMemo(() => {
@@ -267,10 +269,51 @@ export function AccountsView() {
             const pnlCents = stats?.pnlCents ?? 0;
             const pnl = formatSignedCents(pnlCents, a.currency ?? "USD");
             const balance = formatSignedCents(a.startingBalanceCents + pnlCents, a.currency ?? "USD");
+
+            // Daily loss & drawdown tracking
+            const accountTrades = trades.filter((t) => t.accountId === a.id);
+            const todayStr = new Date().toISOString().slice(0, 10);
+            const todayTrades = accountTrades.filter(
+              (t) =>
+                (t.exitTime && t.exitTime.slice(0, 10) === todayStr) ||
+                (t.entryTime && t.entryTime.slice(0, 10) === todayStr),
+            );
+            const todayPnlCents = todayTrades.reduce((s, t) => s + t.netPnlCents, 0);
+            const todayLossPct =
+              a.startingBalanceCents > 0 && todayPnlCents < 0
+                ? (Math.abs(todayPnlCents) / a.startingBalanceCents) * 100
+                : 0;
+
+            const currentDDPct =
+              a.startingBalanceCents > 0 && pnlCents < 0
+                ? (Math.abs(pnlCents) / a.startingBalanceCents) * 100
+                : 0;
+
+            const isDailyLossBreached =
+              a.dailyLossLimitPct != null && todayLossPct >= a.dailyLossLimitPct;
+            const isDailyLossWarning =
+              a.dailyLossLimitPct != null &&
+              !isDailyLossBreached &&
+              todayLossPct >= a.dailyLossLimitPct * 0.8;
+
+            const isDDBreached =
+              a.maxDrawdownPct != null && currentDDPct >= a.maxDrawdownPct;
+            const isDDWarning =
+              a.maxDrawdownPct != null &&
+              !isDDBreached &&
+              currentDDPct >= a.maxDrawdownPct * 0.8;
+
             return (
               <div
                 key={a.id}
-                className="bg-card rounded-xl border border-border p-5 shadow-sm flex flex-col gap-3"
+                className={cn(
+                  "bg-card rounded-xl border p-5 shadow-sm flex flex-col gap-3 transition-colors",
+                  isDailyLossBreached || isDDBreached
+                    ? "border-rose-500/40 bg-rose-500/[0.02]"
+                    : isDailyLossWarning || isDDWarning
+                      ? "border-amber-500/40 bg-amber-500/[0.02]"
+                      : "border-border",
+                )}
               >
                 {/* Header */}
                 <div className="flex items-start justify-between gap-2">
@@ -354,6 +397,36 @@ export function AccountsView() {
                   </div>
                 </div>
 
+                {/* Risk Limit Alerts */}
+                {(isDailyLossBreached || isDailyLossWarning || isDDBreached || isDDWarning) && (
+                  <div className="space-y-1.5 pt-1">
+                    {isDailyLossBreached && (
+                      <div className="flex items-center gap-1.5 p-2 rounded-md bg-rose-500/10 border border-rose-500/20 text-xs text-rose-600 dark:text-rose-400 font-medium">
+                        <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
+                        <span>Daily Loss Limit Breached: {todayLossPct.toFixed(1)}% / {a.dailyLossLimitPct}%</span>
+                      </div>
+                    )}
+                    {isDailyLossWarning && (
+                      <div className="flex items-center gap-1.5 p-2 rounded-md bg-amber-500/10 border border-amber-500/20 text-xs text-amber-600 dark:text-amber-400 font-medium">
+                        <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
+                        <span>Near Daily Loss Limit: {todayLossPct.toFixed(1)}% / {a.dailyLossLimitPct}%</span>
+                      </div>
+                    )}
+                    {isDDBreached && (
+                      <div className="flex items-center gap-1.5 p-2 rounded-md bg-rose-500/10 border border-rose-500/20 text-xs text-rose-600 dark:text-rose-400 font-medium">
+                        <ShieldAlert className="h-3.5 w-3.5 shrink-0" />
+                        <span>Max Drawdown Limit Breached: {currentDDPct.toFixed(1)}% / {a.maxDrawdownPct}%</span>
+                      </div>
+                    )}
+                    {isDDWarning && (
+                      <div className="flex items-center gap-1.5 p-2 rounded-md bg-amber-500/10 border border-amber-500/20 text-xs text-amber-600 dark:text-amber-400 font-medium">
+                        <ShieldAlert className="h-3.5 w-3.5 shrink-0" />
+                        <span>Near Max Drawdown: {currentDDPct.toFixed(1)}% / {a.maxDrawdownPct}%</span>
+                      </div>
+                    )}
+                  </div>
+                )}
+
                 {/* Stats row */}
                 <div className="grid grid-cols-3 gap-2 pt-3 border-t border-border">
                   <StatCell label="Trades" value={String(tradesCount)} />
@@ -373,10 +446,10 @@ export function AccountsView() {
 
                 {/* Risk limits (optional) */}
                 {(a.dailyLossLimitPct != null || a.maxDrawdownPct != null) && (
-                  <div className="flex flex-wrap items-center gap-x-3 gap-y-1 pt-2 text-[11px] text-muted-foreground">
+                  <div className="flex flex-wrap items-center gap-x-3 gap-y-1 pt-2 text-[11px] text-muted-foreground border-t border-border/50">
                     {a.dailyLossLimitPct != null && (
                       <span>
-                        Daily loss limit:{" "}
+                        Daily limit:{" "}
                         <span className="font-medium text-loss tabular-nums">
                           {a.dailyLossLimitPct}%
                         </span>
@@ -384,7 +457,7 @@ export function AccountsView() {
                     )}
                     {a.maxDrawdownPct != null && (
                       <span>
-                        Max DD:{" "}
+                        Max DD limit:{" "}
                         <span className="font-medium text-loss tabular-nums">
                           {a.maxDrawdownPct}%
                         </span>

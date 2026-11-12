@@ -3,6 +3,7 @@ import { z } from "zod";
 import { db } from "@/lib/db";
 import { requireUser } from "@/lib/auth";
 import { ok, bad, toApiError, parseJson } from "@/lib/api";
+import { invalidateCache, getCached, setCached } from "@/lib/server-cache";
 import {  } from "@/lib/financial-engine";
 import { calculateTradeMetrics } from "@/lib/financial-engine";
 import { toInstrumentEconomics } from "@/lib/instrument-bridge";
@@ -29,6 +30,7 @@ const PartialExitSchema = z.object({
   id: z.string().optional(),
   name: z.string().default("TP1"),
   price: z.string(),
+  quantityPct: z.string().optional().nullable(),
 });
 
 const TradeCreateSchema = z.object({
@@ -99,6 +101,10 @@ export async function GET(req: NextRequest) {
   try { user = await requireUser(); } catch (e) { return toApiError(e); }
 
   const url = new URL(req.url);
+  const cacheKey = `trades:${user.id}:${url.searchParams.toString()}`;
+  const cached = getCached<any>(cacheKey);
+  if (cached) return ok(cached);
+
   const params = Object.fromEntries(url.searchParams.entries());
   const parsed = ListQuerySchema.safeParse(params);
   if (!parsed.success) return bad("Invalid query", parsed.error.flatten());
@@ -116,9 +122,15 @@ export async function GET(req: NextRequest) {
   if (q.setupGrade) where.setupGrade = q.setupGrade;
   if (q.tag) where.tagsJson = { contains: `"${q.tag}"` };
   if (q.search) {
+    const s = q.search.trim();
     where.OR = [
-      { instrumentSymbol: { contains: q.search } },
-      { notes: { contains: q.search } },
+      { instrumentSymbol: { contains: s, mode: "insensitive" } },
+      { notes: { contains: s, mode: "insensitive" } },
+      { lessons: { contains: s, mode: "insensitive" } },
+      { thesisJson: { contains: s, mode: "insensitive" } },
+      { tagsJson: { contains: s, mode: "insensitive" } },
+      { id: { equals: s } },
+      { strategy: { name: { contains: s, mode: "insensitive" } } },
     ];
   }
   if (q.fromDate || q.toDate) {
@@ -141,11 +153,13 @@ export async function GET(req: NextRequest) {
 
   const hasMore = trades.length > q.limit;
   const items = hasMore ? trades.slice(0, q.limit) : trades;
-  return ok({
+  const result = {
     items,
     nextCursor: hasMore ? items[items.length - 1].id : null,
     total: items.length,
-  });
+  };
+  setCached(cacheKey, result, 20_000);
+  return ok(result);
 }
 
 export async function POST(req: NextRequest) {
@@ -406,10 +420,10 @@ export async function POST(req: NextRequest) {
         targets: {
           create: data.partialExits
             .filter((tp) => tp.price && tp.price.trim() !== "")
-            .map((tp, idx) => ({
+            .map((tp, idx, arr) => ({
               label: tp.name || `TP${idx + 1}`,
               price: tp.price,
-              quantityPct: "0",
+              quantityPct: tp.quantityPct ? String(tp.quantityPct) : (arr.length > 0 ? (100 / arr.length).toFixed(0) : "0"),
             })),
         },
       },
@@ -448,6 +462,10 @@ export async function POST(req: NextRequest) {
       await audit("trade.checklist_eval_failed", "trade", trade.id);
     }
   }
+
+  invalidateCache(`dashboard:${user.id}`);
+  invalidateCache(`analytics:${user.id}`);
+  invalidateCache(`trades:${user.id}`);
 
   return ok(trade);
 }

@@ -126,15 +126,27 @@ function setupName(t: TradeRow): string | null {
 /* ------------------------------------------------------------------ */
 
 export function TradesLogView() {
-  const { navigate } = useNav();
+  const { navigate, params, setParams } = useNav();
 
-  const [accountFilter, setAccountFilter] = useState<string>("all");
-  const [setupFilter, setSetupFilter] = useState<string>("all");
-  const [directionFilter, setDirectionFilter] = useState<string>("all");
-  const [outcomeFilter, setOutcomeFilter] = useState<string>("all");
-  const [search, setSearch] = useState("");
+  const accountFilter = params.accountId || "all";
+  function setAccountFilter(v: string) {
+    setParams({ accountId: v === "all" ? "" : v });
+  }
+  const [setupFilter, setSetupFilter] = useState<string>(params.strategyId || "all");
+  const [directionFilter, setDirectionFilter] = useState<string>(params.direction || "all");
+  const [outcomeFilter, setOutcomeFilter] = useState<string>(params.outcome || "all");
+  const [search, setSearch] = useState(params.search || params.symbol || "");
   const [closeTradeId, setCloseTradeId] = useState<string | null>(null);
   const [executeTradeId, setExecuteTradeId] = useState<string | null>(null);
+
+  // Sync state if navigation params update
+  useMemo(() => {
+    if (params.symbol && params.symbol !== search) setSearch(params.symbol);
+    if (params.search && params.search !== search) setSearch(params.search);
+    if (params.strategyId && params.strategyId !== setupFilter) setSetupFilter(params.strategyId);
+    if (params.direction && params.direction !== directionFilter) setDirectionFilter(params.direction);
+    if (params.outcome && params.outcome !== outcomeFilter) setOutcomeFilter(params.outcome);
+  }, [params.symbol, params.search, params.strategyId, params.direction, params.outcome]);
 
   const { data: tradesData, isLoading: tradesLoading } = useQuery({
     queryKey: ["trades", { log: true }],

@@ -29,7 +29,7 @@ async function deriveKey(passphrase: string, salt: Uint8Array): Promise<CryptoKe
   return crypto.subtle.deriveKey(
     {
       name: "PBKDF2",
-      salt,
+      salt: salt as unknown as BufferSource,
       iterations: PBKDF2_ITERATIONS,
       hash: "SHA-256",
     },
@@ -62,7 +62,7 @@ export async function encryptField(passphrase: string, plaintext: string): Promi
   const iv = crypto.getRandomValues(new Uint8Array(IV_BYTES));
   const key = await deriveKey(passphrase, salt);
   const ct = await crypto.subtle.encrypt(
-    { name: "AES-GCM", iv },
+    { name: "AES-GCM", iv: iv as unknown as BufferSource },
     key,
     enc.encode(plaintext),
   );
@@ -80,9 +80,9 @@ export async function decryptField(passphrase: string, payload: EncryptedPayload
   const iv = fromB64(payload.iv);
   const key = await deriveKey(passphrase, salt);
   const pt = await crypto.subtle.decrypt(
-    { name: "AES-GCM", iv },
+    { name: "AES-GCM", iv: iv as unknown as BufferSource },
     key,
-    fromB64(payload.ciphertext),
+    fromB64(payload.ciphertext) as unknown as BufferSource,
   );
   return dec.decode(pt);
 }

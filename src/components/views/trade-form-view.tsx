@@ -27,7 +27,8 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useNav } from "@/lib/nav-store";
-import { calculatePlanAdherence, calculatePositionSize } from "@/lib/financial-engine";
+import { calculatePlanAdherence, calculatePositionSize, calculateTradeMetrics, type ExecutionFill } from "@/lib/financial-engine";
+import { formatSignedCents } from "@/lib/money";
 import { Decimal } from "decimal.js";
 import {
   evaluateChecklist,
@@ -88,6 +89,10 @@ import {
   Lock,
   X,
   CheckCircle2,
+  Zap,
+  TrendingUp,
+  TrendingDown,
+  ListChecks,
 } from "lucide-react";
 import { InstrumentSelector } from "@/components/common/instrument-selector";
 import {
@@ -338,10 +343,38 @@ export function TradeFormView() {
     isDraft: false,
   });
 
+  const [entryMode, setEntryMode] = useState<"quick" | "advanced">(editingId ? "advanced" : "quick");
   const [activeStep, setActiveStep] = useState<StepKey>("trade-info");
   const [saving, setSaving] = useState(false);
   const [advancedOpen, setAdvancedOpen] = useState(false);
+  const [autosaveState, setAutosaveState] = useState<"idle" | "saving" | "saved">("idle");
+  const [lastSavedAt, setLastSavedAt] = useState<Date | null>(null);
+  const [restoredDraftInfo, setRestoredDraftInfo] = useState<{ timestamp?: string } | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const initialAutosaveSkipRef = useRef(true);
+
+  // Instant real-time financial metrics preview for Quick Entry
+  const quickMetrics = useMemo(() => {
+    if (!form.plannedEntryPrice || !form.instrumentSymbol) return null;
+    const exitP = form.actualExitPrice || form.plannedTargetPrice;
+    if (form.status === "closed" && !exitP) return null;
+    const instr = resolveInstrument(form.instrumentSymbol);
+    const fills: ExecutionFill[] = [
+      { kind: "entry", price: form.plannedEntryPrice, quantity: form.lotSize || "1" },
+    ];
+    if (form.status === "closed" && exitP) {
+      fills.push({ kind: "exit", price: exitP, quantity: form.lotSize || "1" });
+    }
+    try {
+      return calculateTradeMetrics({
+        direction: form.direction,
+        instrument: instr as any,
+        fills,
+      } as any);
+    } catch {
+      return null;
+    }
+  }, [form.plannedEntryPrice, form.actualExitPrice, form.plannedTargetPrice, form.instrumentSymbol, form.status, form.direction, form.lotSize]);
   // Per-upload File + XHR refs, keyed by each placeholder's tempId. Keeping
   // these in a ref Map (not React state) means progress ticks don't trigger
   // re-renders of the File objects, and Cancel can abort the in-flight XHR
@@ -522,6 +555,7 @@ export function TradeFormView() {
             id: t.id || `tp_${idx}`,
             name: t.label || `TP${idx + 1}`,
             price: t.price ?? "",
+            quantityPct: t.quantityPct && t.quantityPct !== "0" ? t.quantityPct : "",
           }));
         }
         // Fallback: legacy trades that stored partial exits inline.
@@ -610,13 +644,21 @@ export function TradeFormView() {
   // Autosave draft (new trades only).
   useEffect(() => {
     if (editingId) return;
+    if (initialAutosaveSkipRef.current) {
+      initialAutosaveSkipRef.current = false;
+      return;
+    }
+    setAutosaveState("saving");
     const t = setTimeout(() => {
       try {
-        localStorage.setItem(DRAFT_KEY, JSON.stringify(form));
+        const payload = { ...form, _savedAt: new Date().toISOString() };
+        localStorage.setItem(DRAFT_KEY, JSON.stringify(payload));
+        setAutosaveState("saved");
+        setLastSavedAt(new Date());
       } catch {
-        // ignore quota errors
+        setAutosaveState("idle");
       }
-    }, 500);
+    }, 600);
     return () => clearTimeout(t);
   }, [form, editingId]);
 
@@ -637,11 +679,80 @@ export function TradeFormView() {
         );
       }
       setForm((f: any) => ({ ...f, ...parsed }));
-      toast.info("Restored autosaved draft.");
+      const timeStr = parsed._savedAt
+        ? new Date(parsed._savedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
+        : undefined;
+      setRestoredDraftInfo({ timestamp: timeStr });
+      if (parsed._savedAt) {
+        setLastSavedAt(new Date(parsed._savedAt));
+        setAutosaveState("saved");
+      }
     } catch {
       // ignore
     }
   }, [editingId]);
+
+  function discardDraft() {
+    try {
+      localStorage.removeItem(DRAFT_KEY);
+    } catch {}
+    setRestoredDraftInfo(null);
+    setLastSavedAt(null);
+    setAutosaveState("idle");
+    const curToday = new Date();
+    const defaultAcc = accounts.find((a: any) => a.isDefault) ?? accounts[0];
+    setForm({
+      accountId: defaultAcc?.id ?? "",
+      strategyId: "",
+      instrumentSymbol: "",
+      direction: "long",
+      status: "open",
+      tradeDate: curToday.toISOString().slice(0, 10),
+      tradeTime: curToday.toTimeString().slice(0, 5),
+      session: "ny_am",
+      timeframe: "5m",
+      newsEvent: "none",
+      thesisWhy: "",
+      checklistAnswers: {},
+      plannedEntryPrice: "",
+      plannedStopPrice: "",
+      plannedTargetPrice: "",
+      lotSize: "1",
+      riskPct: "0.005",
+      actualExitPrice: "",
+      followedPlan: true,
+      actualEntryPrice: "",
+      actualStopPrice: "",
+      actualTargetPrice: "",
+      actualLotSize: "",
+      partialExits: [],
+      behaviorFlags: [],
+      tags: [],
+      notes: "",
+      lessons: "",
+      psychBefore: { moodTags: [], confidence: 3, energy: 3, impact: "moderate" },
+      psychAfter: { moodTags: [], confidence: 3, energy: 3, impact: "moderate" },
+      setup: {
+        htfContext: { weeklyBias: "bullish", dailyBias: "bullish" },
+        liquidity: [],
+        structure: [],
+        entryModel: "FVG",
+        session: "ny_am",
+        timeframe: "5m",
+      },
+      thesis: {
+        narrative: "",
+        liquidityTarget: "",
+        confirms: [],
+        invalidates: [],
+        target: "",
+        earlyExit: "",
+      },
+      uploadedMedia: [],
+      isDraft: false,
+    });
+    toast.success("Draft discarded. Started fresh trade.");
+  }
 
   // Warn before navigating away while media uploads are in-flight. The
   // uploads use XHR (not service workers / background sync), so closing or
@@ -922,12 +1033,12 @@ export function TradeFormView() {
       ...f,
       partialExits: [
         ...f.partialExits,
-        { id: uid(), name: `TP${f.partialExits.length + 1}`, price: "" },
+        { id: uid(), name: `TP${f.partialExits.length + 1}`, price: "", quantityPct: "" },
       ],
     }));
   }
 
-  function updateExit(id: string, field: "name" | "price", value: string) {
+  function updateExit(id: string, field: "name" | "price" | "quantityPct", value: string) {
     setForm((f: any) => ({
       ...f,
       partialExits: f.partialExits.map((e: any) =>
@@ -1233,6 +1344,7 @@ export function TradeFormView() {
         plannedStopPrice: form.plannedStopPrice || null,
         plannedTargetPrice: form.plannedTargetPrice || null,
         plannedRiskPct: form.riskPct || null,
+        positionSize: form.followedPlan ? form.lotSize : (form.actualLotSize || form.lotSize),
         // For planned trades, don't send executions — the trade is not executed yet.
         // The server will keep P&L as 0 and status as "planned".
         executions: isPlanned ? [] : executions,
@@ -1402,30 +1514,372 @@ export function TradeFormView() {
 
   return (
     <div className="p-4 md:p-6 max-w-4xl mx-auto space-y-4">
-      {/* Header */}
-      <div className="flex items-center gap-3">
-        <Button variant="ghost" size="icon" onClick={() => navigate("tradesLog")}>
-          <ArrowLeft className="h-4 w-4" />
-        </Button>
-        <div>
-          <h1 className="text-2xl font-semibold tracking-tight">
-            {editingId ? "Edit Trade" : "New Trade"}
-          </h1>
-          <p className="text-sm text-muted-foreground">
-            Walk through the 5 steps to log a structured trade with checklist
-            scoring, risk sizing, and partial exits.
-          </p>
+      {/* Header & Mode Switcher */}
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+        <div className="flex items-center gap-3">
+          <Button variant="ghost" size="icon" onClick={() => navigate("tradesLog")}>
+            <ArrowLeft className="h-4 w-4" />
+          </Button>
+          <div>
+            <div className="flex items-center gap-3">
+              <h1 className="text-2xl font-semibold tracking-tight">
+                {editingId ? "Edit Trade" : "New Trade"}
+              </h1>
+              {!editingId && (
+                <div className="flex items-center gap-1.5 text-xs text-muted-foreground font-mono">
+                  {autosaveState === "saving" && (
+                    <span className="flex items-center gap-1 text-muted-foreground">
+                      <Loader2 className="h-3 w-3 animate-spin" />
+                      Autosaving...
+                    </span>
+                  )}
+                  {autosaveState === "saved" && lastSavedAt && (
+                    <span className="flex items-center gap-1 text-emerald-500/90 dark:text-emerald-400">
+                      <CheckCircle2 className="h-3 w-3" />
+                      Saved {lastSavedAt.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+                    </span>
+                  )}
+                </div>
+              )}
+            </div>
+            <p className="text-sm text-muted-foreground">
+              {entryMode === "quick" && !editingId
+                ? "Fast trade logging for active execution."
+                : "Walk through the 5 steps to log a structured trade with checklist scoring, risk sizing, and partial exits."}
+            </p>
+          </div>
         </div>
+
+        {/* Mode Selector (New Trades only) */}
+        {!editingId && (
+          <div className="flex items-center bg-muted/60 p-1 rounded-lg border border-border shrink-0 self-start sm:self-auto">
+            <button
+              type="button"
+              onClick={() => setEntryMode("quick")}
+              className={cn(
+                "px-3 py-1.5 text-xs font-medium rounded-md transition-all flex items-center gap-1.5",
+                entryMode === "quick"
+                  ? "bg-background text-foreground shadow-sm"
+                  : "text-muted-foreground hover:text-foreground",
+              )}
+            >
+              <Zap className="h-3.5 w-3.5 text-amber-500" />
+              Quick Entry
+            </button>
+            <button
+              type="button"
+              onClick={() => setEntryMode("advanced")}
+              className={cn(
+                "px-3 py-1.5 text-xs font-medium rounded-md transition-all flex items-center gap-1.5",
+                entryMode === "advanced"
+                  ? "bg-background text-foreground shadow-sm"
+                  : "text-muted-foreground hover:text-foreground",
+              )}
+            >
+              <ListChecks className="h-3.5 w-3.5 text-primary" />
+              Advanced Wizard
+            </button>
+          </div>
+        )}
       </div>
 
-      <Tabs value={activeStep} onValueChange={(v) => setActiveStep(v as StepKey)} className="w-full">
-        <TabsList className="w-full justify-start overflow-x-auto no-scrollbar h-auto">
-          <TabsTrigger value="trade-info">1. Trade Info</TabsTrigger>
-          <TabsTrigger value="checklist">2. Setup Checklist</TabsTrigger>
-          <TabsTrigger value="risk">3. Risk &amp; Sizing</TabsTrigger>
-          <TabsTrigger value="exits">4. Partial Exits</TabsTrigger>
-          <TabsTrigger value="review">5. Review &amp; Save</TabsTrigger>
-        </TabsList>
+      {/* Restored Draft Banner */}
+      {restoredDraftInfo && !editingId && (
+        <div className="flex items-center justify-between p-3 rounded-lg bg-amber-500/10 border border-amber-500/20 text-xs text-amber-700 dark:text-amber-400">
+          <div className="flex items-center gap-2">
+            <RotateCcw className="h-4 w-4 shrink-0" />
+            <span>
+              Restored an unsaved trade draft {restoredDraftInfo.timestamp ? `saved at ${restoredDraftInfo.timestamp}` : ""}.
+            </span>
+          </div>
+          <div className="flex items-center gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="h-7 text-xs bg-background hover:bg-muted"
+              onClick={discardDraft}
+            >
+              Discard & Start Fresh
+            </Button>
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              className="h-7 w-7 p-0"
+              onClick={() => setRestoredDraftInfo(null)}
+            >
+              <X className="h-3.5 w-3.5" />
+            </Button>
+          </div>
+        </div>
+      )}
+
+      {/* QUICK ENTRY VIEW */}
+      {entryMode === "quick" && !editingId ? (
+        <Card className="p-4 md:p-6 space-y-5 bg-background border border-border rounded-xl">
+          <div className="flex items-center justify-between pb-3 border-b border-border">
+            <div className="flex items-center gap-2">
+              <Badge variant="outline" className="text-xs uppercase font-mono tracking-wider">Quick Log</Badge>
+              <span className="text-xs text-muted-foreground">Direct execution & P&L recording</span>
+            </div>
+            {quickMetrics && (
+              <div className="flex items-center gap-2 text-sm font-mono">
+                <span className="text-xs text-muted-foreground">Est. P&L:</span>
+                <span
+                  className={cn(
+                    "font-bold",
+                    quickMetrics.grossPnlNativeCents > 0
+                      ? "text-emerald-500"
+                      : quickMetrics.grossPnlNativeCents < 0
+                      ? "text-rose-500"
+                      : "text-muted-foreground",
+                  )}
+                >
+                  {formatSignedCents(quickMetrics.grossPnlNativeCents).text}
+                </span>
+              </div>
+            )}
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+            {/* Account */}
+            <div className="space-y-1.5">
+              <Label className="text-xs font-medium">Trading Account *</Label>
+              <Select value={form.accountId} onValueChange={(v) => setField("accountId", v)}>
+                <SelectTrigger className="h-9">
+                  <SelectValue placeholder="Select Account" />
+                </SelectTrigger>
+                <SelectContent>
+                  {accounts.map((a: any) => (
+                    <SelectItem key={a.id} value={a.id}>
+                      {a.name} ({a.currency})
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            {/* Instrument with Quick Pick pills */}
+            <div className="space-y-1.5 sm:col-span-2">
+              <div className="flex items-center justify-between">
+                <Label className="text-xs font-medium">Instrument *</Label>
+                <div className="flex items-center gap-1">
+                  {["XAUUSD", "EURUSD", "NAS100", "NQ", "BTCUSD"].map((sym) => (
+                    <button
+                      key={sym}
+                      type="button"
+                      onClick={() => setField("instrumentSymbol", sym)}
+                      className={cn(
+                        "text-[10px] px-2 py-0.5 rounded border transition-colors",
+                        form.instrumentSymbol === sym
+                          ? "bg-primary text-primary-foreground border-primary"
+                          : "bg-muted text-muted-foreground border-border hover:bg-muted/80",
+                      )}
+                    >
+                      {sym}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <Input
+                value={form.instrumentSymbol}
+                onChange={(e) => setField("instrumentSymbol", e.target.value.toUpperCase())}
+                placeholder="e.g. XAUUSD, EURUSD, NQ, BTCUSD"
+                className="h-9 font-mono uppercase"
+              />
+            </div>
+
+            {/* Direction */}
+            <div className="space-y-1.5">
+              <Label className="text-xs font-medium">Direction *</Label>
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  type="button"
+                  onClick={() => setField("direction", "long")}
+                  className={cn(
+                    "h-9 rounded-md text-xs font-semibold flex items-center justify-center gap-1.5 border transition-all",
+                    form.direction === "long"
+                      ? "bg-emerald-500/15 text-emerald-500 border-emerald-500/30 shadow-sm"
+                      : "bg-muted/40 text-muted-foreground border-border hover:bg-muted",
+                  )}
+                >
+                  <TrendingUp className="h-3.5 w-3.5" />
+                  LONG
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setField("direction", "short")}
+                  className={cn(
+                    "h-9 rounded-md text-xs font-semibold flex items-center justify-center gap-1.5 border transition-all",
+                    form.direction === "short"
+                      ? "bg-rose-500/15 text-rose-500 border-rose-500/30 shadow-sm"
+                      : "bg-muted/40 text-muted-foreground border-border hover:bg-muted",
+                  )}
+                >
+                  <TrendingDown className="h-3.5 w-3.5" />
+                  SHORT
+                </button>
+              </div>
+            </div>
+
+            {/* Trade Status */}
+            <div className="space-y-1.5">
+              <Label className="text-xs font-medium">Status *</Label>
+              <Select value={form.status} onValueChange={(v) => setField("status", v)}>
+                <SelectTrigger className="h-9">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="closed">Closed</SelectItem>
+                  <SelectItem value="open">Open (Active)</SelectItem>
+                  <SelectItem value="planned">Planned (Pending)</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            {/* Strategy (Optional) */}
+            <div className="space-y-1.5">
+              <Label className="text-xs font-medium">Strategy / Setup</Label>
+              <Select
+                value={form.strategyId || "none"}
+                onValueChange={(v) => setField("strategyId", v === "none" ? "" : v)}
+              >
+                <SelectTrigger className="h-9">
+                  <SelectValue placeholder="Optional" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">No Strategy</SelectItem>
+                  {strategies.map((s: any) => (
+                    <SelectItem key={s.id} value={s.id}>
+                      {s.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            {/* Entry Price */}
+            <div className="space-y-1.5">
+              <Label className="text-xs font-medium">Entry Price *</Label>
+              <Input
+                type="number"
+                step="any"
+                value={form.plannedEntryPrice}
+                onChange={(e) => setField("plannedEntryPrice", e.target.value)}
+                placeholder="e.g. 2400.50"
+                className="h-9 font-mono"
+              />
+            </div>
+
+            {/* Position Size (Quantity / Lot) */}
+            <div className="space-y-1.5">
+              <Label className="text-xs font-medium">Quantity / Lot *</Label>
+              <Input
+                type="number"
+                step="any"
+                value={form.lotSize}
+                onChange={(e) => setField("lotSize", e.target.value)}
+                placeholder="e.g. 1.0"
+                className="h-9 font-mono"
+              />
+            </div>
+
+            {/* If Closed: Exit Price */}
+            {form.status === "closed" && (
+              <div className="space-y-1.5">
+                <Label className="text-xs font-medium">Exit Price *</Label>
+                <Input
+                  type="number"
+                  step="any"
+                  value={form.actualExitPrice || form.plannedTargetPrice}
+                  onChange={(e) => {
+                    setField("actualExitPrice", e.target.value);
+                    setField("plannedTargetPrice", e.target.value);
+                  }}
+                  placeholder="e.g. 2415.00"
+                  className="h-9 font-mono"
+                />
+              </div>
+            )}
+
+            {/* Date & Time */}
+            <div className="space-y-1.5">
+              <Label className="text-xs font-medium">Trade Date</Label>
+              <Input
+                type="date"
+                value={form.tradeDate}
+                onChange={(e) => setField("tradeDate", e.target.value)}
+                className="h-9"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs font-medium">Trade Time</Label>
+              <Input
+                type="time"
+                value={form.tradeTime}
+                onChange={(e) => setField("tradeTime", e.target.value)}
+                className="h-9"
+              />
+            </div>
+          </div>
+
+          {/* Quick Notes */}
+          <div className="space-y-1.5">
+            <Label className="text-xs font-medium">Quick Notes / Trade Context</Label>
+            <Textarea
+              value={form.notes}
+              onChange={(e) => setField("notes", e.target.value)}
+              placeholder="What did you observe? Any key trade notes..."
+              rows={2}
+              className="resize-none text-sm"
+            />
+          </div>
+
+          {/* Footer Actions */}
+          <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pt-2">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => setEntryMode("advanced")}
+              className="text-xs"
+            >
+              Switch to Advanced Wizard →
+            </Button>
+            <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => submit(true)}
+                disabled={saving}
+              >
+                Save Draft
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                onClick={() => submit(false)}
+                disabled={saving || !form.instrumentSymbol || !form.plannedEntryPrice}
+                className="gap-1.5"
+              >
+                {saving && <Loader2 className="h-4 w-4 animate-spin" />}
+                Log Trade
+              </Button>
+            </div>
+          </div>
+        </Card>
+      ) : (
+        <>
+          <Tabs value={activeStep} onValueChange={(v) => setActiveStep(v as StepKey)} className="w-full">
+            <TabsList className="w-full justify-start overflow-x-auto no-scrollbar h-auto">
+              <TabsTrigger value="trade-info">1. Trade Info</TabsTrigger>
+              <TabsTrigger value="checklist">2. Setup Checklist</TabsTrigger>
+              <TabsTrigger value="risk">3. Risk &amp; Sizing</TabsTrigger>
+              <TabsTrigger value="exits">4. Partial Exits</TabsTrigger>
+              <TabsTrigger value="review">5. Review &amp; Save</TabsTrigger>
+            </TabsList>
 
         {/* ─────────────────────────────────────────────────────────── */}
         {/* STEP 1 — Trade Info                                          */}
@@ -2402,6 +2856,7 @@ export function TradeFormView() {
                         const sizeRes = calculatePositionSize({
                           instrument: selectedInstrument as any,
                           accountBalanceCents: balanceCents,
+                          accountCurrency,
                           riskPct: form.riskPct,
                           entryPrice: form.plannedEntryPrice,
                           stopPrice: form.plannedStopPrice
@@ -2704,7 +3159,7 @@ export function TradeFormView() {
                 {form.partialExits.map((exit: any) => (
                   <div
                     key={exit.id}
-                    className="grid sm:grid-cols-[1fr_1fr_auto] gap-3 items-end p-3 rounded-md border border-border bg-muted/20"
+                    className="grid sm:grid-cols-[1fr_1fr_100px_auto] gap-3 items-end p-3 rounded-md border border-border bg-muted/20"
                   >
                     <div className="space-y-2">
                       <Label className="text-xs">Level Name</Label>
@@ -2723,6 +3178,17 @@ export function TradeFormView() {
                         value={exit.price}
                         onChange={(e) => updateExit(exit.id, "price", e.target.value)}
                         placeholder="0.00000"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label className="text-xs">Alloc %</Label>
+                      <Input
+                        type="number"
+                        min="1"
+                        max="100"
+                        value={exit.quantityPct ?? ""}
+                        onChange={(e) => updateExit(exit.id, "quantityPct", e.target.value)}
+                        placeholder="50"
                       />
                     </div>
                     <Button
@@ -3008,6 +3474,8 @@ export function TradeFormView() {
           </div>
         )}
       </div>
+      </>
+      )}
     </div>
   );
 }

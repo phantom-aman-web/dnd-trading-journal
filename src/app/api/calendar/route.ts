@@ -2,6 +2,7 @@ import { NextRequest } from "next/server";
 import { db } from "@/lib/db";
 import { requireUser } from "@/lib/auth";
 import { ok, toApiError } from "@/lib/api";
+import { getCached, setCached } from "@/lib/server-cache";
 
 interface CalendarDay {
   date: string;
@@ -82,9 +83,14 @@ export async function GET(req: NextRequest) {
   const url = new URL(req.url);
   const yearStr = url.searchParams.get("year");
   const monthStr = url.searchParams.get("month");
+  const accountId = url.searchParams.get("accountId") || undefined;
   const now = new Date();
   const year = yearStr ? parseInt(yearStr) : now.getFullYear();
   const month = monthStr ? parseInt(monthStr) : now.getMonth() + 1;
+
+  const cacheKey = `calendar:${user.id}:${year}:${month}:${accountId ?? "all"}`;
+  const cached = getCached<any>(cacheKey);
+  if (cached) return ok(cached);
 
   // Query window covers the calendar month PLUS a 1-day buffer on each side
   // to catch trades that fall on month boundaries when viewed in a non-UTC
@@ -101,6 +107,7 @@ export async function GET(req: NextRequest) {
     where: {
       userId: user.id,
       isArchived: false,
+      ...(accountId ? { accountId } : {}),
       entryTime: { gte: start, lte: end },
     },
     orderBy: { entryTime: "asc" },
@@ -164,10 +171,12 @@ export async function GET(req: NextRequest) {
     days.push(rest);
   }
 
-  return ok({
+  const result = {
     year,
     month,
     timezone,
     days: days.sort((a, b) => a.date.localeCompare(b.date)),
-  });
+  };
+  setCached(cacheKey, result, 30_000);
+  return ok(result);
 }

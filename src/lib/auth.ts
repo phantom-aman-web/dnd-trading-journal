@@ -99,12 +99,33 @@ export async function verifySessionToken(token: string): Promise<SessionPayload 
   }
 }
 
+interface CachedUser {
+  user: any;
+  cachedAt: number;
+}
+const userSessionCache = new Map<string, CachedUser>();
+const USER_CACHE_TTL_MS = 60_000; // 60 seconds
+
+export function invalidateUserSession(userId?: string) {
+  if (userId) {
+    userSessionCache.delete(userId);
+  } else {
+    userSessionCache.clear();
+  }
+}
+
 export async function getSessionUser() {
   const cookieStore = await cookies();
   const token = cookieStore.get(SESSION_COOKIE)?.value;
   if (!token) return null;
   const payload = await verifySessionToken(token);
   if (!payload) return null;
+
+  const cached = userSessionCache.get(payload.sub);
+  if (cached && Date.now() - cached.cachedAt < USER_CACHE_TTL_MS) {
+    return cached.user;
+  }
+
   const user = await db.user.findUnique({
     where: { id: payload.sub },
     select: {
@@ -118,9 +139,15 @@ export async function getSessionUser() {
   // Flatten the user's timezone (from UserSettings, default "UTC") onto the
   // returned session user so callers (calendar/analytics/etc.) can do
   // timezone-aware date math without an extra DB round-trip.
-  return user
+  const resolved = user
     ? { ...user, timezone: user.settings?.timezone ?? "UTC" }
     : null;
+
+  if (resolved) {
+    userSessionCache.set(payload.sub, { user: resolved, cachedAt: Date.now() });
+  }
+
+  return resolved;
 }
 
 export async function setSessionCookie(token: string) {
@@ -137,6 +164,7 @@ export async function setSessionCookie(token: string) {
 export async function clearSessionCookie() {
   const cookieStore = await cookies();
   cookieStore.delete(SESSION_COOKIE);
+  invalidateUserSession();
 }
 
 export const SESSION_COOKIE_NAME = SESSION_COOKIE;

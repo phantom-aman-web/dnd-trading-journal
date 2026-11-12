@@ -44,14 +44,16 @@ export async function POST(_req: NextRequest, ctx: { params: Promise<{ id: strin
       behaviorFlagsJson: trade.behaviorFlagsJson,
       isDraft: true,
       executions: {
-        create: trade.executions.map((e) => ({
-          kind: e.kind,
-          seq: e.seq,
-          price: e.price,
-          quantity: e.quantity,
-          timestamp: new Date(),
-          notes: e.notes,
-        })),
+        create: trade.executions
+          .filter((e) => e.kind === "entry")
+          .map((e, idx) => ({
+            kind: e.kind,
+            seq: idx + 1,
+            price: e.price,
+            quantity: e.quantity,
+            timestamp: new Date(),
+            notes: e.notes,
+          })),
       },
     },
   });

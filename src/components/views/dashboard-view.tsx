@@ -38,9 +38,13 @@ import {
   ArrowUpRight,
   CheckCircle2,
   ClipboardList,
+  Clock,
+  Compass,
+  Layers,
   Plus,
   ShieldCheck,
   Target,
+  TrendingDown,
   TrendingUp,
 } from "lucide-react";
 
@@ -61,7 +65,40 @@ const PRESETS = [
 // API helpers
 // ---------------------------------------------------------------------------
 
+interface GroupBreakdownItem {
+  key: string;
+  label: string;
+  trades: number;
+  wins: number;
+  winRate: number | null;
+  avgR: string | null;
+  expectancyR: string | null;
+  pnlCents: number;
+}
+
+interface LongVsShortMetrics {
+  trades: number;
+  closedTrades: number;
+  wins: number;
+  losses: number;
+  winRate: string | null;
+  avgR: string | null;
+  profitFactor: string | null;
+  expectancyR: string | null;
+  pnlCents: number;
+}
+
+interface PeriodComparison {
+  prevNetPnlCents: number;
+  pnlChangeCents: number;
+  prevWinRate: string | null;
+  winRateDelta: string | null;
+  prevTrades: number;
+  tradesDelta: number;
+}
+
 interface DashboardResponse {
+  preset: string;
   aggregate: {
     totalTrades: number;
     closedTrades: number;
@@ -76,6 +113,14 @@ interface DashboardResponse {
     avgWinCents?: number | null;
     avgLossCents?: number | null;
   };
+  comparison?: PeriodComparison | null;
+  longVsShort?: {
+    long: LongVsShortMetrics;
+    short: LongVsShortMetrics;
+  } | null;
+  byInstrument?: GroupBreakdownItem[];
+  bySession?: GroupBreakdownItem[];
+  byStrategy?: GroupBreakdownItem[];
   byBehavior: Array<{
     key: string;
     label: string;
@@ -209,7 +254,7 @@ export function DashboardView() {
   if (hasNoData) {
     return (
       <div className="p-4 md:p-6 space-y-6">
-        <DashboardHeader preset={preset} setPreset={setPreset} />
+        <DashboardHeader preset={preset} setPreset={setPreset} comparison={dash?.comparison} />
         <EmptyDashboard onLogTrade={() => navigate("tradeNew")} />
       </div>
     );
@@ -217,7 +262,7 @@ export function DashboardView() {
 
   return (
     <div className="p-4 md:p-6 space-y-6">
-      <DashboardHeader preset={preset} setPreset={setPreset} />
+      <DashboardHeader preset={preset} setPreset={setPreset} comparison={dash?.comparison} />
 
       {/* Section 1 — Process & Adherence Breakdown */}
       <section className="space-y-3">
@@ -270,7 +315,13 @@ export function DashboardView() {
           <MetricTile
             label="Net P&L"
             value={formatSignedCents(dash?.aggregate.netPnlCents ?? 0).text}
-            sub={dash?.aggregate ? `${dash.aggregate.closedTrades} closed` : undefined}
+            sub={
+              dash?.comparison
+                ? `vs prev: ${formatSignedCents(dash.comparison.pnlChangeCents).text}`
+                : dash?.aggregate
+                  ? `${dash.aggregate.closedTrades} closed`
+                  : undefined
+            }
             icon={Activity}
             tone={
               (dash?.aggregate.netPnlCents ?? 0) > 0
@@ -345,7 +396,20 @@ export function DashboardView() {
         />
       )}
 
-      {/* Section 3 — Recent Trades Activity */}
+      {/* Section 3 — Strategic Market Breakdown & Edge Analysis */}
+      {dash && dash.totalTrades > 0 && (
+        <StrategicBreakdown
+          byInstrument={dash.byInstrument}
+          byStrategy={dash.byStrategy}
+          bySession={dash.bySession}
+          longVsShort={dash.longVsShort}
+          onSelectSymbol={(sym) => navigate("tradesLog", { symbol: sym })}
+          onSelectStrategy={(stratId) => navigate("tradesLog", { strategyId: stratId })}
+          onSelectDirection={(dir) => navigate("tradesLog", { direction: dir })}
+        />
+      )}
+
+      {/* Section 4 — Recent Trades Activity */}
       <section className="space-y-3">
         <div className="flex items-end justify-between gap-3">
           <SectionTitle
@@ -422,15 +486,35 @@ export function DashboardView() {
 function DashboardHeader({
   preset,
   setPreset,
+  comparison,
 }: {
   preset: string;
   setPreset: (p: string) => void;
+  comparison?: PeriodComparison | null;
 }) {
   return (
     <div className="flex flex-col sm:flex-row sm:items-center gap-3">
       <div>
-        <h1 className="text-2xl font-semibold tracking-tight text-foreground">Dashboard</h1>
-        <p className="text-sm text-muted-foreground">Track your adherence and recent activity.</p>
+        <div className="flex items-center gap-2.5 flex-wrap">
+          <h1 className="text-2xl font-semibold tracking-tight text-foreground">Dashboard</h1>
+          {comparison && (
+            <Badge
+              variant="outline"
+              className={cn(
+                "text-xs font-mono font-medium tracking-tight",
+                comparison.pnlChangeCents > 0
+                  ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/30"
+                  : comparison.pnlChangeCents < 0
+                    ? "bg-rose-500/10 text-rose-600 dark:text-rose-400 border-rose-500/30"
+                    : "bg-muted text-muted-foreground border-border",
+              )}
+            >
+              vs prev: {formatSignedCents(comparison.pnlChangeCents).text}
+              {comparison.winRateDelta ? ` (${comparison.winRateDelta.startsWith("-") ? "" : "+"}${comparison.winRateDelta} WR)` : ""}
+            </Badge>
+          )}
+        </div>
+        <p className="text-sm text-muted-foreground">Track your adherence, edge, and market performance.</p>
       </div>
       <div className="sm:ml-auto flex flex-wrap gap-1.5">
         {PRESETS.map((p) => {
@@ -778,6 +862,292 @@ function PerformanceOverview({
             <RDistributionChart data={rDistribution} />
           </Card>
         )}
+      </div>
+    </section>
+  );
+}
+
+function StrategicBreakdown({
+  byInstrument = [],
+  byStrategy = [],
+  bySession = [],
+  longVsShort,
+  onSelectSymbol,
+  onSelectStrategy,
+  onSelectDirection,
+}: {
+  byInstrument?: GroupBreakdownItem[];
+  byStrategy?: GroupBreakdownItem[];
+  bySession?: GroupBreakdownItem[];
+  longVsShort?: {
+    long: LongVsShortMetrics;
+    short: LongVsShortMetrics;
+  } | null;
+  onSelectSymbol: (symbol: string) => void;
+  onSelectStrategy: (strategyId: string) => void;
+  onSelectDirection: (direction: "long" | "short") => void;
+}) {
+  const topInstruments = byInstrument.slice(0, 5);
+  const topStrategies = byStrategy.slice(0, 5);
+
+  const totalDirectionalTrades =
+    (longVsShort?.long?.trades ?? 0) + (longVsShort?.short?.trades ?? 0);
+  const longPct =
+    totalDirectionalTrades > 0
+      ? Math.round(((longVsShort?.long?.trades ?? 0) / totalDirectionalTrades) * 100)
+      : 50;
+  const shortPct = 100 - longPct;
+
+  return (
+    <section className="space-y-3">
+      <SectionTitle
+        icon={Layers}
+        title="MARKET BREAKDOWN & EDGE ANALYSIS"
+        subtitle="Rankings by instrument, strategy setup, directional bias, and trading session."
+      />
+
+      {/* Row 1: Instrument Rankings & Strategy Rankings */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
+        {/* Instrument Rankings */}
+        <Card className="bg-card border border-border rounded-xl shadow-sm p-4 flex flex-col justify-between">
+          <div>
+            <div className="flex items-center justify-between mb-3">
+              <div className="flex items-center gap-2">
+                <Compass className="h-4 w-4 text-muted-foreground" />
+                <h3 className="text-sm font-semibold text-foreground">Top Instruments</h3>
+              </div>
+              <span className="text-[10px] text-muted-foreground uppercase font-mono tracking-wider">
+                Click to filter
+              </span>
+            </div>
+            {topInstruments.length === 0 ? (
+              <p className="text-xs text-muted-foreground py-6 text-center">No instrument data</p>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-xs">
+                  <thead>
+                    <tr className="border-b border-border text-muted-foreground text-[10px] uppercase font-semibold">
+                      <th className="text-left pb-2">Instrument</th>
+                      <th className="text-right pb-2">Trades</th>
+                      <th className="text-right pb-2">Win %</th>
+                      <th className="text-right pb-2">Avg R</th>
+                      <th className="text-right pb-2">Net P&amp;L</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-border/60">
+                    {topInstruments.map((item) => {
+                      const pnl = formatSignedCents(item.pnlCents);
+                      return (
+                        <tr
+                          key={item.key}
+                          onClick={() => onSelectSymbol(item.key)}
+                          className="hover:bg-muted/40 cursor-pointer transition-colors"
+                        >
+                          <td className="py-2.5 font-medium text-foreground">{item.label}</td>
+                          <td className="py-2.5 text-right font-mono text-muted-foreground">{item.trades}</td>
+                          <td className="py-2.5 text-right font-mono">
+                            {item.winRate != null ? `${Math.round(item.winRate * 100)}%` : "—"}
+                          </td>
+                          <td className="py-2.5 text-right font-mono text-muted-foreground">
+                            {formatR(item.avgR)}
+                          </td>
+                          <td
+                            className={cn(
+                              "py-2.5 text-right font-semibold font-mono",
+                              pnl.sign > 0 ? "text-profit" : pnl.sign < 0 ? "text-loss" : "text-muted-foreground",
+                            )}
+                          >
+                            {pnl.text}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        </Card>
+
+        {/* Strategy Rankings */}
+        <Card className="bg-card border border-border rounded-xl shadow-sm p-4 flex flex-col justify-between">
+          <div>
+            <div className="flex items-center justify-between mb-3">
+              <div className="flex items-center gap-2">
+                <Target className="h-4 w-4 text-muted-foreground" />
+                <h3 className="text-sm font-semibold text-foreground">Strategy Edge</h3>
+              </div>
+              <span className="text-[10px] text-muted-foreground uppercase font-mono tracking-wider">
+                Click to filter
+              </span>
+            </div>
+            {topStrategies.length === 0 ? (
+              <p className="text-xs text-muted-foreground py-6 text-center">No strategy data</p>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-xs">
+                  <thead>
+                    <tr className="border-b border-border text-muted-foreground text-[10px] uppercase font-semibold">
+                      <th className="text-left pb-2">Strategy</th>
+                      <th className="text-right pb-2">Trades</th>
+                      <th className="text-right pb-2">Win %</th>
+                      <th className="text-right pb-2">Expectancy</th>
+                      <th className="text-right pb-2">Net P&amp;L</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-border/60">
+                    {topStrategies.map((item) => {
+                      const pnl = formatSignedCents(item.pnlCents);
+                      return (
+                        <tr
+                          key={item.key}
+                          onClick={() => onSelectStrategy(item.key)}
+                          className="hover:bg-muted/40 cursor-pointer transition-colors"
+                        >
+                          <td className="py-2.5 font-medium text-foreground max-w-[140px] truncate">
+                            {item.label}
+                          </td>
+                          <td className="py-2.5 text-right font-mono text-muted-foreground">{item.trades}</td>
+                          <td className="py-2.5 text-right font-mono">
+                            {item.winRate != null ? `${Math.round(item.winRate * 100)}%` : "—"}
+                          </td>
+                          <td className="py-2.5 text-right font-mono text-muted-foreground">
+                            {formatR(item.expectancyR)}
+                          </td>
+                          <td
+                            className={cn(
+                              "py-2.5 text-right font-semibold font-mono",
+                              pnl.sign > 0 ? "text-profit" : pnl.sign < 0 ? "text-loss" : "text-muted-foreground",
+                            )}
+                          >
+                            {pnl.text}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        </Card>
+      </div>
+
+      {/* Row 2: Directional Asymmetry (Long vs Short) & Session Performance */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
+        {/* Long vs Short */}
+        <Card className="bg-card border border-border rounded-xl shadow-sm p-4">
+          <div className="flex items-center justify-between mb-3">
+            <h3 className="text-sm font-semibold text-foreground">Directional Asymmetry (Long vs Short)</h3>
+            <span className="text-[10px] text-muted-foreground font-mono">
+              {totalDirectionalTrades} trades
+            </span>
+          </div>
+
+          {/* Ratio bar */}
+          <div className="space-y-1.5 mb-4">
+            <div className="flex items-center justify-between text-xs font-mono">
+              <span className="text-emerald-500 font-medium">Long: {longPct}%</span>
+              <span className="text-rose-500 font-medium">Short: {shortPct}%</span>
+            </div>
+            <div className="w-full h-2 rounded-full overflow-hidden flex bg-muted">
+              <div style={{ width: `${longPct}%` }} className="bg-emerald-500 transition-all" />
+              <div style={{ width: `${shortPct}%` }} className="bg-rose-500 transition-all" />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3 pt-2 border-t border-border/60">
+            {/* Long details */}
+            <div
+              onClick={() => onSelectDirection("long")}
+              className="p-3 rounded-lg bg-muted/30 hover:bg-muted/50 cursor-pointer transition-colors border border-border/50 space-y-1.5"
+            >
+              <div className="flex items-center gap-1.5 text-xs font-semibold text-emerald-500">
+                <TrendingUp className="h-3.5 w-3.5" />
+                LONG
+              </div>
+              <div className="text-sm font-bold font-mono">
+                {formatSignedCents(longVsShort?.long?.pnlCents ?? 0).text}
+              </div>
+              <div className="text-[11px] text-muted-foreground space-y-0.5 font-mono">
+                <div>Win Rate: {longVsShort?.long?.winRate ? formatPct(longVsShort.long.winRate) : "—"}</div>
+                <div>Avg R: {formatR(longVsShort?.long?.avgR)}</div>
+                <div>PF: {longVsShort?.long?.profitFactor ? Number(longVsShort.long.profitFactor).toFixed(2) : "—"}</div>
+              </div>
+            </div>
+
+            {/* Short details */}
+            <div
+              onClick={() => onSelectDirection("short")}
+              className="p-3 rounded-lg bg-muted/30 hover:bg-muted/50 cursor-pointer transition-colors border border-border/50 space-y-1.5"
+            >
+              <div className="flex items-center gap-1.5 text-xs font-semibold text-rose-500">
+                <TrendingDown className="h-3.5 w-3.5" />
+                SHORT
+              </div>
+              <div className="text-sm font-bold font-mono">
+                {formatSignedCents(longVsShort?.short?.pnlCents ?? 0).text}
+              </div>
+              <div className="text-[11px] text-muted-foreground space-y-0.5 font-mono">
+                <div>Win Rate: {longVsShort?.short?.winRate ? formatPct(longVsShort.short.winRate) : "—"}</div>
+                <div>Avg R: {formatR(longVsShort?.short?.avgR)}</div>
+                <div>PF: {longVsShort?.short?.profitFactor ? Number(longVsShort.short.profitFactor).toFixed(2) : "—"}</div>
+              </div>
+            </div>
+          </div>
+        </Card>
+
+        {/* Trading Session Performance */}
+        <Card className="bg-card border border-border rounded-xl shadow-sm p-4">
+          <div className="flex items-center justify-between mb-3">
+            <div className="flex items-center gap-2">
+              <Clock className="h-4 w-4 text-muted-foreground" />
+              <h3 className="text-sm font-semibold text-foreground">Trading Sessions</h3>
+            </div>
+            <span className="text-[10px] text-muted-foreground uppercase font-mono tracking-wider">
+              Realized P&amp;L
+            </span>
+          </div>
+
+          {bySession.length === 0 ? (
+            <p className="text-xs text-muted-foreground py-6 text-center">No session data</p>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-xs">
+                <thead>
+                  <tr className="border-b border-border text-muted-foreground text-[10px] uppercase font-semibold">
+                    <th className="text-left pb-2">Session</th>
+                    <th className="text-right pb-2">Trades</th>
+                    <th className="text-right pb-2">Win %</th>
+                    <th className="text-right pb-2">Net P&amp;L</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-border/60">
+                  {bySession.map((sess) => {
+                    const pnl = formatSignedCents(sess.pnlCents);
+                    return (
+                      <tr key={sess.key} className="hover:bg-muted/40 transition-colors">
+                        <td className="py-2.5 font-medium text-foreground">{sess.label}</td>
+                        <td className="py-2.5 text-right font-mono text-muted-foreground">{sess.trades}</td>
+                        <td className="py-2.5 text-right font-mono">
+                          {sess.winRate != null ? `${Math.round(sess.winRate * 100)}%` : "—"}
+                        </td>
+                        <td
+                          className={cn(
+                            "py-2.5 text-right font-semibold font-mono",
+                            pnl.sign > 0 ? "text-profit" : pnl.sign < 0 ? "text-loss" : "text-muted-foreground",
+                          )}
+                        >
+                          {pnl.text}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </Card>
       </div>
     </section>
   );

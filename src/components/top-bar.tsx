@@ -52,7 +52,7 @@ export function TopBar({ onOpenMobileNav }: { onOpenMobileNav?: () => void }) {
   });
   const accounts = Array.isArray(accountsData)
     ? accountsData
-    : (accountsData?.items ?? (Array.isArray(accountsData?.accounts) ? accountsData.accounts : []));
+    : ((accountsData as any)?.items ?? (Array.isArray((accountsData as any)?.accounts) ? (accountsData as any).accounts : []));
 
   const accountFilter = params.accountId ?? "all";
 

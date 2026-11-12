@@ -42,7 +42,6 @@
     "examples",
     "skills",
     "mini-services",
-    "src/lib/financial-engine.test.ts",
-    "src/lib/population.test.ts"
+    "**/*.test.ts"
   ]
 }

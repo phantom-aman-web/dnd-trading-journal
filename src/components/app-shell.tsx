@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, useRef } from "react";
-import { useNav } from "@/lib/nav-store";
+import { useNav, type ViewKey } from "@/lib/nav-store";
 import { useAuth } from "@/lib/auth-store";
 import { Sidebar } from "@/components/sidebar";
 import { MobileNav } from "@/components/mobile-nav";
@@ -17,6 +17,7 @@ import { PlaybooksView } from "@/components/views/playbooks-view";
 import { AccountsView } from "@/components/views/accounts-view";
 import { SettingsView } from "@/components/views/settings-view";
 import { BackupView } from "@/components/views/backup-view";
+import { cn } from "@/lib/utils";
 
 export function AppShell() {
   const { view, getScroll, saveScroll } = useNav();
@@ -24,6 +25,19 @@ export function AppShell() {
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const mainRef = useRef<HTMLElement>(null);
   const restoreRef = useRef<string | null>(null);
+
+  // Modern Keep-Alive view cache: remember views the user has visited so navigating
+  // back is instantaneous (0ms), preserving state, DOM, and avoiding skeleton re-renders.
+  const [visitedViews, setVisitedViews] = useState<Set<ViewKey>>(() => new Set([view]));
+
+  useEffect(() => {
+    setVisitedViews((prev) => {
+      if (prev.has(view)) return prev;
+      const next = new Set(prev);
+      next.add(view);
+      return next;
+    });
+  }, [view]);
 
   useEffect(() => {
     setMobileNavOpen(false);
@@ -103,16 +117,48 @@ export function AppShell() {
           ref={mainRef}
           className="flex-1 overflow-y-auto overflow-x-hidden pb-20 md:pb-0 scroll-thin bg-background"
         >
-          {view === "dashboard" && <DashboardView />}
-          {view === "tradesLog" && <TradesLogView />}
+          {visitedViews.has("dashboard") && (
+            <div className={cn(view !== "dashboard" && "hidden")}>
+              <DashboardView />
+            </div>
+          )}
+          {visitedViews.has("tradesLog") && (
+            <div className={cn(view !== "tradesLog" && "hidden")}>
+              <TradesLogView />
+            </div>
+          )}
           {view === "tradeDetail" && <TradeDetailView />}
           {view === "tradeNew" && <TradeFormView />}
-          {view === "calendar" && <CalendarView />}
-          {view === "analytics" && <AnalyticsView />}
-          {view === "setups" && <PlaybooksView />}
-          {view === "accounts" && <AccountsView />}
-          {view === "settings" && <SettingsView />}
-          {view === "backup" && <BackupView />}
+          {visitedViews.has("calendar") && (
+            <div className={cn(view !== "calendar" && "hidden")}>
+              <CalendarView />
+            </div>
+          )}
+          {visitedViews.has("analytics") && (
+            <div className={cn(view !== "analytics" && "hidden")}>
+              <AnalyticsView />
+            </div>
+          )}
+          {visitedViews.has("setups") && (
+            <div className={cn(view !== "setups" && "hidden")}>
+              <PlaybooksView />
+            </div>
+          )}
+          {visitedViews.has("accounts") && (
+            <div className={cn(view !== "accounts" && "hidden")}>
+              <AccountsView />
+            </div>
+          )}
+          {visitedViews.has("settings") && (
+            <div className={cn(view !== "settings" && "hidden")}>
+              <SettingsView />
+            </div>
+          )}
+          {visitedViews.has("backup") && (
+            <div className={cn(view !== "backup" && "hidden")}>
+              <BackupView />
+            </div>
+          )}
         </main>
         <MobileNav />
       </div>

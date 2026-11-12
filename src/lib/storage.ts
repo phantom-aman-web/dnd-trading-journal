@@ -85,6 +85,16 @@ export async function deleteStored(stored: string): Promise<void> {
   await getSupabase().storage.from(BUCKET_NAME).remove([stored]);
 }
 
+/** Download and return a stored file as a Node.js Buffer. */
+export async function readStored(stored: string): Promise<Buffer> {
+  const { data, error } = await getSupabase().storage.from(BUCKET_NAME).download(stored);
+  if (error || !data) {
+    throw new Error(`Failed to read from storage: ${error?.message ?? "Not found"}`);
+  }
+  const arrayBuffer = await data.arrayBuffer();
+  return Buffer.from(arrayBuffer);
+}
+
 /** Build a relative signed URL for use in the frontend. */
 export async function buildSignedUrl(stored: string): Promise<string> {
   const { data, error } = await getSupabase()

@@ -3,16 +3,24 @@ import { db } from "@/lib/db";
 import { requireUser } from "@/lib/auth";
 import { ok, bad, toApiError, parseJson } from "@/lib/api";
 import { audit } from "@/lib/audit";
+import { getCached, setCached, invalidateCache } from "@/lib/server-cache";
 
 export async function GET() {
   let user;
   try { user = await requireUser(); } catch (e) { return toApiError(e); }
+
+  const cacheKey = `strategies:${user.id}`;
+  const cached = getCached<any>(cacheKey);
+  if (cached) return ok(cached);
+
   const items = await db.strategy.findMany({
     where: { userId: user.id },
     orderBy: { createdAt: "desc" },
     include: { versions: { orderBy: { effectiveDate: "desc" } }, checklistConfig: true },
   });
-  return ok({ items });
+  const result = { items };
+  setCached(cacheKey, result, 30_000);
+  return ok(result);
 }
 
 export async function POST(req: NextRequest) {
@@ -48,5 +56,6 @@ export async function POST(req: NextRequest) {
     },
   });
   await audit("strategy.created", "strategy", strat.id);
+  invalidateCache(`strategies:${user.id}`);
   return ok(strat);
 }
