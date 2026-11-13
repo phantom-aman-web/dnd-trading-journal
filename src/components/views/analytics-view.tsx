@@ -185,7 +185,7 @@ export function AnalyticsView() {
           </div>
 
           <TabsContent value="overall" className="mt-6 focus-visible:outline-none">
-            {loading ? (
+            {loading || tab !== "overall" ? (
               <AnalyticsSkeleton />
             ) : (
               <OverallMetrics
@@ -197,7 +197,7 @@ export function AnalyticsView() {
           </TabsContent>
 
           <TabsContent value="instruments" className="mt-6 focus-visible:outline-none">
-            {loading ? (
+            {loading || tab !== "instruments" ? (
               <AnalyticsSkeleton />
             ) : (
               <InstrumentBreakdown
@@ -208,7 +208,7 @@ export function AnalyticsView() {
           </TabsContent>
 
           <TabsContent value="setup" className="mt-6 focus-visible:outline-none">
-            {loading ? (
+            {loading || tab !== "setup" ? (
               <AnalyticsSkeleton />
             ) : (
               <SetupBreakdown
@@ -219,7 +219,7 @@ export function AnalyticsView() {
           </TabsContent>
 
           <TabsContent value="holdingTime" className="mt-6 focus-visible:outline-none">
-            {loading ? (
+            {loading || tab !== "holdingTime" ? (
               <AnalyticsSkeleton />
             ) : (
               <TimeInTradeTab data={data as any} />
@@ -227,7 +227,7 @@ export function AnalyticsView() {
           </TabsContent>
 
           <TabsContent value="checklist" className="mt-6 focus-visible:outline-none">
-            {loading ? (
+            {loading || tab !== "checklist" ? (
               <AnalyticsSkeleton />
             ) : (
               <ChecklistAdherence items={(data as any)?.items ?? []} />
@@ -235,7 +235,7 @@ export function AnalyticsView() {
           </TabsContent>
 
           <TabsContent value="violations" className="mt-6 focus-visible:outline-none">
-            {loading ? (
+            {loading || tab !== "violations" ? (
               <AnalyticsSkeleton />
             ) : (
               <RuleViolations
@@ -246,7 +246,7 @@ export function AnalyticsView() {
           </TabsContent>
 
           <TabsContent value="sessions" className="mt-6 focus-visible:outline-none">
-            {loading ? (
+            {loading || tab !== "sessions" ? (
               <AnalyticsSkeleton />
             ) : (
               <SessionsWeekdays

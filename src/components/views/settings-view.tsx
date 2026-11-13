@@ -893,24 +893,53 @@ export function SettingsView() {
               </p>
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mt-5">
                 {[
-                  { key: "nordic", label: "Nordic Clean", desc: "Light, quiet, precise" },
-                  { key: "terminal", label: "Sleek Terminal", desc: "Dark, technical" },
-                  { key: "institutional", label: "Institutional", desc: "Premium, analytical" },
+                  {
+                    key: "nordic",
+                    label: "Nordic Clean",
+                    desc: "Light, quiet, precise",
+                    swatches: ["#F8FAFC", "#1E293B", "#34D399"],
+                  },
+                  {
+                    key: "terminal",
+                    label: "Sleek Terminal",
+                    desc: "Dark, technical",
+                    swatches: ["#0E1114", "#E6EAF0", "#10B981"],
+                  },
+                  {
+                    key: "institutional",
+                    label: "Institutional Blue",
+                    desc: "Navy, crimson & white",
+                    swatches: ["#235789", "#C1292E", "#FDFFFC"],
+                  },
                 ].map((t) => (
                   <button
                     key={t.key}
                     onClick={() => applyTheme(t.key as any)}
                     className={cn(
-                      "p-4 rounded-lg border text-left transition-colors",
+                      "p-4 rounded-lg border text-left transition-colors flex flex-col justify-between",
                       theme === t.key
                         ? "border-foreground ring-2 ring-foreground/20 bg-card"
                         : "border-border hover:bg-muted/50 bg-card",
                     )}
                   >
-                    <div className="font-medium text-sm text-foreground">{t.label}</div>
-                    <div className="text-xs text-muted-foreground mt-1">{t.desc}</div>
+                    <div>
+                      <div className="flex items-center justify-between gap-2">
+                        <div className="font-medium text-sm text-foreground">{t.label}</div>
+                        <div className="flex items-center gap-1">
+                          {t.swatches.map((color, i) => (
+                            <span
+                              key={i}
+                              className="h-2.5 w-2.5 rounded-full border border-border/50"
+                              style={{ backgroundColor: color }}
+                              title={color}
+                            />
+                          ))}
+                        </div>
+                      </div>
+                      <div className="text-xs text-muted-foreground mt-1">{t.desc}</div>
+                    </div>
                     {theme === t.key && (
-                      <div className="mt-2 inline-flex items-center gap-1 text-[10px] font-semibold text-primary uppercase tracking-wide">
+                      <div className="mt-3 inline-flex items-center gap-1 text-[10px] font-semibold text-primary uppercase tracking-wide">
                         <Check className="h-3 w-3" /> Active
                       </div>
                     )}

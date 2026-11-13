@@ -133,44 +133,44 @@
   --chart-5: #4A5260;
 }
 
-/* THEME C: INSTITUTIONAL BLUE (dark) */
+/* THEME C: INSTITUTIONAL BLUE (palette: #FDFFFC, #235789, #C1292E) */
 [data-theme="institutional"] {
   --radius: 0.5rem;
-  --background: #0F172A;
-  --foreground: #E2E8F0;
-  --card: #1E293B;
-  --card-foreground: #E2E8F0;
-  --popover: #1E293B;
-  --popover-foreground: #E2E8F0;
-  --primary: #06B6D4;
-  --primary-foreground: #0F172A;
-  --secondary: #334155;
-  --secondary-foreground: #E2E8F0;
-  --muted: #1E293B;
-  --muted-foreground: #94A3B8;
-  --accent: #334155;
-  --accent-foreground: #E2E8F0;
-  --destructive: #EF4444;
-  --destructive-foreground: #FFFFFF;
-  --border: #334155;
-  --input: #334155;
-  --ring: #06B6D4;
-  --profit: #06B6D4;
-  --loss: #EF4444;
+  --background: #0B1622;
+  --foreground: #FDFFFC;
+  --card: #122336;
+  --card-foreground: #FDFFFC;
+  --popover: #122336;
+  --popover-foreground: #FDFFFC;
+  --primary: #235789;
+  --primary-foreground: #FDFFFC;
+  --secondary: #1A334F;
+  --secondary-foreground: #FDFFFC;
+  --muted: #162B42;
+  --muted-foreground: #94A8BE;
+  --accent: #1A334F;
+  --accent-foreground: #FDFFFC;
+  --destructive: #C1292E;
+  --destructive-foreground: #FDFFFC;
+  --border: #1E3B5C;
+  --input: #1E3B5C;
+  --ring: #235789;
+  --profit: #2E75B6;
+  --loss: #C1292E;
   --warning: #F59E0B;
-  --sidebar: #0F172A;
-  --sidebar-foreground: #E2E8F0;
-  --sidebar-primary: #06B6D4;
-  --sidebar-primary-foreground: #0F172A;
-  --sidebar-accent: #1E293B;
-  --sidebar-accent-foreground: #E2E8F0;
-  --sidebar-border: #334155;
-  --sidebar-ring: #06B6D4;
-  --chart-1: #06B6D4;
-  --chart-2: #EF4444;
-  --chart-3: #94A3B8;
+  --sidebar: #08111B;
+  --sidebar-foreground: #FDFFFC;
+  --sidebar-primary: #235789;
+  --sidebar-primary-foreground: #FDFFFC;
+  --sidebar-accent: #122336;
+  --sidebar-accent-foreground: #FDFFFC;
+  --sidebar-border: #1E3B5C;
+  --sidebar-ring: #235789;
+  --chart-1: #235789;
+  --chart-2: #C1292E;
+  --chart-3: #FDFFFC;
   --chart-4: #F59E0B;
-  --chart-5: #334155;
+  --chart-5: #1A334F;
 }
 
 /* Dark class is handled by data-theme above. No fallback needed — we always set data-theme explicitly. */

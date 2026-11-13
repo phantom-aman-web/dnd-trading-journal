@@ -30,7 +30,9 @@ interface TimeInTradeTabProps {
 }
 
 export function TimeInTradeTab({ data }: TimeInTradeTabProps) {
-  if (!data || data.totalClosedAnalyzed === 0) {
+  const buckets = Array.isArray(data?.buckets) ? data.buckets : [];
+
+  if (!data || !data.totalClosedAnalyzed || buckets.length === 0) {
     return (
       <Card className="p-10 text-center border-border">
         <Clock className="h-10 w-10 mx-auto text-muted-foreground/50 mb-3" />
@@ -43,13 +45,13 @@ export function TimeInTradeTab({ data }: TimeInTradeTabProps) {
   }
 
   const chartData = useMemo(() => {
-    return data.buckets.map((b) => ({
+    return buckets.map((b) => ({
       name: b.label.split("(")[0].trim(),
       trades: b.tradesCount,
       pnlDollars: b.netPnlCents / 100,
       winRate: b.winRatePct ?? 0,
     }));
-  }, [data.buckets]);
+  }, [buckets]);
 
   return (
     <div className="space-y-6">
@@ -197,7 +199,7 @@ export function TimeInTradeTab({ data }: TimeInTradeTabProps) {
               </tr>
             </thead>
             <tbody className="divide-y divide-border">
-              {data.buckets.map((b) => {
+              {buckets.map((b) => {
                 const pnl = formatSignedCents(b.netPnlCents);
                 return (
                   <tr key={b.bucketKey} className="hover:bg-muted/30 transition-colors">

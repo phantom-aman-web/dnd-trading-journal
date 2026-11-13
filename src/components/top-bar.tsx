@@ -65,9 +65,9 @@ export function TopBar({ onOpenMobileNav }: { onOpenMobileNav?: () => void }) {
   }
 
   const themeOptions = [
-    { key: "nordic", label: "Nordic Clean" },
-    { key: "terminal", label: "Sleek Terminal" },
-    { key: "institutional", label: "Institutional Blue" },
+    { key: "nordic", label: "Nordic Clean", dot: "#1E293B" },
+    { key: "terminal", label: "Sleek Terminal", dot: "#10B981" },
+    { key: "institutional", label: "Institutional Blue", dot: "#235789" },
   ] as const;
 
   return (
@@ -122,8 +122,14 @@ export function TopBar({ onOpenMobileNav }: { onOpenMobileNav?: () => void }) {
                 onClick={() => applyTheme(opt.key)}
                 className={cn("flex items-center gap-2", currentTheme === opt.key && "font-semibold")}
               >
-                <span className={cn("h-2 w-2 rounded-full", currentTheme === opt.key ? "bg-primary" : "bg-transparent border border-border")} />
-                {opt.label}
+                <span
+                  className="h-2.5 w-2.5 rounded-full border border-border shrink-0"
+                  style={{ backgroundColor: opt.dot }}
+                />
+                <span className="flex-1">{opt.label}</span>
+                {currentTheme === opt.key && (
+                  <span className="h-1.5 w-1.5 rounded-full bg-primary" />
+                )}
               </DropdownMenuItem>
             ))}
           </DropdownMenuContent>

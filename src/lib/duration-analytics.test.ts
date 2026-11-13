@@ -87,5 +87,13 @@ describe("Time-in-Trade Analytics Engine", () => {
     expect(formatDurationHuman(1500)).toBe("1d 1h");
     expect(formatDurationHuman(2880)).toBe("2d");
   });
+
+  test("DUR-5: Handles empty trades and malformed input gracefully", () => {
+    const emptyResult = computeTimeInTradeAnalytics([]);
+    expect(emptyResult.totalClosedAnalyzed).toBe(0);
+    expect(Array.isArray(emptyResult.buckets)).toBe(true);
+    expect(emptyResult.buckets.length).toBe(6);
+    expect(emptyResult.avgMinutes).toBeNull();
+  });
 });
 
