@@ -22,6 +22,7 @@
 
 import { useQuery } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
+import { useAuth } from "@/lib/auth-store";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   Tabs,
@@ -55,11 +56,13 @@ import {
   Gauge,
   Timer,
 } from "lucide-react";
+import { TimeInTradeTab } from "@/components/analytics/time-in-trade-tab";
 
 const TABS = [
   { key: "overall", label: "Overall Metrics" },
   { key: "instruments", label: "By Instrument" },
   { key: "setup", label: "By Setup & Strategy" },
+  { key: "holdingTime", label: "Time in Trade" },
   { key: "checklist", label: "Checklist Adherence" },
   { key: "violations", label: "Rule Violations" },
   { key: "sessions", label: "Sessions & Weekdays" },
@@ -72,6 +75,7 @@ const TAB_DIMENSION: Record<TabKey, string> = {
   overall: "overview",
   instruments: "instrument",
   setup: "strategy",
+  holdingTime: "holding-time",
   checklist: "strategy",
   violations: "behavior",
   sessions: "session",
@@ -99,6 +103,7 @@ async function fetchAccountsList() {
 }
 
 export function AnalyticsView() {
+  const { user } = useAuth();
   const [tab, setTab] = useState<TabKey>("overall");
   const { params, setParams, navigate, selectedAccountId, setSelectedAccountId } = useNav();
   const accountId = selectedAccountId || params.accountId || "all";
@@ -107,8 +112,9 @@ export function AnalyticsView() {
   }
 
   const { data: accountsData } = useQuery({
-    queryKey: ["accounts"],
+    queryKey: ["accounts", user?.id],
     queryFn: fetchAccountsList,
+    enabled: !!user?.id,
   });
 
   const dimension = TAB_DIMENSION[tab];
@@ -209,6 +215,14 @@ export function AnalyticsView() {
                 items={(data as any)?.items ?? []}
                 onSelectStrategy={(stratId) => navigate("tradesLog", { strategyId: stratId })}
               />
+            )}
+          </TabsContent>
+
+          <TabsContent value="holdingTime" className="mt-6 focus-visible:outline-none">
+            {loading ? (
+              <AnalyticsSkeleton />
+            ) : (
+              <TimeInTradeTab data={data as any} />
             )}
           </TabsContent>
 

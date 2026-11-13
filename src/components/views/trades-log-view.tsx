@@ -1,8 +1,9 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
-import { useMemo, useState } from "react";
+import { useMemo, useState, useEffect } from "react";
 import { useNav } from "@/lib/nav-store";
+import { useAuth } from "@/lib/auth-store";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -19,6 +20,7 @@ import { formatSignedCents, formatR } from "@/lib/money";
 import { dToNumber } from "@/lib/decimal";
 import { CloseTradeModal } from "@/components/trade/close-trade-modal";
 import { ExecuteTradeModal } from "@/components/trade/execute-trade-modal";
+import { SavedFilterPresets, type FilterState } from "@/components/trades/saved-filter-presets";
 
 /* ------------------------------------------------------------------ */
 /* Data fetching                                                       */
@@ -38,7 +40,9 @@ interface TradeRow {
   isDraft: boolean;
   accountId: string;
   strategyId: string | null;
+  strategyVersionId?: string | null;
   strategy?: { id: string; name: string } | null;
+  strategyVersion?: { id: string; versionLabel: string; strategyId?: string } | null;
   planAdherenceJson: string | null;
 }
 
@@ -53,14 +57,20 @@ async function fetchTrades(): Promise<{ items: TradeRow[] }> {
   return res.json();
 }
 
-async function fetchAccounts() {
+async function fetchAccounts(): Promise<{ items: any[] }> {
   const res = await fetch("/api/accounts", { cache: "no-store" });
-  return res.json();
+  if (!res.ok) return { items: [] };
+  const data = await res.json();
+  const arr = (data as any)?.items ?? (data as any)?.accounts ?? (Array.isArray(data) ? data : []);
+  return { items: Array.isArray(arr) ? arr : [] };
 }
 
-async function fetchStrategies() {
+async function fetchStrategies(): Promise<{ items: any[] }> {
   const res = await fetch("/api/strategies", { cache: "no-store" });
-  return res.json();
+  if (!res.ok) return { items: [] };
+  const data = await res.json();
+  const arr = (data as any)?.items ?? (data as any)?.strategies ?? (Array.isArray(data) ? data : []);
+  return { items: Array.isArray(arr) ? arr : [] };
 }
 
 /* ------------------------------------------------------------------ */
@@ -127,6 +137,7 @@ function setupName(t: TradeRow): string | null {
 
 export function TradesLogView() {
   const { navigate, params, setParams, selectedAccountId, setSelectedAccountId } = useNav();
+  const { user } = useAuth();
 
   const accountFilter = selectedAccountId || params.accountId || "all";
   function setAccountFilter(v: string) {
@@ -140,7 +151,7 @@ export function TradesLogView() {
   const [executeTradeId, setExecuteTradeId] = useState<string | null>(null);
 
   // Sync state if navigation params update
-  useMemo(() => {
+  useEffect(() => {
     if (params.symbol && params.symbol !== search) setSearch(params.symbol);
     if (params.search && params.search !== search) setSearch(params.search);
     if (params.strategyId && params.strategyId !== setupFilter) setSetupFilter(params.strategyId);
@@ -153,22 +164,70 @@ export function TradesLogView() {
     queryFn: fetchTrades,
   });
   const { data: accountsData } = useQuery({
-    queryKey: ["accounts"],
+    queryKey: ["accounts", user?.id],
     queryFn: fetchAccounts,
+    enabled: !!user?.id,
   });
   const { data: strategiesData } = useQuery({
     queryKey: ["strategies"],
     queryFn: fetchStrategies,
   });
 
-  const allTrades: TradeRow[] = tradesData?.items ?? [];
-  const accounts: { id: string; name: string }[] = accountsData?.items ?? [];
-  const strategies: { id: string; name: string }[] = strategiesData?.items ?? [];
+  const allTrades: TradeRow[] = useMemo(() => {
+    if (Array.isArray(tradesData)) return tradesData;
+    if (Array.isArray(tradesData?.items)) return tradesData.items;
+    if (Array.isArray((tradesData as any)?.trades)) return (tradesData as any).trades;
+    return [];
+  }, [tradesData]);
+
+  const accounts: { id: string; name: string; broker?: string | null; accountType?: string | null; currency?: string }[] = useMemo(() => {
+    if (Array.isArray(accountsData)) return accountsData;
+    if (Array.isArray(accountsData?.items)) return accountsData.items;
+    if (Array.isArray((accountsData as any)?.accounts)) return (accountsData as any).accounts;
+    return [];
+  }, [accountsData]);
+
+  const strategies: { id: string; name: string }[] = useMemo(() => {
+    if (Array.isArray(strategiesData)) return strategiesData;
+    if (Array.isArray(strategiesData?.items)) return strategiesData.items;
+    if (Array.isArray((strategiesData as any)?.strategies)) return (strategiesData as any).strategies;
+    return [];
+  }, [strategiesData]);
+
+  // Compute trade count per strategy to display in the setup selector
+  const tradeCountsByStrategy = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const t of allTrades) {
+      const sId = t.strategyId || t.strategy?.id || t.strategyVersion?.strategyId;
+      if (sId) {
+        counts.set(sId, (counts.get(sId) || 0) + 1);
+      }
+    }
+    return counts;
+  }, [allTrades]);
+
+  const selectedStrategy = useMemo(() => {
+    if (setupFilter === "all") return null;
+    return strategies.find((s) => s.id === setupFilter) || null;
+  }, [strategies, setupFilter]);
 
   const filtered = useMemo(() => {
     return allTrades.filter((t) => {
+      // Account filter
       if (accountFilter !== "all" && t.accountId !== accountFilter) return false;
-      if (setupFilter !== "all" && t.strategyId !== setupFilter) return false;
+
+      // Setup filter: resolve parent strategy ID via strategyId, strategy.id, strategyVersion.strategyId, or matching name
+      if (setupFilter !== "all") {
+        const tradeStratId = t.strategyId || t.strategy?.id || t.strategyVersion?.strategyId;
+        const matchesId = tradeStratId === setupFilter;
+        const matchesName =
+          selectedStrategy?.name &&
+          t.strategy?.name &&
+          t.strategy.name.toLowerCase() === selectedStrategy.name.toLowerCase();
+
+        if (!matchesId && !matchesName) return false;
+      }
+
       if (directionFilter !== "all" && t.direction !== directionFilter) return false;
       if (outcomeFilter !== "all" && classifyOutcome(t) !== outcomeFilter) return false;
       if (search) {
@@ -182,7 +241,7 @@ export function TradesLogView() {
       }
       return true;
     });
-  }, [allTrades, accountFilter, setupFilter, directionFilter, outcomeFilter, search]);
+  }, [allTrades, accountFilter, setupFilter, selectedStrategy, directionFilter, outcomeFilter, search]);
 
   const hasActiveFilters =
     accountFilter !== "all" ||
@@ -198,6 +257,25 @@ export function TradesLogView() {
     setOutcomeFilter("all");
     setSearch("");
   }
+
+  function handleApplyPresetFilters(filters: FilterState) {
+    if (filters.accountId !== undefined) setAccountFilter(filters.accountId);
+    if (filters.setupId !== undefined) setSetupFilter(filters.setupId);
+    if (filters.direction !== undefined) setDirectionFilter(filters.direction);
+    if (filters.outcome !== undefined) setOutcomeFilter(filters.outcome);
+    if (filters.search !== undefined) setSearch(filters.search);
+  }
+
+  const currentFilterState: FilterState = useMemo(() => ({
+    accountId: accountFilter,
+    setupId: setupFilter,
+    direction: directionFilter,
+    outcome: outcomeFilter,
+    search,
+  }), [accountFilter, setupFilter, directionFilter, outcomeFilter, search]);
+
+  const availableAccountIds = useMemo(() => accounts.map((a) => a.id), [accounts]);
+  const availableStrategyIds = useMemo(() => strategies.map((s) => s.id), [strategies]);
 
   return (
     <div className="p-4 md:p-6 space-y-4 max-w-7xl">
@@ -217,7 +295,15 @@ export function TradesLogView() {
       </div>
 
       {/* Filter bar */}
-      <div className="bg-card rounded-xl border border-border shadow-sm p-3 md:p-4">
+      <div className="bg-card rounded-xl border border-border shadow-sm p-3 md:p-4 space-y-3">
+        <SavedFilterPresets
+          targetView="tradesLog"
+          currentFilters={currentFilterState}
+          onApplyFilters={handleApplyPresetFilters}
+          availableAccountIds={availableAccountIds}
+          availableStrategyIds={availableStrategyIds}
+        />
+
         <div className="flex flex-col gap-3">
           <div className="relative">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground/70 z-10" />
@@ -234,12 +320,18 @@ export function TradesLogView() {
                 <SelectValue placeholder="All Accounts" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="all">All Accounts</SelectItem>
-                {accounts.map((a) => (
-                  <SelectItem key={a.id} value={a.id}>
-                    {a.name}
-                  </SelectItem>
-                ))}
+                <SelectItem value="all">All Accounts ({accounts.length})</SelectItem>
+                {accounts.map((a) => {
+                  const isDuplicateName = accounts.filter((other) => other.name === a.name).length > 1;
+                  const secondary = isDuplicateName
+                    ? ` (${a.broker || a.accountType || a.currency || a.id.slice(-4)})`
+                    : "";
+                  return (
+                    <SelectItem key={a.id} value={a.id}>
+                      {a.name}{secondary}
+                    </SelectItem>
+                  );
+                })}
               </SelectContent>
             </Select>
 
@@ -248,12 +340,15 @@ export function TradesLogView() {
                 <SelectValue placeholder="All Setups" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="all">All Setups</SelectItem>
-                {strategies.map((s) => (
-                  <SelectItem key={s.id} value={s.id}>
-                    {s.name}
-                  </SelectItem>
-                ))}
+                <SelectItem value="all">All Setups ({strategies.length})</SelectItem>
+                {strategies.map((s) => {
+                  const count = tradeCountsByStrategy.get(s.id) || 0;
+                  return (
+                    <SelectItem key={s.id} value={s.id}>
+                      {s.name}{count > 0 ? ` (${count} trade${count === 1 ? "" : "s"})` : ""}
+                    </SelectItem>
+                  );
+                })}
               </SelectContent>
             </Select>
 

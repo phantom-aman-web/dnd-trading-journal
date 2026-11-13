@@ -64,21 +64,18 @@ export async function GET(req: NextRequest) {
   }
 
   // Full JSON export
-  const [accounts, instruments, strategies, checklists, trades, reviews, actionItems, tags, goals, dailyPlans] = await Promise.all([
+  const [accounts, instruments, strategies, checklists, trades, tags, goals] = await Promise.all([
     db.tradingAccount.findMany({ where: { userId: user.id } }),
     db.instrument.findMany({ where: { userId: user.id } }),
     db.strategy.findMany({ where: { userId: user.id }, include: { versions: true, experiments: true } }),
     db.checklistConfig.findMany({ where: { userId: user.id }, include: { versions: true } }),
     db.trade.findMany({ where: { userId: user.id }, include: { executions: true, media: true } }),
-    db.review.findMany({ where: { userId: user.id }, include: { tradeLinks: true, actionItems: true } }),
-    db.actionItem.findMany({ where: { userId: user.id } }),
     db.tag.findMany({ where: { userId: user.id } }),
     db.goal.findMany({ where: { userId: user.id } }),
-    db.dailyPlan.findMany({ where: { userId: user.id } }),
   ]);
   await audit("export.performed", "user", user.id, { format: "json", type: "all" });
   return Response.json({
     exportedAt: new Date().toISOString(),
-    accounts, instruments, strategies, checklists, trades, reviews, actionItems, tags, goals, dailyPlans,
+    accounts, instruments, strategies, checklists, trades, tags, goals,
   });
 }

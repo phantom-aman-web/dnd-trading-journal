@@ -1,7 +1,7 @@
 "use client";
 
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -23,10 +23,13 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Plus, ListChecks, ChevronRight, Loader2, Trash2, PencilLine, X, ArrowUp, ArrowDown } from "lucide-react";
+import { Plus, ListChecks, ChevronRight, Loader2, Trash2, PencilLine, X, ArrowUp, ArrowDown, GitCompare } from "lucide-react";
 import { toast } from "sonner";
 import { FieldLabel } from "@/components/common/field-label";
 import { cn } from "@/lib/utils";
+import { useNav } from "@/lib/nav-store";
+import { StrategyVersionComparisonModal } from "@/components/strategies/strategy-version-comparison-modal";
+import { StrategyDetailView } from "@/components/strategies/strategy-detail-view";
 
 /* ------------------------------------------------------------------ */
 /* Types & helpers                                                     */
@@ -113,10 +116,48 @@ async function fetchStrategies() {
 
 export function PlaybooksView() {
   const qc = useQueryClient();
+  const { params, setParams } = useNav();
+  const [selectedStrategyId, setSelectedStrategyId] = useState<string | null>(params.strategyId || null);
   const { data, isLoading } = useQuery({ queryKey: ["strategies"], queryFn: fetchStrategies });
   const [editing, setEditing] = useState<{ id?: string; open: boolean }>({ open: false });
+  const [comparing, setComparing] = useState<{
+    id?: string;
+    name?: string;
+    versions?: any[];
+    open: boolean;
+  }>({ open: false });
+
+  useEffect(() => {
+    if (params.strategyId && params.strategyId !== selectedStrategyId) {
+      setSelectedStrategyId(params.strategyId);
+    } else if (!params.strategyId && selectedStrategyId) {
+      setSelectedStrategyId(null);
+    }
+  }, [params.strategyId]);
+
+  const handleSelectStrategy = (id: string) => {
+    setSelectedStrategyId(id);
+    setParams({ ...params, strategyId: id });
+  };
+
+  const handleBackFromDetail = () => {
+    setSelectedStrategyId(null);
+    const nextParams = { ...params };
+    delete nextParams.strategyId;
+    setParams(nextParams);
+    qc.invalidateQueries({ queryKey: ["strategies"] });
+  };
 
   const strategies: any[] = data?.items ?? [];
+
+  if (selectedStrategyId) {
+    return (
+      <StrategyDetailView
+        strategyId={selectedStrategyId}
+        onBack={handleBackFromDetail}
+      />
+    );
+  }
 
   if (isLoading) return <div className="p-4 md:p-6"><Skeleton className="h-96" /></div>;
 
@@ -126,7 +167,7 @@ export function PlaybooksView() {
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">Setups & Checklists</h1>
           <p className="text-sm text-muted-foreground mt-1">
-            Define each setup you trade, the market it applies to, and the checklist of rules you follow.
+            Define each setup you trade, the market it applies to, and the checklist of rules you follow. Click any setup to view its full analytics and version history.
           </p>
         </div>
         <SetupDialog
@@ -164,12 +205,32 @@ export function PlaybooksView() {
                 strategy={s}
                 checklistCount={checklist.length}
                 requiredCount={requiredCount}
+                onSelect={() => handleSelectStrategy(s.id)}
                 onEdit={() => setEditing({ id: s.id, open: true })}
+                onCompare={() =>
+                  setComparing({
+                    id: s.id,
+                    name: s.name,
+                    versions,
+                    open: true,
+                  })
+                }
                 onDeleted={() => qc.invalidateQueries({ queryKey: ["strategies"] })}
               />
             );
           })}
         </div>
+      )}
+
+      {/* Version comparison modal */}
+      {comparing.open && comparing.id && comparing.versions && (
+        <StrategyVersionComparisonModal
+          open={comparing.open}
+          onOpenChange={(o) => setComparing((prev) => ({ ...prev, open: o }))}
+          strategyId={comparing.id}
+          strategyName={comparing.name || "Setup"}
+          versions={comparing.versions}
+        />
       )}
 
       {/* Hidden dialog instance that opens when editing an existing setup. */}
@@ -196,25 +257,53 @@ function SetupCard({
   strategy,
   checklistCount,
   requiredCount,
+  onSelect,
   onEdit,
+  onCompare,
   onDeleted,
 }: {
   strategy: any;
   checklistCount: number;
   requiredCount: number;
+  onSelect: () => void;
   onEdit: () => void;
+  onCompare: () => void;
   onDeleted: () => void;
 }) {
   const marketLabel = strategy.market ? MARKET_LABELS[strategy.market] ?? strategy.market : null;
+  const versionsCount = (strategy.versions ?? []).length;
+  const tradesCount = strategy._count?.trades ?? strategy.tradeCount;
+
   return (
-    <Card className="p-4 flex flex-col gap-3 transition-shadow hover:shadow-sm">
+    <Card className="p-4 flex flex-col gap-3 transition-shadow hover:shadow-sm hover:border-primary/40">
       <div className="flex items-start justify-between gap-2">
-        <div className="min-w-0 flex-1">
+        <div
+          className="min-w-0 flex-1 cursor-pointer group"
+          onClick={onSelect}
+          role="button"
+          tabIndex={0}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" || e.key === " ") {
+              e.preventDefault();
+              onSelect();
+            }
+          }}
+        >
           <div className="flex items-center gap-2 flex-wrap">
-            <h3 className="font-medium text-sm truncate">{strategy.name}</h3>
+            <h3 className="font-medium text-sm truncate group-hover:text-primary transition-colors">
+              {strategy.name}
+            </h3>
             {marketLabel && (
               <Badge variant="outline" className="text-[10px] uppercase tracking-wide">
                 {marketLabel}
+              </Badge>
+            )}
+            <Badge variant="secondary" className="text-[10px]">
+              {versionsCount} {versionsCount === 1 ? "version" : "versions"}
+            </Badge>
+            {typeof tradesCount === "number" && (
+              <Badge variant="outline" className="text-[10px] tnum">
+                {tradesCount} {tradesCount === 1 ? "trade" : "trades"}
               </Badge>
             )}
           </div>
@@ -226,7 +315,7 @@ function SetupCard({
         </div>
         <button
           onClick={onEdit}
-          className="shrink-0 text-muted-foreground hover:text-foreground"
+          className="shrink-0 text-muted-foreground hover:text-foreground p-1"
           aria-label="Edit setup"
         >
           <PencilLine className="h-4 w-4" />
@@ -247,13 +336,29 @@ function SetupCard({
         )}
       </div>
 
-      <div className="flex items-center justify-between pt-1 border-t border-border mt-auto">
-        <button
-          onClick={onEdit}
-          className="text-xs text-muted-foreground hover:text-foreground inline-flex items-center gap-1"
-        >
-          Edit <ChevronRight className="h-3 w-3" />
-        </button>
+      <div className="flex items-center justify-between pt-2 border-t border-border mt-auto">
+        <div className="flex items-center gap-3">
+          <button
+            onClick={onSelect}
+            className="text-xs text-primary font-medium hover:underline inline-flex items-center gap-1"
+          >
+            View Details <ChevronRight className="h-3 w-3" />
+          </button>
+          <button
+            onClick={onEdit}
+            className="text-xs text-muted-foreground hover:text-foreground inline-flex items-center gap-1"
+          >
+            Edit
+          </button>
+          {versionsCount >= 2 && (
+            <button
+              onClick={onCompare}
+              className="text-xs text-muted-foreground hover:text-foreground inline-flex items-center gap-1"
+            >
+              <GitCompare className="h-3 w-3" /> Compare
+            </button>
+          )}
+        </div>
         <button
           onClick={async () => {
             if (!confirm("Delete this setup? Trades that reference it will keep their data, but the setup itself will be removed.")) return;

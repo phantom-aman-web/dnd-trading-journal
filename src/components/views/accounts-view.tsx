@@ -25,6 +25,8 @@ import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { formatSignedCents } from "@/lib/money";
 import { useNavStore } from "@/lib/nav-store";
+import { useAuth } from "@/lib/auth-store";
+import { PropChallengesSection } from "@/components/accounts/prop-challenges-section";
 
 /* ------------------------------------------------------------------ */
 /* Types & constants                                                   */
@@ -115,11 +117,13 @@ async function fetchTrades(): Promise<TradeRow[]> {
 
 export function AccountsView() {
   const qc = useQueryClient();
+  const { user } = useAuth();
   const selectedAccountId = useNavStore((s) => s.selectedAccountId);
   const setSelectedAccountId = useNavStore((s) => s.setSelectedAccountId);
   const { data: accountsData, isLoading } = useQuery({
-    queryKey: ["accounts"],
+    queryKey: ["accounts", user?.id],
     queryFn: fetchAccounts,
+    enabled: !!user?.id,
   });
   const { data: tradesData } = useQuery({
     queryKey: ["trades", { log: true }],
@@ -485,6 +489,9 @@ export function AccountsView() {
           })}
         </div>
       )}
+
+      {/* Prop Firm Challenge Tracker */}
+      {accounts.length > 0 && <PropChallengesSection accounts={accounts} />}
 
       {/* Performance detail section */}
       {accounts.length > 0 && (

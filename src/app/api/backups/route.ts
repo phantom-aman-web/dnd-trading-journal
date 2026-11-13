@@ -11,11 +11,8 @@ interface BackupData {
   strategies: any[];
   checklists: any[];
   trades: any[];
-  reviews: any[];
-  actionItems: any[];
   tags: any[];
   goals: any[];
-  dailyPlans: any[];
 }
 
 export async function GET() {
@@ -35,21 +32,18 @@ export async function POST(req: NextRequest) {
   try { user = await requireUser(); } catch (e) { return toApiError(e); }
   await ensureStorage();
 
-  const [accounts, instruments, strategies, checklists, trades, reviews, actionItems, tags, goals, dailyPlans] = await Promise.all([
+  const [accounts, instruments, strategies, checklists, trades, tags, goals] = await Promise.all([
     db.tradingAccount.findMany({ where: { userId: user.id } }),
     db.instrument.findMany({ where: { userId: user.id } }),
     db.strategy.findMany({ where: { userId: user.id }, include: { versions: true, experiments: true } }),
     db.checklistConfig.findMany({ where: { userId: user.id }, include: { versions: true } }),
     db.trade.findMany({ where: { userId: user.id }, include: { executions: true, media: true } }),
-    db.review.findMany({ where: { userId: user.id } }),
-    db.actionItem.findMany({ where: { userId: user.id } }),
     db.tag.findMany({ where: { userId: user.id } }),
     db.goal.findMany({ where: { userId: user.id } }),
-    db.dailyPlan.findMany({ where: { userId: user.id } }),
   ]);
 
   const data: BackupData = {
-    accounts, instruments, strategies, checklists, trades, reviews, actionItems, tags, goals, dailyPlans,
+    accounts, instruments, strategies, checklists, trades, tags, goals,
   };
   const payload = JSON.stringify(data, null, 2);
   const buf = Buffer.from(payload, "utf-8");
@@ -67,7 +61,6 @@ export async function POST(req: NextRequest) {
         instruments: instruments.length,
         strategies: strategies.length,
         trades: trades.length,
-        reviews: reviews.length,
       }),
     },
   });
@@ -95,9 +88,6 @@ export async function PUT(req: NextRequest) {
   if (restoreMode === "replace") {
     // Delete existing user data (careful)
     await db.trade.deleteMany({ where: { userId: user.id } });
-    await db.review.deleteMany({ where: { userId: user.id } });
-    await db.actionItem.deleteMany({ where: { userId: user.id } });
-    await db.dailyPlan.deleteMany({ where: { userId: user.id } });
     await db.strategy.deleteMany({ where: { userId: user.id } });
     await db.checklistConfig.deleteMany({ where: { userId: user.id } });
     await db.tag.deleteMany({ where: { userId: user.id } });

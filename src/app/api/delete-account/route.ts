@@ -29,12 +29,6 @@ export async function DELETE(req: NextRequest) {
   await db.tradeMedia.deleteMany({ where: { userId: user.id } });
   await db.trade.deleteMany({ where: { userId: user.id } });
 
-  await db.reviewTradeLink.deleteMany({ where: { review: { userId: user.id } } });
-  await db.actionItem.deleteMany({ where: { userId: user.id } });
-  await db.review.deleteMany({ where: { userId: user.id } });
-
-  await db.dailyPlan.deleteMany({ where: { userId: user.id } });
-
   await db.strategyVersion.deleteMany({ where: { strategy: { userId: user.id } } });
   await db.strategyExperiment.deleteMany({ where: { strategy: { userId: user.id } } });
   await db.strategy.deleteMany({ where: { userId: user.id } });

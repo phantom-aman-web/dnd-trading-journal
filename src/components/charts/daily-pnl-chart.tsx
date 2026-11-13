@@ -17,8 +17,8 @@ export function DailyPnlChart({ data }: { data: Point[] }) {
     count: d.tradeCount,
   }));
   return (
-    <div className="h-48 md:h-56">
-      <ResponsiveContainer width="100%" height="100%">
+    <div className="h-48 md:h-56 min-w-0 w-full">
+      <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={180}>
         <BarChart data={chartData} margin={{ top: 5, right: 5, left: 5, bottom: 5 }}>
           <XAxis dataKey="label" tick={CHART_AXIS_TICK_STYLE} tickLine={false} axisLine={false} interval="preserveStartEnd" />
           <YAxis tick={CHART_AXIS_TICK_STYLE} tickLine={false} axisLine={false} width={50} tickFormatter={(v) => `$${v.toFixed(0)}`} />

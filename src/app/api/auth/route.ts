@@ -69,8 +69,8 @@ export async function POST(req: NextRequest) {
       create: {
         userId: user.id,
         prefsJson: JSON.stringify({
-          trading: { sessionReminder: true, dailyPlan: true, dailyLoss: true },
-          journal: { incompleteTrade: true, eodReminder: true, weeklyReview: true },
+          trading: { sessionReminder: true, dailyLoss: true },
+          journal: { incompleteTrade: true, eodReminder: true },
           system: { importCompleted: true, uploadCompleted: false, syncConflict: true },
           quietHours: { enabled: false, start: "22:00", end: "07:00" },
         }),

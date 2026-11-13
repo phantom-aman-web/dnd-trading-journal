@@ -18,8 +18,8 @@ export function GroupBarChart({ data, valueLabel = "Value" }: { data: Row[]; val
     );
   }
   return (
-    <div className="h-48 md:h-56">
-      <ResponsiveContainer width="100%" height="100%">
+    <div className="h-48 md:h-56 min-w-0 w-full">
+      <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={180}>
         <BarChart data={data} layout="vertical" margin={{ top: 5, right: 30, left: 5, bottom: 5 }}>
           <XAxis type="number" tick={CHART_AXIS_TICK_STYLE} tickLine={false} axisLine={false} />
           <YAxis type="category" dataKey="label" tick={CHART_AXIS_TICK_STYLE} tickLine={false} axisLine={false} width={90} />

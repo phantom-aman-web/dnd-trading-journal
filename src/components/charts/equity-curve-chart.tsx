@@ -21,8 +21,8 @@ export function EquityCurveChart({ data, startingBalanceCents = 0 }: { data: Poi
   const padding = (maxVal - minVal) * 0.1 || 1;
 
   return (
-    <div className="h-48 md:h-56">
-      <ResponsiveContainer width="100%" height="100%">
+    <div className="h-48 md:h-56 min-w-0 w-full">
+      <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={180}>
         <AreaChart data={chartData} margin={{ top: 5, right: 5, left: 5, bottom: 5 }}>
           <defs>
             <linearGradient id="equityGradient" x1="0" y1="0" x2="0" y2="1">

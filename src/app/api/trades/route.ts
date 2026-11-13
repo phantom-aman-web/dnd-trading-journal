@@ -43,7 +43,6 @@ const TradeCreateSchema = z.object({
   newsEvent: z.string().optional().nullable(),
   strategyId: z.string().optional().nullable(),
   strategyVersionId: z.string().optional().nullable(),
-  dailyPlanId: z.string().optional().nullable(),
   checklistVersionId: z.string().optional().nullable(),
   checklistAnswers: z.record(z.string(), z.any()).optional().nullable(),
   // setupGrade / setupScore are accepted but ALWAYS overridden by the server's
@@ -115,7 +114,17 @@ export async function GET(req: NextRequest) {
   if (q.includeArchived === false) where.isArchived = false;
   if (q.accountId) where.accountId = q.accountId;
   if (q.instrumentId) where.instrumentId = q.instrumentId;
-  if (q.strategyId) where.strategyId = q.strategyId;
+  if (q.strategyId) {
+    where.AND = [
+      ...(where.AND || []),
+      {
+        OR: [
+          { strategyId: q.strategyId },
+          { strategyVersion: { strategyId: q.strategyId } },
+        ],
+      },
+    ];
+  }
   if (q.session) where.session = q.session;
   if (q.status) where.status = q.status;
   if (q.direction) where.direction = q.direction;
@@ -147,7 +156,7 @@ export async function GET(req: NextRequest) {
     include: {
       executions: { orderBy: { seq: "asc" } },
       strategy: { select: { id: true, name: true } },
-      strategyVersion: { select: { id: true, versionLabel: true } },
+      strategyVersion: { select: { id: true, versionLabel: true, strategyId: true } },
     },
   });
 
@@ -196,12 +205,6 @@ export async function POST(req: NextRequest) {
       where: { id: data.strategyId, userId: user.id },
     });
     if (!strat) return bad("Strategy not found or not owned by user");
-  }
-  if (data.dailyPlanId) {
-    const plan = await db.dailyPlan.findFirst({
-      where: { id: data.dailyPlanId, userId: user.id },
-    });
-    if (!plan) return bad("Daily plan not found or not owned by user");
   }
 
   // ── SERVER-SIDE FINANCIAL CALCULATION (Authoritative Engine) ───
@@ -366,7 +369,6 @@ export async function POST(req: NextRequest) {
         newsEvent: data.newsEvent ?? "none",
         strategyId: data.strategyId,
         strategyVersionId: data.strategyVersionId,
-        dailyPlanId: data.dailyPlanId,
         checklistVersionId: pendingEvaluation?.checklistVersionId ?? null,
         setupGrade,
         setupScore,

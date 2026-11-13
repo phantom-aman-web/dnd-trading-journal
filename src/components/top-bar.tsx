@@ -34,10 +34,10 @@ import { MarketClock } from "@/components/market-clock";
 
 async function fetchAccounts() {
   const res = await fetch("/api/accounts", { cache: "no-store" });
-  if (!res.ok) return [];
+  if (!res.ok) return { items: [] };
   const data = await res.json();
   const arr = (data as any)?.items ?? (data as any)?.accounts ?? (Array.isArray(data) ? data : []);
-  return Array.isArray(arr) ? arr : [];
+  return { items: Array.isArray(arr) ? arr : [] };
 }
 
 export function TopBar({ onOpenMobileNav }: { onOpenMobileNav?: () => void }) {
@@ -53,7 +53,9 @@ export function TopBar({ onOpenMobileNav }: { onOpenMobileNav?: () => void }) {
   });
   const accounts: any[] = Array.isArray(accountsData)
     ? accountsData
-    : ((accountsData as any)?.items ?? (Array.isArray((accountsData as any)?.accounts) ? (accountsData as any).accounts : []));
+    : (Array.isArray((accountsData as any)?.items)
+      ? (accountsData as any).items
+      : (Array.isArray((accountsData as any)?.accounts) ? (accountsData as any).accounts : []));
 
   const validAccountSelected = selectedAccountId && accounts.some((a: any) => a.id === selectedAccountId);
   const accountFilter = validAccountSelected ? selectedAccountId : "all";

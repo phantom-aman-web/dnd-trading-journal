@@ -290,8 +290,8 @@ async function seed() {
     create: {
       userId: user.id,
       prefsJson: JSON.stringify({
-        trading: { sessionReminder: true, dailyPlan: true, dailyLoss: true },
-        journal: { incompleteTrade: true, eodReminder: true, weeklyReview: true },
+        trading: { sessionReminder: true, dailyLoss: true },
+        journal: { incompleteTrade: true, eodReminder: true },
         system: { importCompleted: true, uploadCompleted: false, syncConflict: true },
         quietHours: { enabled: false, start: "22:00", end: "07:00" },
       }),
@@ -628,45 +628,6 @@ async function seed() {
       }
     }
     console.log(`Seeded ${seeds.length} trades (with checklist evaluations).`);
-  }
-
-  // Sample daily plans for last 5 days
-  for (let d = 0; d < 5; d++) {
-    const date = new Date(Date.now() - d * 24 * 60 * 60 * 1000);
-    date.setUTCHours(0, 0, 0, 0);
-    const existing = await db.dailyPlan.findUnique({ where: { userId_date: { userId: user.id, date } } });
-    if (existing) continue;
-    await db.dailyPlan.create({
-      data: {
-        userId: user.id,
-        date,
-        weeklyBias: d % 2 === 0 ? "bullish" : "bearish",
-        dailyBias: d % 2 === 0 ? "bullish" : "bearish",
-        instruments: "XAUUSD, EURUSD, NQ",
-        pwh: "2008.50",
-        pwl: "1995.20",
-        pdh: "2010.10",
-        pdl: "1992.40",
-        session: "ny_am",
-        setupConditions: "Wait for liquidity sweep + MSS confirmation",
-        invalidation: "Close below 1990 invalidates bullish bias",
-        maxTrades: 2,
-        maxDailyRiskPct: "0.01",
-        notes: "Focus on quality over quantity. Patience is the edge.",
-      },
-    });
-  }
-
-  // Sample action items
-  const existingActions = await db.actionItem.count({ where: { userId: user.id } });
-  if (existingActions === 0) {
-    await db.actionItem.createMany({
-      data: [
-        { userId: user.id, title: "Wait for MSS confirmation before entry", description: "Multiple trades this week entered before MSS confirmed.", status: "open" },
-        { userId: user.id, title: "Limit to 2 trades per session", description: "Overtrading observed in NY AM.", status: "open" },
-        { userId: user.id, title: "Journal every trade within 24 hours", description: "Keep entries fresh and accurate.", status: "open" },
-      ],
-    });
   }
 
   // Sample notifications

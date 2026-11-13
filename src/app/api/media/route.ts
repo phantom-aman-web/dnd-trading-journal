@@ -10,9 +10,17 @@ export async function GET(req: NextRequest) {
   try { user = await requireUser(); } catch (e) { return toApiError(e); }
   const url = new URL(req.url);
   const tradeId = url.searchParams.get("tradeId");
+  const strategyId = url.searchParams.get("strategyId");
   const kind = url.searchParams.get("kind");
+
+  // Strictly trade/strategy-scoped evidence only. Global media library is not supported.
+  if (!tradeId && !strategyId) {
+    return bad("tradeId or strategyId is required to access evidence attachments.");
+  }
+
   const where: any = { userId: user.id };
   if (tradeId) where.tradeId = tradeId;
+  if (strategyId) where.strategyId = strategyId;
   if (kind) where.kind = kind;
   const items = await db.tradeMedia.findMany({
     where,
@@ -35,11 +43,14 @@ export async function POST(req: NextRequest) {
   const file = formData.get("file") as File | null;
   const tradeId = (formData.get("tradeId") as string | null) ?? null;
   const strategyId = (formData.get("strategyId") as string | null) ?? null;
-  const reviewId = (formData.get("reviewId") as string | null) ?? null;
   const stage = (formData.get("stage") as string | null) ?? null;
   const caption = (formData.get("caption") as string | null) ?? null;
 
   if (!file) return bad("File is required");
+
+  if (!tradeId && !strategyId) {
+    return bad("tradeId or strategyId is required for evidence upload.");
+  }
 
   // Validate ownership of parent
   if (tradeId) {
@@ -49,10 +60,6 @@ export async function POST(req: NextRequest) {
   if (strategyId) {
     const strat = await db.strategy.findFirst({ where: { id: strategyId, userId: user.id } });
     if (!strat) return bad("Strategy not found or not owned by user");
-  }
-  if (reviewId) {
-    const rev = await db.review.findFirst({ where: { id: reviewId, userId: user.id } });
-    if (!rev) return bad("Review not found or not owned by user");
   }
 
   // Validate MIME/size (spec section 104)
@@ -71,7 +78,6 @@ export async function POST(req: NextRequest) {
       userId: user.id,
       tradeId,
       strategyId,
-      reviewId,
       kind: isImage ? "image" : "video",
       stage,
       filename: file.name,

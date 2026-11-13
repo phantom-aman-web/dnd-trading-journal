@@ -72,7 +72,6 @@ export async function DELETE(req: NextRequest, ctx: { params: Promise<{ id: stri
     await db.tradeTarget.deleteMany({ where: { tradeId: { in: tradeIds } } });
     await db.tradeChecklistEvaluation.deleteMany({ where: { tradeId: { in: tradeIds } } });
     await db.tradeMedia.deleteMany({ where: { tradeId: { in: tradeIds } } });
-    await db.reviewTradeLink.deleteMany({ where: { tradeId: { in: tradeIds } } });
     await db.trade.deleteMany({ where: { accountId: id } });
   }
 

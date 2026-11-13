@@ -18,8 +18,8 @@ export function RDistributionChart({ data }: { data: Bucket[] }) {
     );
   }
   return (
-    <div className="h-48 md:h-56">
-      <ResponsiveContainer width="100%" height="100%">
+    <div className="h-48 md:h-56 min-w-0 w-full">
+      <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={180}>
         <BarChart data={data} margin={{ top: 5, right: 5, left: 5, bottom: 5 }}>
           <XAxis dataKey="bucket" tick={CHART_AXIS_TICK_STYLE} tickLine={false} axisLine={false} />
           <YAxis tick={CHART_AXIS_TICK_STYLE} tickLine={false} axisLine={false} width={30} allowDecimals={false} />

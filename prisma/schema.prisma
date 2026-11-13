@@ -42,6 +42,8 @@ model User {
   legalAcceptances   LegalAcceptance[]
   media              TradeMedia[]
   deviceSessions     DeviceSession[]
+  filterPresets      FilterPreset[]
+  propChallenges     PropChallenge[]
 }
 
 // ---------------------------------------------------------------------------
@@ -66,6 +68,7 @@ model TradingAccount {
 
   user   User    @relation(fields: [userId], references: [id], onDelete: Cascade)
   trades Trade[]
+  propChallenges PropChallenge[]
 
   @@index([userId])
 }
@@ -680,3 +683,61 @@ model AnalyticsCache {
   @@unique([userId, bucket])
   @@index([userId])
 }
+
+// ---------------------------------------------------------------------------
+// Saved Filter Presets
+// ---------------------------------------------------------------------------
+
+model FilterPreset {
+  id          String   @id @default(cuid())
+  userId      String
+  name        String
+  description String?
+  targetView  String   @default("tradesLog") // tradesLog | analytics
+  filtersJson String   // JSON string of active filter key-values
+  isDefault   Boolean  @default(false)
+  isPinned    Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, targetView])
+}
+
+// ---------------------------------------------------------------------------
+// Prop Firm Challenge Tracker
+// ---------------------------------------------------------------------------
+
+model PropChallenge {
+  id                         String    @id @default(cuid())
+  userId                     String
+  accountId                  String
+  name                       String    // e.g. "FTMO 100k Stage 1"
+  propFirm                   String    // "FTMO", "MFF", "FundingPips", etc.
+  stage                      String    @default("phase1") // phase1 | phase2 | funded
+  status                     String    @default("active") // active | passed | failed | expired
+  startingBalanceCents       Int
+  profitTargetCents          Int?
+  dailyLossLimitCents        Int?
+  dailyLossLimitPct          Float?
+  maxDrawdownCents           Int?
+  maxDrawdownPct             Float?
+  drawdownType               String    @default("static") // static | trailing
+  trailingHighWaterMarkCents Int?
+  minTradingDays             Int?      @default(4)
+  maxTradingDays             Int?
+  resetTimezone              String    @default("America/New_York")
+  resetHour                  Int       @default(17) // 17:00 NY (5pm ET)
+  startDate                  DateTime  @default(now())
+  endDate                    DateTime?
+  notes                      String?
+  createdAt                  DateTime  @default(now())
+  updatedAt                  DateTime  @updatedAt
+
+  account TradingAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  user    User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, accountId])
+}
+

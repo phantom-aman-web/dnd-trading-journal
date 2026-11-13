@@ -4,6 +4,7 @@ import { requireUser } from "@/lib/auth";
 import { ok, toApiError } from "@/lib/api";
 import { getCached, setCached } from "@/lib/server-cache";
 import { TradeMetricRow, computeAggregateMetrics, groupBy, safeParsePsychTags } from "@/lib/financial-engine";
+import { computeTimeInTradeAnalytics } from "@/lib/duration-analytics";
 
 function safeParseArr(json: string | null): string[] {
   if (!json) return [];
@@ -223,6 +224,9 @@ export async function GET(req: NextRequest) {
         label: k, items: computeAggregateMetrics(arr, null),
       })),
     });
+  }
+  if (dimension === "holding-time" || dimension === "time-in-trade") {
+    return send(computeTimeInTradeAnalytics(trades));
   }
   return send({ aggregate: computeAggregateMetrics(rows, startingBalanceCents) });
 }

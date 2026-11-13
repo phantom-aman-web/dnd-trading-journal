@@ -36,7 +36,6 @@ export async function GET(_req: NextRequest, ctx: { params: Promise<{ id: string
       instrument: true,
       strategy: { include: { versions: { orderBy: { effectiveDate: "desc" } } } },
       strategyVersion: true,
-      dailyPlan: true,
       checklistVersion: { include: { checklist: true } },
       checklistEvaluations: {
         include: {
@@ -46,7 +45,6 @@ export async function GET(_req: NextRequest, ctx: { params: Promise<{ id: string
         orderBy: { evaluatedAt: "desc" },
       },
       media: { include: { annotations: true }, orderBy: { createdAt: "asc" } },
-      reviewLinks: { include: { review: true } },
     },
   });
   if (!trade) return notFound("Trade not found");
@@ -76,7 +74,7 @@ export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: strin
   const fields = [
     "instrumentSymbol", "market", "direction", "status", "session",
     "newsEvent",
-    "strategyId", "strategyVersionId", "dailyPlanId", "checklistVersionId",
+    "strategyId", "strategyVersionId", "checklistVersionId",
     "setupGrade", "setupScore", "plannedEntryPrice", "plannedStopPrice", "plannedTargetPrice",
     "plannedRiskPct", "entryTime", "exitTime", "tradingTimezone",
     "feesCents", "commissionCents", "swapCents", "slippageCents",
@@ -100,10 +98,6 @@ export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: strin
           where: { id: body[f], checklist: { userId: user.id } },
         });
         if (!cv) return bad("Checklist version not found or not owned by user.");
-      }
-      if (f === "dailyPlanId" && body[f]) {
-        const plan = await db.dailyPlan.findFirst({ where: { id: body[f], userId: user.id } });
-        if (!plan) return bad("Daily plan not found or not owned by user.");
       }
       allowed[f] = body[f];
     }

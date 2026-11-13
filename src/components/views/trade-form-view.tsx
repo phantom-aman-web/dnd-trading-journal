@@ -627,10 +627,10 @@ export function TradeFormView() {
     }
   }, [existing]);
 
-  // Deep-link pre-fills: ?date=YYYY-MM-DD (from calendar), ?dailyPlanId=...
+  // Deep-link pre-fills: ?date=YYYY-MM-DD (from calendar)
   useEffect(() => {
     if (editingId) return;
-    if (!params.date && !params.dailyPlanId) return;
+    if (!params.date) return;
     setForm((f: any) => {
       const next = { ...f };
       if (params.date) {
@@ -639,7 +639,7 @@ export function TradeFormView() {
       }
       return next;
     });
-  }, [params.date, params.dailyPlanId, editingId]);
+  }, [params.date, editingId]);
 
   // Autosave draft (new trades only).
   useEffect(() => {
@@ -1878,7 +1878,7 @@ export function TradeFormView() {
               <TabsTrigger value="checklist">2. Setup Checklist</TabsTrigger>
               <TabsTrigger value="risk">3. Risk &amp; Sizing</TabsTrigger>
               <TabsTrigger value="exits">4. Partial Exits</TabsTrigger>
-              <TabsTrigger value="review">5. Review &amp; Save</TabsTrigger>
+              <TabsTrigger value="review">5. Confirm &amp; Save</TabsTrigger>
             </TabsList>
 
         {/* ─────────────────────────────────────────────────────────── */}
@@ -3250,12 +3250,12 @@ export function TradeFormView() {
         </TabsContent>
 
         {/* ─────────────────────────────────────────────────────────── */}
-        {/* STEP 5 — Review & Save                                        */}
+        {/* STEP 5 — Confirm & Save                                       */}
         {/* ─────────────────────────────────────────────────────────── */}
         <TabsContent value="review" className="space-y-4 mt-3">
           <Card className="p-4 md:p-6 space-y-4 bg-background">
             <div>
-              <h2 className="text-lg font-medium">Review &amp; Save</h2>
+              <h2 className="text-lg font-medium">Confirm &amp; Save</h2>
               <p className="text-sm text-muted-foreground">
                 Confirm the trade details below, then save as a draft or as a
                 finalized trade record.

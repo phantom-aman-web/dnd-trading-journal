@@ -30,7 +30,6 @@ import {
   Check,
   X,
   Sparkles,
-  ClipboardList,
   HelpCircle,
   Lock,
   Play,
@@ -208,15 +207,6 @@ export function TradeDetailView() {
         <Button variant="outline" size="sm" onClick={() => navigate("tradeNew", { id })}>
           <Edit className="h-4 w-4" /> Edit
         </Button>
-        {trade.dailyPlanId && (
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => navigate("dashboard", { id: trade.dailyPlanId })}
-          >
-            <ClipboardList className="h-4 w-4" /> View Daily Plan
-          </Button>
-        )}
         <Button
           variant="outline"
           size="sm"
@@ -287,7 +277,6 @@ export function TradeDetailView() {
           <TabsTrigger value="replay">Replay</TabsTrigger>
           <TabsTrigger value="psychology">Psychology</TabsTrigger>
           <TabsTrigger value="evidence">Evidence</TabsTrigger>
-          <TabsTrigger value="review">Review</TabsTrigger>
         </TabsList>
 
         <TabsContent value="overview" className="space-y-4 mt-3">
@@ -754,17 +743,6 @@ export function TradeDetailView() {
                   );
                 })()}
               </div>
-            )}
-          </Card>
-        </TabsContent>
-
-        <TabsContent value="review" className="space-y-4 mt-3">
-          <Card className="p-4">
-            <h3 className="font-medium mb-2">Lessons</h3>
-            {trade.lessons ? (
-              <p className="text-sm text-muted-foreground whitespace-pre-wrap leading-relaxed">{trade.lessons}</p>
-            ) : (
-              <p className="text-sm text-muted-foreground">No lessons recorded for this trade.</p>
             )}
           </Card>
         </TabsContent>
