@@ -17,6 +17,9 @@ import {
   X,
   PanelLeftClose,
   PanelLeftOpen,
+  Trophy,
+  Calculator,
+  CheckSquare,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -52,6 +55,14 @@ const NAV_GROUPS: NavGroup[] = [
     items: [
       { view: "analytics", label: "Analytics Engine", icon: BarChart3, dataTour: "analytics" },
       { view: "setups", label: "Setups & Checklists", icon: ListChecks, dataTour: "setups" },
+    ],
+  },
+  {
+    label: "TOOLS",
+    items: [
+      { view: "propChallenges", label: "Prop Challenges", icon: Trophy, dataTour: "prop-challenges" },
+      { view: "riskCalculator", label: "Risk Calculator", icon: Calculator, dataTour: "risk-calculator" },
+      { view: "tradingTodo", label: "Trading To-Do", icon: CheckSquare, dataTour: "trading-todo" },
     ],
   },
   {
@@ -118,11 +129,11 @@ export function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
       </div>
 
       {/* Nav groups */}
-      <nav className="flex-1 overflow-y-auto py-4 px-2 space-y-3 scroll-thin">
+      <nav className="flex-1 overflow-y-auto py-4 px-2 space-y-3 sidebar-scroll">
         {NAV_GROUPS.map((group) => (
           <div key={group.label} className="space-y-0.5">
             {!sidebarCollapsed && (
-              <div className="px-3 py-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/50 select-none">
+              <div className="px-3 py-1 text-[10px] font-semibold uppercase tracking-wider text-sidebar-foreground/50 select-none">
                 {group.label}
               </div>
             )}
@@ -139,8 +150,8 @@ export function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
                     "w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors",
                     sidebarCollapsed && "justify-center px-0",
                     active
-                      ? "bg-sidebar-accent text-sidebar-accent-foreground"
-                      : "text-muted-foreground/70 hover:text-sidebar-foreground hover:bg-sidebar-accent/50",
+                      ? "bg-sidebar-accent text-sidebar-accent-foreground font-semibold"
+                      : "text-sidebar-foreground/75 hover:text-sidebar-foreground hover:bg-sidebar-accent/50",
                   )}
                 >
                   <Icon className="h-4 w-4 shrink-0" />
@@ -158,7 +169,7 @@ export function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
           onClick={toggleSidebar}
           title={sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
           className={cn(
-            "hidden md:flex w-full items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-muted-foreground/70 hover:text-sidebar-foreground hover:bg-sidebar-accent/50 transition-colors",
+            "hidden md:flex w-full items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-sidebar-foreground/75 hover:text-sidebar-foreground hover:bg-sidebar-accent/50 transition-colors",
             sidebarCollapsed && "justify-center px-0",
           )}
           aria-label={sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
@@ -174,7 +185,7 @@ export function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
           onClick={() => signOut()}
           title={sidebarCollapsed ? "Sign Out" : undefined}
           className={cn(
-            "w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-muted-foreground/70 hover:text-sidebar-foreground hover:bg-sidebar-accent/50 transition-colors",
+            "w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-sidebar-foreground/75 hover:text-sidebar-foreground hover:bg-sidebar-accent/50 transition-colors",
             sidebarCollapsed && "justify-center px-0",
           )}
         >

@@ -67,7 +67,7 @@ export function TopBar({ onOpenMobileNav }: { onOpenMobileNav?: () => void }) {
   const themeOptions = [
     { key: "nordic", label: "Nordic Clean", dot: "#1E293B" },
     { key: "terminal", label: "Sleek Terminal", dot: "#10B981" },
-    { key: "institutional", label: "Institutional Blue", dot: "#235789" },
+    { key: "institutional", label: "Slate Contrast", dot: "#0F172A" },
   ] as const;
 
   return (

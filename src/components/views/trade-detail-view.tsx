@@ -43,6 +43,7 @@ import { ExecuteTradeModal } from "@/components/trade/execute-trade-modal";
 import { TradeReplay } from "@/components/trade/trade-replay";
 import { useRouter } from "next/navigation";
 import { TIMEFRAME_GROUPS, getTimeframeGroup, getTimeframeLabel } from "@/lib/timeframes";
+import { extractCustomFields } from "@/lib/strategy-custom-fields";
 
 
 async function fetchTrade(id: string) {
@@ -94,6 +95,10 @@ export function TradeDetailView() {
       answers,
     };
   }, [trade]);
+
+  const strategyCustomFields = useMemo(() => {
+    return extractCustomFields(trade?.strategyVersion?.rulesJson);
+  }, [trade?.strategyVersion?.rulesJson]);
 
   if (isLoading) {
     return (
@@ -315,6 +320,13 @@ export function TradeDetailView() {
             )}
           </Card>
 
+          {trade.account?.name && (
+            <div className="text-xs text-muted-foreground flex items-center gap-1.5 px-1">
+              <span>Account:</span>
+              <strong className="text-foreground font-medium">{trade.account.name}</strong>
+            </div>
+          )}
+
           {tags.length > 0 && (
             <Card className="p-4">
               <h3 className="font-medium mb-2 flex items-center gap-2"><Tag className="h-4 w-4" /> Tags</h3>
@@ -326,17 +338,26 @@ export function TradeDetailView() {
 
           {trade.notes && (
             <Card className="p-4">
-              <h3 className="font-medium mb-2">Notes</h3>
+              <h3 className="font-medium mb-2">Trade Notes</h3>
               <p className="text-sm text-muted-foreground whitespace-pre-wrap leading-relaxed">{trade.notes}</p>
+            </Card>
+          )}
+
+          {trade.lessons && (
+            <Card className="p-4">
+              <h3 className="font-medium mb-2">Lessons Learned</h3>
+              <p className="text-sm text-muted-foreground whitespace-pre-wrap leading-relaxed">{trade.lessons}</p>
             </Card>
           )}
 
           {behaviorFlags.length > 0 && (
             <Card className="p-4">
-              <h3 className="font-medium mb-3">Behavior Flags</h3>
+              <h3 className="font-medium mb-3">Behavior &amp; Discipline Flags</h3>
               <div className="flex flex-wrap gap-2">
                 {behaviorFlags.map(f => (
-                  <Badge key={f} variant="outline" className="bg-destructive/10 text-destructive border-destructive/20">{f}</Badge>
+                  <Badge key={f} variant="outline" className="bg-destructive/10 text-destructive border-destructive/20 capitalize">
+                    {f.replace(/_/g, " ")}
+                  </Badge>
                 ))}
               </div>
             </Card>
@@ -345,16 +366,38 @@ export function TradeDetailView() {
 
         <TabsContent value="setup" className="space-y-4 mt-3">
           <Card className="p-4">
-            <h3 className="font-medium mb-3">ICT Setup</h3>
+            <h3 className="font-medium mb-3">
+              {trade.strategy?.name ? `${trade.strategy.name} Setup` : "Setup & Trade Context"}
+            </h3>
             <div className="grid sm:grid-cols-2 gap-4 text-sm">
-              <SetupSection title="Higher Timeframe Context" data={setup?.htfContext} />
-              <SetupSection title="Liquidity" data={setup?.liquidity} isList />
-              <SetupSection title="Structure" data={setup?.structure} isList />
-              <SetupSection title="Entry Model" data={setup?.entryModel} />
+              {/* Dynamic Strategy-Specific Custom Fields */}
+              {strategyCustomFields.map((field) => {
+                const customVal = setup?.customFields?.[field.id] ?? setup?.[field.id];
+                if (customVal === undefined || customVal === null || customVal === "") return null;
+                return (
+                  <SetupSection
+                    key={field.id}
+                    title={field.name}
+                    data={customVal}
+                    isList={Array.isArray(customVal)}
+                    hint={field.description}
+                  />
+                );
+              })}
+
+              {/* Legacy setup fields if present and not already displayed */}
+              {setup?.htfContext && <SetupSection title="Higher Timeframe Context" data={setup.htfContext} />}
+              {setup?.liquidity && <SetupSection title="Liquidity" data={setup.liquidity} isList />}
+              {setup?.structure && <SetupSection title="Structure" data={setup.structure} isList />}
+              {setup?.entryModel && <SetupSection title="Entry Model" data={setup.entryModel} />}
               <SetupSection title="Market" data={trade.market} />
-              <SetupSection title="Session" data={setup?.session} />
+              <SetupSection title="Session" data={setup?.session ?? trade.session} />
               <SetupSection title="Timeframe" data={setup?.timeframe} />
-              <SetupSection title="Setup Score" data={trade.setupScore ? `${(dToNumber(trade.setupScore) * 100).toFixed(0)}%` : null} hint="Calculated from the weighted rules defined by your strategy" />
+              <SetupSection
+                title="Setup Score"
+                data={trade.setupScore ? `${(dToNumber(trade.setupScore) * 100).toFixed(0)}%` : null}
+                hint="Calculated from the weighted rules defined by your strategy"
+              />
             </div>
           </Card>
 
@@ -618,10 +661,10 @@ export function TradeDetailView() {
 
         <TabsContent value="psychology" className="space-y-4 mt-3">
           <div className="grid md:grid-cols-2 gap-4">
-            <Card className="p-4">
-              <h3 className="font-medium mb-3">Before Execution</h3>
-              {psychBefore?.moodTags && (
-                <div className="flex flex-wrap gap-1 mb-3">
+            <Card className="p-4 space-y-3">
+              <h3 className="font-medium">Before Execution</h3>
+              {psychBefore?.moodTags && psychBefore.moodTags.length > 0 && (
+                <div className="flex flex-wrap gap-1">
                   {psychBefore.moodTags.map((t: string) => <Badge key={t} variant="secondary">{t}</Badge>)}
                 </div>
               )}
@@ -629,11 +672,21 @@ export function TradeDetailView() {
                 <div><span className="text-muted-foreground">Confidence:</span> {psychBefore?.confidence ?? "-"}/5</div>
                 <div><span className="text-muted-foreground">Energy:</span> {psychBefore?.energy ?? "-"}/5</div>
               </div>
+              {psychBefore?.impact && (
+                <div className="text-sm"><span className="text-muted-foreground">Impact:</span> {psychBefore.impact}</div>
+              )}
+              {psychBefore?.notes && (
+                <div className="text-sm bg-muted/40 p-2.5 rounded-md border border-border">
+                  <span className="text-xs text-muted-foreground block mb-1">Pre-trade Mindset:</span>
+                  <p className="text-foreground leading-relaxed whitespace-pre-wrap">{psychBefore.notes}</p>
+                </div>
+              )}
             </Card>
-            <Card className="p-4">
-              <h3 className="font-medium mb-3">After Execution</h3>
-              {psychAfter?.moodTags && (
-                <div className="flex flex-wrap gap-1 mb-3">
+
+            <Card className="p-4 space-y-3">
+              <h3 className="font-medium">After Execution</h3>
+              {psychAfter?.moodTags && psychAfter.moodTags.length > 0 && (
+                <div className="flex flex-wrap gap-1">
                   {psychAfter.moodTags.map((t: string) => <Badge key={t} variant="secondary">{t}</Badge>)}
                 </div>
               )}
@@ -641,8 +694,27 @@ export function TradeDetailView() {
                 <div><span className="text-muted-foreground">Confidence:</span> {psychAfter?.confidence ?? "-"}/5</div>
                 <div><span className="text-muted-foreground">Energy:</span> {psychAfter?.energy ?? "-"}/5</div>
               </div>
+              {psychAfter?.notes && (
+                <div className="text-sm bg-muted/40 p-2.5 rounded-md border border-border">
+                  <span className="text-xs text-muted-foreground block mb-1">Post-trade Debrief:</span>
+                  <p className="text-foreground leading-relaxed whitespace-pre-wrap">{psychAfter.notes}</p>
+                </div>
+              )}
             </Card>
           </div>
+
+          {behaviorFlags.length > 0 && (
+            <Card className="p-4">
+              <h3 className="font-medium mb-3">Behavior &amp; Discipline Flags</h3>
+              <div className="flex flex-wrap gap-2">
+                {behaviorFlags.map((f) => (
+                  <Badge key={f} variant="outline" className="bg-destructive/10 text-destructive border-destructive/20 capitalize">
+                    {f.replace(/_/g, " ")}
+                  </Badge>
+                ))}
+              </div>
+            </Card>
+          )}
         </TabsContent>
 
         <TabsContent value="evidence" className="space-y-4 mt-3">

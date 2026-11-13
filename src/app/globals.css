@@ -133,44 +133,131 @@
   --chart-5: #4A5260;
 }
 
-/* THEME C: INSTITUTIONAL BLUE (palette: #FDFFFC, #235789, #C1292E) */
+/* THEME C: SLATE CONTRAST (Hybrid Deep Slate Dark Header & Sidebar / Crisp Light Workspace) */
+[data-theme="slate"],
 [data-theme="institutional"] {
   --radius: 0.5rem;
-  --background: #0B1622;
-  --foreground: #FDFFFC;
-  --card: #122336;
-  --card-foreground: #FDFFFC;
-  --popover: #122336;
-  --popover-foreground: #FDFFFC;
-  --primary: #235789;
-  --primary-foreground: #FDFFFC;
-  --secondary: #1A334F;
-  --secondary-foreground: #FDFFFC;
-  --muted: #162B42;
-  --muted-foreground: #94A8BE;
-  --accent: #1A334F;
-  --accent-foreground: #FDFFFC;
-  --destructive: #C1292E;
-  --destructive-foreground: #FDFFFC;
-  --border: #1E3B5C;
-  --input: #1E3B5C;
-  --ring: #235789;
-  --profit: #2E75B6;
-  --loss: #C1292E;
+  /* Workspace surfaces (crisp light) */
+  --background: #F8FAFC;
+  --foreground: #0F172A;
+  --card: #FFFFFF;
+  --card-foreground: #0F172A;
+  --popover: #FFFFFF;
+  --popover-foreground: #0F172A;
+  --primary: #2563EB;
+  --primary-foreground: #FFFFFF;
+  --secondary: #F1F5F9;
+  --secondary-foreground: #0F172A;
+  --muted: #F1F5F9;
+  --muted-foreground: #64748B;
+  --accent: #F1F5F9;
+  --accent-foreground: #0F172A;
+  --destructive: #EF4444;
+  --destructive-foreground: #FFFFFF;
+  --border: #E2E8F0;
+  --input: #E2E8F0;
+  --ring: #2563EB;
+  --profit: #10B981;
+  --loss: #EF4444;
   --warning: #F59E0B;
-  --sidebar: #08111B;
-  --sidebar-foreground: #FDFFFC;
-  --sidebar-primary: #235789;
-  --sidebar-primary-foreground: #FDFFFC;
-  --sidebar-accent: #122336;
-  --sidebar-accent-foreground: #FDFFFC;
-  --sidebar-border: #1E3B5C;
-  --sidebar-ring: #235789;
-  --chart-1: #235789;
-  --chart-2: #C1292E;
-  --chart-3: #FDFFFC;
+  /* Header & Navigation surfaces (deep slate dark with high-contrast bright text) */
+  --header: #0F172A;
+  --header-foreground: #F8FAFC;
+  --header-muted: #94A8BE;
+  --header-border: #1E293B;
+  --header-input: #1E293B;
+  --header-accent: #1E293B;
+  /* Sidebar surfaces (deep slate dark with high-contrast bright text) */
+  --sidebar: #0F172A;
+  --sidebar-foreground: #F8FAFC;
+  --sidebar-primary: #2563EB;
+  --sidebar-primary-foreground: #FFFFFF;
+  --sidebar-accent: #1E293B;
+  --sidebar-accent-foreground: #FFFFFF;
+  --sidebar-border: #1E293B;
+  --sidebar-ring: #3B82F6;
+  --chart-1: #2563EB;
+  --chart-2: #EF4444;
+  --chart-3: #10B981;
   --chart-4: #F59E0B;
-  --chart-5: #1A334F;
+  --chart-5: #64748B;
+}
+
+/* Custom header & accent theme styling for Slate Contrast */
+[data-theme="slate"] header,
+[data-theme="institutional"] header {
+  background-color: var(--header) !important;
+  color: var(--header-foreground) !important;
+  border-bottom-color: var(--header-border) !important;
+}
+
+[data-theme="slate"] header *,
+[data-theme="institutional"] header * {
+  border-color: var(--header-border);
+}
+
+[data-theme="slate"] header button,
+[data-theme="institutional"] header button {
+  color: var(--header-foreground) !important;
+}
+
+[data-theme="slate"] header .text-foreground,
+[data-theme="institutional"] header .text-foreground {
+  color: #FFFFFF !important;
+}
+
+[data-theme="slate"] header .text-muted-foreground,
+[data-theme="institutional"] header .text-muted-foreground {
+  color: #94A3B8 !important;
+}
+
+[data-theme="slate"] header input,
+[data-theme="institutional"] header input,
+[data-theme="slate"] header [data-slot="control"],
+[data-theme="institutional"] header [data-slot="control"],
+[data-theme="slate"] header button[role="combobox"],
+[data-theme="institutional"] header button[role="combobox"] {
+  background-color: var(--header-input) !important;
+  border-color: var(--header-border) !important;
+  color: #FFFFFF !important;
+}
+
+[data-theme="slate"] header .bg-muted\/50,
+[data-theme="institutional"] header .bg-muted\/50 {
+  background-color: var(--header-accent) !important;
+  border-color: var(--header-border) !important;
+  color: #FFFFFF !important;
+}
+
+[data-theme="slate"] header .hover\:bg-muted:hover,
+[data-theme="institutional"] header .hover\:bg-muted:hover {
+  background-color: var(--header-accent) !important;
+}
+
+/* Subtle, polished deep slate accents across tables, active pills and section headers */
+[data-theme="slate"] thead,
+[data-theme="institutional"] thead {
+  background-color: #0F172A !important;
+  color: #F8FAFC !important;
+}
+[data-theme="slate"] thead th,
+[data-theme="institutional"] thead th {
+  color: #94A3B8 !important;
+  border-bottom-color: #1E293B !important;
+}
+[data-theme="slate"] .bg-primary,
+[data-theme="institutional"] .bg-primary {
+  background-color: #0F172A !important;
+  color: #FFFFFF !important;
+}
+[data-theme="slate"] .bg-primary\/10,
+[data-theme="institutional"] .bg-primary\/10 {
+  background-color: rgba(15, 23, 42, 0.08) !important;
+  color: #0F172A !important;
+}
+[data-theme="slate"] .text-primary,
+[data-theme="institutional"] .text-primary {
+  color: #0F172A !important;
 }
 
 /* Dark class is handled by data-theme above. No fallback needed — we always set data-theme explicitly. */
@@ -266,6 +353,35 @@ body {
 .scroll-thin::-webkit-scrollbar-track { background: transparent; }
 .scroll-thin::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
 .scroll-thin::-webkit-scrollbar-thumb:hover { background: var(--muted-foreground); }
+
+/* Auto-hiding sidebar scrollbar: completely invisible until hovered/scrolled */
+.sidebar-scroll {
+  scrollbar-width: thin;
+  scrollbar-color: transparent transparent;
+  transition: scrollbar-color 0.25s ease;
+}
+.sidebar-scroll::-webkit-scrollbar {
+  width: 5px;
+}
+.sidebar-scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+.sidebar-scroll::-webkit-scrollbar-thumb {
+  background: transparent;
+  border-radius: 9999px;
+  transition: background 0.25s ease;
+}
+.sidebar-scroll:hover,
+.sidebar-scroll:focus-within {
+  scrollbar-color: rgba(255, 255, 255, 0.2) transparent;
+}
+.sidebar-scroll:hover::-webkit-scrollbar-thumb,
+.sidebar-scroll:focus-within::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.2);
+}
+.sidebar-scroll::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.35);
+}
 
 /* Focus ring */
 :focus-visible {

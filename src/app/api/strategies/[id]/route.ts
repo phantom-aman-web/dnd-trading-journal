@@ -217,12 +217,24 @@ export async function PUT(req: NextRequest, ctx: { params: Promise<{ id: string 
   if (!strat) return notFound("Strategy not found");
   const body = await parseJson(req);
   if (!body) return bad("Invalid JSON body");
-  const { versionLabel, changeReason, changeSummary, expectedImpact, rules, checklist, effectiveDate } = body;
+  const { versionLabel, changeReason, changeSummary, expectedImpact, rules, customFields, checklist, effectiveDate } = body;
   if (!versionLabel) return bad("Version label is required");
   const existing = await db.strategyVersion.findUnique({
     where: { strategyId_versionLabel: { strategyId: id, versionLabel } },
   });
   if (existing) return bad("Version label already exists");
+
+  const cleanRulesList = Array.isArray(rules) ? rules : (rules?.rules ?? rules?.items ?? []);
+  const cleanFieldsList = Array.isArray(customFields)
+    ? customFields
+    : (rules && typeof rules === "object" && Array.isArray((rules as any).customFields) ? (rules as any).customFields : []);
+
+  const rulesData = {
+    rules: cleanRulesList,
+    items: cleanRulesList,
+    customFields: cleanFieldsList,
+  };
+
   const version = await db.strategyVersion.create({
     data: {
       strategyId: id,
@@ -230,7 +242,7 @@ export async function PUT(req: NextRequest, ctx: { params: Promise<{ id: string 
       changeReason,
       changeSummary,
       expectedImpact,
-      rulesJson: JSON.stringify(rules ?? {}),
+      rulesJson: JSON.stringify(rulesData),
       checklistJson: checklist ? JSON.stringify(checklist) : null,
       effectiveDate: effectiveDate ? new Date(effectiveDate) : new Date(),
     },

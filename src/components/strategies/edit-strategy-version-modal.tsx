@@ -11,6 +11,7 @@ import {
   ShieldCheck,
   Loader2,
   FileText,
+  SlidersHorizontal,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -33,6 +34,11 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { toast } from "sonner";
+import {
+  extractCustomFields,
+  type StrategyCustomField,
+  type CustomFieldType,
+} from "@/lib/strategy-custom-fields";
 
 interface ChecklistItem {
   title: string;
@@ -107,6 +113,9 @@ export function EditStrategyVersionModal({
       ? extracted
       : [{ title: "", required: true, description: "" }];
   });
+  const [customFields, setCustomFields] = useState<StrategyCustomField[]>(() => {
+    return extractCustomFields(latestVersion?.rulesJson);
+  });
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   function addRule() {
@@ -132,6 +141,41 @@ export function EditStrategyVersionModal({
     });
   }
 
+  function addCustomField() {
+    const newField: StrategyCustomField = {
+      id: `field_${Date.now()}`,
+      name: "",
+      description: "",
+      type: "text",
+      required: false,
+      order: customFields.length,
+      enabled: true,
+      options: [],
+    };
+    setCustomFields((prev) => [...prev, newField]);
+  }
+
+  function removeCustomField(index: number) {
+    setCustomFields((prev) => prev.filter((_, i) => i !== index));
+  }
+
+  function updateCustomField(index: number, patch: Partial<StrategyCustomField>) {
+    setCustomFields((prev) =>
+      prev.map((f, i) => (i === index ? { ...f, ...patch } : f))
+    );
+  }
+
+  function moveCustomField(index: number, dir: "up" | "down") {
+    setCustomFields((prev) => {
+      if (dir === "up" && index === 0) return prev;
+      if (dir === "down" && index === prev.length - 1) return prev;
+      const next = [...prev];
+      const target = dir === "up" ? index - 1 : index + 1;
+      [next[index], next[target]] = [next[target], next[index]];
+      return next.map((item, idx) => ({ ...item, order: idx }));
+    });
+  }
+
   async function handleSubmit() {
     if (!name.trim()) {
       toast.error("Strategy name is required");
@@ -154,6 +198,16 @@ export function EditStrategyVersionModal({
       toast.error("At least one checklist rule is required");
       return;
     }
+
+    const cleanCustomFields = customFields
+      .map((f, idx) => ({
+        ...f,
+        id: f.id || `field_${idx}`,
+        name: f.name.trim(),
+        description: (f.description ?? "").trim(),
+        order: idx,
+      }))
+      .filter((f) => f.name.length > 0);
 
     setIsSubmitting(true);
     try {
@@ -182,6 +236,7 @@ export function EditStrategyVersionModal({
           changeReason: changeReason.trim() || "Strategy update",
           changeSummary: changeSummary.trim() || `Created version ${versionLabel.trim()}`,
           rules: cleanRules,
+          customFields: cleanCustomFields,
         }),
       });
 
@@ -377,6 +432,147 @@ export function EditStrategyVersionModal({
                 </div>
               ))}
             </div>
+          </div>
+
+          {/* Dynamic Trade Fields Builder */}
+          <div className="space-y-2 pt-2 border-t border-border">
+            <div className="flex items-center justify-between">
+              <div>
+                <Label className="font-semibold text-foreground flex items-center gap-1.5">
+                  <SlidersHorizontal className="h-3.5 w-3.5 text-primary" />
+                  Dynamic Trade Information Fields ({customFields.length})
+                </Label>
+                <p className="text-[11px] text-muted-foreground">
+                  Custom trade inputs shown in Advanced Options when logging trades with this strategy.
+                </p>
+              </div>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={addCustomField}
+                className="h-7 text-xs gap-1"
+              >
+                <Plus className="h-3.5 w-3.5" /> Add Field
+              </Button>
+            </div>
+
+            {customFields.length === 0 ? (
+              <div className="p-4 rounded-lg border border-dashed border-border text-center text-xs text-muted-foreground">
+                No custom trade fields defined. The default general fields will be used.
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {customFields.map((field, idx) => (
+                  <div
+                    key={field.id || idx}
+                    className="p-3 rounded-lg border border-border bg-card space-y-2"
+                  >
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="flex items-center gap-1">
+                        <button
+                          type="button"
+                          onClick={() => moveCustomField(idx, "up")}
+                          disabled={idx === 0}
+                          className="text-muted-foreground hover:text-foreground disabled:opacity-30 p-0.5"
+                        >
+                          <ArrowUp className="h-3 w-3" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => moveCustomField(idx, "down")}
+                          disabled={idx === customFields.length - 1}
+                          className="text-muted-foreground hover:text-foreground disabled:opacity-30 p-0.5"
+                        >
+                          <ArrowDown className="h-3 w-3" />
+                        </button>
+                        <span className="text-[11px] font-medium text-muted-foreground ml-1">
+                          #{idx + 1}
+                        </span>
+                      </div>
+
+                      <div className="flex items-center gap-2">
+                        <label className="flex items-center gap-1.5 cursor-pointer text-[11px] text-muted-foreground">
+                          <Checkbox
+                            checked={field.required ?? false}
+                            onCheckedChange={(c) => updateCustomField(idx, { required: Boolean(c) })}
+                          />
+                          <span>Required</span>
+                        </label>
+                        <button
+                          type="button"
+                          onClick={() => removeCustomField(idx)}
+                          className="p-1 text-muted-foreground hover:text-rose-500 transition-colors"
+                          aria-label="Remove field"
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </button>
+                      </div>
+                    </div>
+
+                    <div className="grid sm:grid-cols-2 gap-2">
+                      <div className="space-y-1">
+                        <Label className="text-[11px]">Field Name</Label>
+                        <Input
+                          value={field.name}
+                          onChange={(e) => updateCustomField(idx, { name: e.target.value })}
+                          placeholder="e.g. Weekly Bias, Zone Freshness"
+                          className="h-8 text-xs font-medium"
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <Label className="text-[11px]">Field Type</Label>
+                        <Select
+                          value={field.type}
+                          onValueChange={(val: CustomFieldType) => updateCustomField(idx, { type: val })}
+                        >
+                          <SelectTrigger className="h-8 text-xs">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="text">Short Text</SelectItem>
+                            <SelectItem value="textarea">Long Text / Notes</SelectItem>
+                            <SelectItem value="number">Numeric Value</SelectItem>
+                            <SelectItem value="boolean">Toggle / Checkbox</SelectItem>
+                            <SelectItem value="select">Single Select (Dropdown)</SelectItem>
+                            <SelectItem value="multiselect">Multi-Select (Chips)</SelectItem>
+                            <SelectItem value="date">Date</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    </div>
+
+                    {(field.type === "select" || field.type === "multiselect") && (
+                      <div className="space-y-1">
+                        <Label className="text-[11px]">Options (comma-separated)</Label>
+                        <Input
+                          value={Array.isArray(field.options) ? field.options.join(", ") : ""}
+                          onChange={(e) =>
+                            updateCustomField(idx, {
+                              options: e.target.value
+                                .split(",")
+                                .map((s) => s.trim())
+                                .filter(Boolean),
+                            })
+                          }
+                          placeholder="e.g. Bullish, Bearish, Neutral"
+                          className="h-7 text-xs font-mono"
+                        />
+                      </div>
+                    )}
+
+                    <div className="space-y-1">
+                      <Input
+                        value={field.description || ""}
+                        onChange={(e) => updateCustomField(idx, { description: e.target.value })}
+                        placeholder="Optional helper text or description"
+                        className="h-7 text-[11px] text-muted-foreground"
+                      />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         </div>
 

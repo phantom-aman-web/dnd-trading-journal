@@ -26,7 +26,6 @@ import { cn } from "@/lib/utils";
 import { formatSignedCents } from "@/lib/money";
 import { useNavStore } from "@/lib/nav-store";
 import { useAuth } from "@/lib/auth-store";
-import { PropChallengesSection } from "@/components/accounts/prop-challenges-section";
 
 /* ------------------------------------------------------------------ */
 /* Types & constants                                                   */
@@ -489,9 +488,6 @@ export function AccountsView() {
           })}
         </div>
       )}
-
-      {/* Prop Firm Challenge Tracker */}
-      {accounts.length > 0 && <PropChallengesSection accounts={accounts} />}
 
       {/* Performance detail section */}
       {accounts.length > 0 && (

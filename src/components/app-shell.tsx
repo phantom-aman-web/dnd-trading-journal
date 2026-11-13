@@ -15,6 +15,9 @@ import { CalendarView } from "@/components/views/calendar-view";
 import { AnalyticsView } from "@/components/views/analytics-view";
 import { PlaybooksView } from "@/components/views/playbooks-view";
 import { AccountsView } from "@/components/views/accounts-view";
+import { PropChallengesView } from "@/components/views/prop-challenges-view";
+import { RiskCalculatorView } from "@/components/views/risk-calculator-view";
+import { TradingTodoView } from "@/components/views/trading-todo-view";
 import { SettingsView } from "@/components/views/settings-view";
 import { BackupView } from "@/components/views/backup-view";
 import { cn } from "@/lib/utils";
@@ -147,6 +150,21 @@ export function AppShell() {
           {visitedViews.has("accounts") && (
             <div className={cn(view !== "accounts" && "hidden")}>
               <AccountsView />
+            </div>
+          )}
+          {visitedViews.has("propChallenges") && (
+            <div className={cn(view !== "propChallenges" && "hidden")}>
+              <PropChallengesView />
+            </div>
+          )}
+          {visitedViews.has("riskCalculator") && (
+            <div className={cn(view !== "riskCalculator" && "hidden")}>
+              <RiskCalculatorView />
+            </div>
+          )}
+          {visitedViews.has("tradingTodo") && (
+            <div className={cn(view !== "tradingTodo" && "hidden")}>
+              <TradingTodoView />
             </div>
           )}
           {visitedViews.has("settings") && (

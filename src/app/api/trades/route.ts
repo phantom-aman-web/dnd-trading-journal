@@ -77,7 +77,8 @@ const TradeCreateSchema = z.object({
 });
 
 const ListQuerySchema = z.object({
-  limit: z.coerce.number().min(1).max(200).default(100),
+  page: z.coerce.number().min(1).default(1),
+  limit: z.coerce.number().min(1).max(200).default(10),
   cursor: z.string().optional(),
   search: z.string().optional(),
   accountId: z.string().optional(),
@@ -85,6 +86,7 @@ const ListQuerySchema = z.object({
   strategyId: z.string().optional(),
   session: z.string().optional(),
   status: z.string().optional(),
+  outcome: z.enum(["all", "win", "loss", "breakeven", "open"]).optional(),
   direction: z.enum(["long", "short"]).optional(),
   setupGrade: z.string().optional(),
   tag: z.string().optional(),
@@ -110,7 +112,7 @@ export async function GET(req: NextRequest) {
   const q = parsed.data;
 
   // Authorization: enforce userId ownership on every query (spec section 100/101)
-  const where: any = { userId: user.id, isArchived: q.includeArchived ? undefined : false };
+  const where: any = { userId: user.id };
   if (q.includeArchived === false) where.isArchived = false;
   if (q.accountId) where.accountId = q.accountId;
   if (q.instrumentId) where.instrumentId = q.instrumentId;
@@ -130,43 +132,117 @@ export async function GET(req: NextRequest) {
   if (q.direction) where.direction = q.direction;
   if (q.setupGrade) where.setupGrade = q.setupGrade;
   if (q.tag) where.tagsJson = { contains: `"${q.tag}"` };
+
+  // Outcome filtering
+  if (q.outcome && q.outcome !== "all") {
+    if (q.outcome === "win") {
+      where.netPnlCents = { gt: 0 };
+      where.status = { notIn: ["open", "planned"] };
+      where.isDraft = false;
+    } else if (q.outcome === "loss") {
+      where.netPnlCents = { lt: 0 };
+      where.status = { notIn: ["open", "planned"] };
+      where.isDraft = false;
+    } else if (q.outcome === "breakeven") {
+      where.netPnlCents = 0;
+      where.status = { notIn: ["open", "planned"] };
+      where.isDraft = false;
+    } else if (q.outcome === "open") {
+      where.OR = [
+        ...(where.OR || []),
+        { status: "open" },
+        { status: "planned" },
+        { isDraft: true },
+      ];
+    }
+  }
+
+  // Enhanced multi-field & relational search
   if (q.search) {
     const s = q.search.trim();
-    where.OR = [
+    const searchConditions: any[] = [
       { instrumentSymbol: { contains: s, mode: "insensitive" } },
       { notes: { contains: s, mode: "insensitive" } },
       { lessons: { contains: s, mode: "insensitive" } },
       { thesisJson: { contains: s, mode: "insensitive" } },
+      { setupJson: { contains: s, mode: "insensitive" } },
       { tagsJson: { contains: s, mode: "insensitive" } },
+      { behaviorFlagsJson: { contains: s, mode: "insensitive" } },
       { id: { equals: s } },
       { strategy: { name: { contains: s, mode: "insensitive" } } },
+      { strategyVersion: { versionLabel: { contains: s, mode: "insensitive" } } },
+      { account: { name: { contains: s, mode: "insensitive" } } },
+      { instrument: { name: { contains: s, mode: "insensitive" } } },
+      { executions: { some: { notes: { contains: s, mode: "insensitive" } } } },
     ];
+
+    const sLower = s.toLowerCase();
+    if (sLower === "long" || sLower === "short") {
+      searchConditions.push({ direction: sLower });
+    }
+    if (sLower === "win") {
+      searchConditions.push({ netPnlCents: { gt: 0 }, status: { notIn: ["open", "planned"] }, isDraft: false });
+    }
+    if (sLower === "loss") {
+      searchConditions.push({ netPnlCents: { lt: 0 }, status: { notIn: ["open", "planned"] }, isDraft: false });
+    }
+    if (sLower === "breakeven" || sLower === "be") {
+      searchConditions.push({ netPnlCents: 0, status: { notIn: ["open", "planned"] }, isDraft: false });
+    }
+    if (sLower === "draft") {
+      searchConditions.push({ isDraft: true });
+    }
+    if (sLower === "planned") {
+      searchConditions.push({ status: "planned" });
+    }
+
+    if (where.OR && where.OR.length > 0) {
+      where.AND = [...(where.AND || []), { OR: searchConditions }];
+    } else {
+      where.OR = searchConditions;
+    }
   }
+
   if (q.fromDate || q.toDate) {
     where.entryTime = {};
     if (q.fromDate) where.entryTime.gte = new Date(q.fromDate);
     if (q.toDate) where.entryTime.lte = new Date(q.toDate);
   }
 
-  const trades = await db.trade.findMany({
-    where,
-    orderBy: { [q.sortBy]: q.sortDir },
-    take: q.limit + 1,
-    ...(q.cursor ? { skip: 1, cursor: { id: q.cursor } } : {}),
-    include: {
-      executions: { orderBy: { seq: "asc" } },
-      strategy: { select: { id: true, name: true } },
-      strategyVersion: { select: { id: true, versionLabel: true, strategyId: true } },
-    },
-  });
+  const page = q.page ?? 1;
+  const limit = q.limit ?? 25;
+  const skip = (page - 1) * limit;
 
-  const hasMore = trades.length > q.limit;
-  const items = hasMore ? trades.slice(0, q.limit) : trades;
+  const [total, trades] = await Promise.all([
+    db.trade.count({ where }),
+    db.trade.findMany({
+      where,
+      orderBy: { [q.sortBy]: q.sortDir },
+      skip: q.cursor ? undefined : skip,
+      take: q.cursor ? limit + 1 : limit,
+      ...(q.cursor ? { skip: 1, cursor: { id: q.cursor } } : {}),
+      include: {
+        executions: { orderBy: { seq: "asc" } },
+        strategy: { select: { id: true, name: true } },
+        strategyVersion: { select: { id: true, versionLabel: true, strategyId: true } },
+        account: { select: { id: true, name: true } },
+      },
+    }),
+  ]);
+
+  const totalPages = Math.max(1, Math.ceil(total / limit));
+  const hasMore = q.cursor ? trades.length > limit : page < totalPages;
+  const items = q.cursor && trades.length > limit ? trades.slice(0, limit) : trades;
+
   const result = {
     items,
-    nextCursor: hasMore ? items[items.length - 1].id : null,
-    total: items.length,
+    total,
+    page,
+    pageSize: limit,
+    totalPages,
+    nextCursor: hasMore ? items[items.length - 1]?.id ?? null : null,
   };
+
   setCached(cacheKey, result, 20_000);
   return ok(result);
 }

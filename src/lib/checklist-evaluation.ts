@@ -513,9 +513,13 @@ export function extractChecklist(rulesJson: string | null | undefined): Checklis
   }
   if (parsed && typeof parsed === "object") {
     const obj = parsed as Record<string, unknown>;
-    // New playbooks-view format: { items: [...] }
+    // New playbooks-view format: { items: [...] } or { rules: [...] }
     if (Array.isArray(obj.items)) {
       obj.items.forEach(pushRule);
+      return items;
+    }
+    if (Array.isArray(obj.rules)) {
+      obj.rules.forEach(pushRule);
       return items;
     }
     // Legacy category object: { entry, stop, target, management, invalidation }

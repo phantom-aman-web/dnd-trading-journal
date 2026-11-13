@@ -15,9 +15,9 @@ function notifyTheme(t: DndTheme) {
 
 function applyThemeToDOM(t: DndTheme) {
   document.documentElement.setAttribute("data-theme", t);
-  document.documentElement.classList.toggle("dark", t !== "nordic");
+  document.documentElement.classList.toggle("dark", t === "terminal");
   // Also set color-scheme so native form controls + scrollbars match.
-  document.documentElement.style.colorScheme = t === "nordic" ? "light" : "dark";
+  document.documentElement.style.colorScheme = t === "terminal" ? "dark" : "light";
 }
 
 /**

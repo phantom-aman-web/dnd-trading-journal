@@ -16,6 +16,9 @@ import {
   DatabaseBackup,
   Palette,
   LogOut,
+  Trophy,
+  Calculator,
+  CheckSquare,
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -36,6 +39,9 @@ const MOBILE_ITEMS: { key: ViewKey; label: string; icon: React.ComponentType<{ c
 
 const MORE_ITEMS: { key: ViewKey; label: string; icon: React.ComponentType<{ className?: string }> }[] = [
   { key: "accounts", label: "Accounts", icon: Wallet },
+  { key: "propChallenges", label: "Prop Challenges", icon: Trophy },
+  { key: "riskCalculator", label: "Risk Calculator", icon: Calculator },
+  { key: "tradingTodo", label: "Trading To-Do", icon: CheckSquare },
   { key: "setups", label: "Setups & Checklists", icon: ListChecks },
   { key: "analytics", label: "Analytics Engine", icon: BarChart3 },
   { key: "settings", label: "Settings", icon: Settings },
@@ -60,7 +66,7 @@ export function MobileNav() {
   const themeOptions = [
     { key: "nordic", label: "Nordic Clean" },
     { key: "terminal", label: "Sleek Terminal" },
-    { key: "institutional", label: "Institutional Blue" },
+    { key: "institutional", label: "Slate Contrast" },
   ] as const;
 
   return (

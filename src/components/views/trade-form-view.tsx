@@ -39,6 +39,7 @@ import {
   type GradingThresholds,
   DEFAULT_GRADING_THRESHOLDS,
 } from "@/lib/checklist-evaluation";
+import { extractCustomFields, type StrategyCustomField } from "@/lib/strategy-custom-fields";
 import { NEWS_EVENTS, getNewsEventLabel } from "@/lib/news-events";
 import {
   TIMEFRAMES as MEDIA_TIMEFRAMES,
@@ -426,6 +427,11 @@ export function TradeFormView() {
 
   const checklistItems: ChecklistItem[] = useMemo(
     () => extractChecklist(selectedStrategyVersion?.rulesJson),
+    [selectedStrategyVersion?.rulesJson],
+  );
+
+  const strategyCustomFields: StrategyCustomField[] = useMemo(
+    () => extractCustomFields(selectedStrategyVersion?.rulesJson),
     [selectedStrategyVersion?.rulesJson],
   );
 
@@ -2461,98 +2467,192 @@ export function TradeFormView() {
               </CollapsibleTrigger>
 
               <CollapsibleContent className="space-y-4">
-                {/* ICT Setup */}
+                {/* Strategy Custom Setup Fields */}
                 <div className="rounded-md border border-border p-3 space-y-3">
-                  <h3 className="text-sm font-medium">ICT Setup</h3>
+                  <div className="flex items-center justify-between">
+                    <h3 className="text-sm font-medium">
+                      {selectedStrategyVersion?.versionLabel
+                        ? `${selectedStrategyVersion.versionLabel} Setup Parameters`
+                        : "Setup Parameters"}
+                    </h3>
+                    <span className="text-[10px] text-muted-foreground uppercase tracking-wider font-mono">
+                      {strategyCustomFields.length} {strategyCustomFields.length === 1 ? "field" : "fields"}
+                    </span>
+                  </div>
+
                   <div className="grid sm:grid-cols-2 gap-3">
-                    <div className="space-y-2">
-                      <Label>Weekly Bias</Label>
-                      <Select
-                        value={form.setup.htfContext.weeklyBias}
-                        onValueChange={(v) => setField("setup.htfContext.weeklyBias", v)}
-                      >
-                        <SelectTrigger><SelectValue /></SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="bullish">Bullish</SelectItem>
-                          <SelectItem value="bearish">Bearish</SelectItem>
-                          <SelectItem value="neutral">Neutral</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </div>
-                    <div className="space-y-2">
-                      <Label>Daily Bias</Label>
-                      <Select
-                        value={form.setup.htfContext.dailyBias}
-                        onValueChange={(v) => setField("setup.htfContext.dailyBias", v)}
-                      >
-                        <SelectTrigger><SelectValue /></SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="bullish">Bullish</SelectItem>
-                          <SelectItem value="bearish">Bearish</SelectItem>
-                          <SelectItem value="neutral">Neutral</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </div>
-                  </div>
-                  <div className="space-y-2">
-                    <Label>Liquidity Targets</Label>
-                    <div className="flex flex-wrap gap-2">
-                      {["PDH", "PDL", "PWH", "PWL", "equal highs", "equal lows", "buy-side", "sell-side", "session liquidity"].map((opt) => {
-                        const active = (form.setup.liquidity ?? []).includes(opt);
+                    {strategyCustomFields.map((field) => {
+                      const val = form.setup?.customFields?.[field.id] ?? (
+                        // Fallback mapping for legacy fields if customFields not populated
+                        field.id === "weeklyBias"
+                          ? form.setup?.htfContext?.weeklyBias
+                          : field.id === "dailyBias"
+                          ? form.setup?.htfContext?.dailyBias
+                          : field.id === "liquidityTargets"
+                          ? form.setup?.liquidity
+                          : field.id === "marketStructure"
+                          ? form.setup?.structure
+                          : field.id === "entryModel"
+                          ? form.setup?.entryModel
+                          : ""
+                      );
+
+                      const updateVal = (newVal: any) => {
+                        setForm((f: any) => {
+                          const currentCustom = f.setup?.customFields ?? {};
+                          const nextCustom = { ...currentCustom, [field.id]: newVal };
+                          const nextSetup = { ...f.setup, customFields: nextCustom };
+
+                          // Sync legacy keys for backward compatibility
+                          if (field.id === "weeklyBias") {
+                            nextSetup.htfContext = { ...(nextSetup.htfContext ?? {}), weeklyBias: newVal };
+                          } else if (field.id === "dailyBias") {
+                            nextSetup.htfContext = { ...(nextSetup.htfContext ?? {}), dailyBias: newVal };
+                          } else if (field.id === "liquidityTargets") {
+                            nextSetup.liquidity = newVal;
+                          } else if (field.id === "marketStructure") {
+                            nextSetup.structure = newVal;
+                          } else if (field.id === "entryModel") {
+                            nextSetup.entryModel = newVal;
+                          }
+
+                          return { ...f, setup: nextSetup };
+                        });
+                      };
+
+                      if (field.type === "select") {
+                        const opts = field.options && field.options.length > 0
+                          ? field.options
+                          : ["Bullish", "Bearish", "Neutral"];
                         return (
-                          <button
-                            key={opt}
-                            type="button"
-                            onClick={() => toggleArrayField("setup.liquidity", opt)}
-                            className={cn(
-                              "px-2 py-1 rounded-md text-xs border transition-colors",
-                              active
-                                ? "bg-primary text-primary-foreground border-primary"
-                                : "border-border hover:bg-muted",
+                          <div key={field.id} className="space-y-2">
+                            <Label className="text-xs flex items-center gap-1">
+                              {field.name}
+                              {field.required && <span className="text-destructive">*</span>}
+                            </Label>
+                            <Select
+                              value={typeof val === "string" ? val : ""}
+                              onValueChange={updateVal}
+                            >
+                              <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="Select..." /></SelectTrigger>
+                              <SelectContent>
+                                {opts.map((opt) => (
+                                  <SelectItem key={opt} value={opt} className="text-xs">
+                                    {opt}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                            {field.description && (
+                              <p className="text-[10px] text-muted-foreground">{field.description}</p>
                             )}
-                          >
-                            {opt}
-                          </button>
+                          </div>
                         );
-                      })}
-                    </div>
-                  </div>
-                  <div className="space-y-2">
-                    <Label>Market Structure</Label>
-                    <div className="flex flex-wrap gap-2">
-                      {["BOS", "MSS", "displacement", "protected high", "protected low", "structure shift"].map((opt) => {
-                        const active = (form.setup.structure ?? []).includes(opt);
+                      }
+
+                      if (field.type === "multiselect") {
+                        const opts = field.options && field.options.length > 0 ? field.options : [];
+                        const currentArr = Array.isArray(val) ? val : [];
+                        const toggleOption = (opt: string) => {
+                          const exists = currentArr.includes(opt);
+                          const next = exists ? currentArr.filter((x: string) => x !== opt) : [...currentArr, opt];
+                          updateVal(next);
+                        };
                         return (
-                          <button
-                            key={opt}
-                            type="button"
-                            onClick={() => toggleArrayField("setup.structure", opt)}
-                            className={cn(
-                              "px-2 py-1 rounded-md text-xs border transition-colors",
-                              active
-                                ? "bg-primary text-primary-foreground border-primary"
-                                : "border-border hover:bg-muted",
+                          <div key={field.id} className="space-y-2 sm:col-span-2">
+                            <Label className="text-xs flex items-center gap-1">
+                              {field.name}
+                              {field.required && <span className="text-destructive">*</span>}
+                            </Label>
+                            <div className="flex flex-wrap gap-1.5">
+                              {opts.map((opt) => {
+                                const active = currentArr.includes(opt);
+                                return (
+                                  <button
+                                    key={opt}
+                                    type="button"
+                                    onClick={() => toggleOption(opt)}
+                                    className={cn(
+                                      "px-2 py-0.5 rounded text-xs border transition-colors",
+                                      active
+                                        ? "bg-primary text-primary-foreground border-primary"
+                                        : "border-border hover:bg-muted text-muted-foreground",
+                                    )}
+                                  >
+                                    {opt}
+                                  </button>
+                                );
+                              })}
+                            </div>
+                            {field.description && (
+                              <p className="text-[10px] text-muted-foreground">{field.description}</p>
                             )}
-                          >
-                            {opt}
-                          </button>
+                          </div>
                         );
-                      })}
-                    </div>
-                  </div>
-                  <div className="space-y-2">
-                    <Label>Entry Model</Label>
-                    <Select
-                      value={form.setup.entryModel}
-                      onValueChange={(v) => setField("setup.entryModel", v)}
-                    >
-                      <SelectTrigger><SelectValue /></SelectTrigger>
-                      <SelectContent>
-                        {["liquidity sweep", "displacement", "FVG", "Order Block", "Breaker", "Mitigation", "SMT", "retracement"].map((o) => (
-                          <SelectItem key={o} value={o}>{o}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                      }
+
+                      if (field.type === "boolean") {
+                        return (
+                          <div key={field.id} className="space-y-2 flex items-center justify-between border rounded p-2">
+                            <div>
+                              <Label className="text-xs flex items-center gap-1">
+                                {field.name}
+                                {field.required && <span className="text-destructive">*</span>}
+                              </Label>
+                              {field.description && (
+                                <p className="text-[10px] text-muted-foreground">{field.description}</p>
+                              )}
+                            </div>
+                            <input
+                              type="checkbox"
+                              checked={!!val}
+                              onChange={(e) => updateVal(e.target.checked)}
+                              className="rounded border-border accent-primary w-4 h-4"
+                            />
+                          </div>
+                        );
+                      }
+
+                      if (field.type === "textarea") {
+                        return (
+                          <div key={field.id} className="space-y-2 sm:col-span-2">
+                            <Label className="text-xs flex items-center gap-1">
+                              {field.name}
+                              {field.required && <span className="text-destructive">*</span>}
+                            </Label>
+                            <textarea
+                              rows={2}
+                              value={typeof val === "string" ? val : ""}
+                              onChange={(e) => updateVal(e.target.value)}
+                              placeholder={`Enter ${field.name.toLowerCase()}...`}
+                              className="w-full text-xs rounded border border-border bg-background p-2 focus:outline-none focus:ring-1 focus:ring-ring"
+                            />
+                            {field.description && (
+                              <p className="text-[10px] text-muted-foreground">{field.description}</p>
+                            )}
+                          </div>
+                        );
+                      }
+
+                      return (
+                        <div key={field.id} className="space-y-2">
+                          <Label className="text-xs flex items-center gap-1">
+                            {field.name}
+                            {field.required && <span className="text-destructive">*</span>}
+                          </Label>
+                          <Input
+                            type={field.type === "number" ? "number" : field.type === "date" ? "date" : "text"}
+                            value={val ?? ""}
+                            onChange={(e) => updateVal(field.type === "number" ? Number(e.target.value) : e.target.value)}
+                            placeholder={`Enter ${field.name.toLowerCase()}...`}
+                            className="h-8 text-xs"
+                          />
+                          {field.description && (
+                            <p className="text-[10px] text-muted-foreground">{field.description}</p>
+                          )}
+                        </div>
+                      );
+                    })}
                   </div>
                 </div>
 
