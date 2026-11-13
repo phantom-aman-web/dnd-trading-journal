@@ -27,7 +27,7 @@ import {
   DatabaseBackup,
 } from "lucide-react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useTheme } from "@/components/theme-provider";
+import { useTheme, useFont, type DndFont } from "@/components/theme-provider";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { MarketClock } from "@/components/market-clock";
@@ -44,6 +44,7 @@ export function TopBar({ onOpenMobileNav }: { onOpenMobileNav?: () => void }) {
   const { navigate, setCommandOpen, params, selectedAccountId, setSelectedAccountId } = useNav();
   const { user, signOut } = useAuth();
   const { theme: currentTheme, setTheme: applyTheme } = useTheme();
+  const { font: currentFont, setFont: applyFont } = useFont();
   const qc = useQueryClient();
 
   const { data: accountsData } = useQuery({
@@ -69,6 +70,15 @@ export function TopBar({ onOpenMobileNav }: { onOpenMobileNav?: () => void }) {
     { key: "terminal", label: "Sleek Terminal", dot: "#10B981" },
     { key: "institutional", label: "Slate Contrast", dot: "#0F172A" },
   ] as const;
+
+  const fontOptions: { key: DndFont; label: string; desc: string; previewFont: string }[] = [
+    { key: "default", label: "Default System", desc: "Clean modern sans", previewFont: "system-ui, -apple-system, sans-serif" },
+    { key: "jetbrains", label: "JetBrains Mono", desc: "Terminal / Monospace", previewFont: "'JetBrains Mono', monospace" },
+    { key: "inter", label: "Inter", desc: "Modern Swiss sans", previewFont: "'Inter', sans-serif" },
+    { key: "jakarta", label: "Plus Jakarta", desc: "Geometric contemporary", previewFont: "'Plus Jakarta Sans', sans-serif" },
+    { key: "playfair", label: "Playfair Display", desc: "Editorial serif", previewFont: "'Playfair Display', Georgia, serif" },
+    { key: "cinzel", label: "Cinzel", desc: "Classic Roman typography", previewFont: "'Cinzel', serif" },
+  ];
 
   return (
     <header className="sticky top-0 z-30 h-14 border-b border-border bg-card flex items-center gap-2 px-4">
@@ -113,14 +123,15 @@ export function TopBar({ onOpenMobileNav }: { onOpenMobileNav?: () => void }) {
               <span className="text-xs font-mono">Aa</span>
             </Button>
           </DropdownMenuTrigger>
-          <DropdownMenuContent align="end">
-            <DropdownMenuLabel>Appearance</DropdownMenuLabel>
-            <DropdownMenuSeparator />
+          <DropdownMenuContent align="end" className="w-56">
+            <DropdownMenuLabel className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+              Color Theme
+            </DropdownMenuLabel>
             {themeOptions.map((opt) => (
               <DropdownMenuItem
                 key={opt.key}
                 onClick={() => applyTheme(opt.key)}
-                className={cn("flex items-center gap-2", currentTheme === opt.key && "font-semibold")}
+                className={cn("flex items-center gap-2 text-xs", currentTheme === opt.key && "font-semibold")}
               >
                 <span
                   className="h-2.5 w-2.5 rounded-full border border-border shrink-0"
@@ -130,6 +141,30 @@ export function TopBar({ onOpenMobileNav }: { onOpenMobileNav?: () => void }) {
                 {currentTheme === opt.key && (
                   <span className="h-1.5 w-1.5 rounded-full bg-primary" />
                 )}
+              </DropdownMenuItem>
+            ))}
+
+            <DropdownMenuSeparator />
+            <DropdownMenuLabel className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+              Font Family
+            </DropdownMenuLabel>
+            {fontOptions.map((f) => (
+              <DropdownMenuItem
+                key={f.key}
+                onClick={() => applyFont(f.key)}
+                className={cn(
+                  "flex flex-col items-start gap-0.5 text-xs py-1.5 cursor-pointer",
+                  currentFont === f.key && "font-semibold bg-muted/60"
+                )}
+              >
+                <div className="flex items-center justify-between w-full">
+                  {/* Each font option label renders in its OWN font style so you see exactly what you are picking */}
+                  <span style={{ fontFamily: f.previewFont }}>{f.label}</span>
+                  {currentFont === f.key && (
+                    <span className="h-1.5 w-1.5 rounded-full bg-primary" />
+                  )}
+                </div>
+                <span className="text-[10px] text-muted-foreground font-normal">{f.desc}</span>
               </DropdownMenuItem>
             ))}
           </DropdownMenuContent>

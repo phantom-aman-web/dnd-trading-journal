@@ -21,7 +21,7 @@ const CreateTaskSchema = z.object({
     completed: z.boolean(),
   })).default([]),
   templateKind: z.string().optional().nullable(),
-  templateData: z.record(z.any()).optional().nullable(),
+  templateData: z.record(z.string(), z.any()).optional().nullable(),
   accountId: z.string().optional().nullable(),
   instrumentSymbol: z.string().optional().nullable(),
   strategyId: z.string().optional().nullable(),

@@ -6,7 +6,7 @@ import { ThemeProvider } from "@/components/theme-provider";
 import { QueryProvider } from "@/components/query-provider";
 
 export const metadata: Metadata = {
-  title: "DnD — Trading Performance OS",
+  title: "AlphaPips — Trading Performance OS",
   description: "Turn every trade into measurable progress. A private trading performance system.",
   icons: { icon: "/logo.svg" },
 };
@@ -19,20 +19,25 @@ export const metadata: Metadata = {
  *
  * Runs synchronously in <head>, before any body content or CSS renders.
  */
-const themeInitScript = `(function(){try{var t=localStorage.getItem('dnd-theme')||'nordic';var d=document.documentElement;d.setAttribute('data-theme',t);d.classList.toggle('dark',t!=='nordic');d.style.colorScheme=t==='nordic'?'light':'dark';var den=localStorage.getItem('dnd-density');if(den)d.setAttribute('data-density',den);if(localStorage.getItem('dnd-larger-text')==='true')d.setAttribute('data-larger-text','true');}catch(e){}})();`;
+const themeInitScript = `(function(){try{var t=localStorage.getItem('dnd-theme')||'nordic';var d=document.documentElement;d.setAttribute('data-theme',t);d.classList.toggle('dark',t!=='nordic');d.style.colorScheme=t==='nordic'?'light':'dark';var f=localStorage.getItem('alphapips-font');if(f)d.setAttribute('data-font',f);var den=localStorage.getItem('dnd-density');if(den)d.setAttribute('data-density',den);if(localStorage.getItem('dnd-larger-text')==='true')d.setAttribute('data-larger-text','true');}catch(e){}})();`;
 
 export default function RootLayout({
   children,
 }: Readonly<{ children: React.ReactNode }>) {
   return (
     <html lang="en" suppressHydrationWarning>
-      <body className="antialiased bg-background text-foreground">
-        {/* Blocking inline script: reads persisted theme from localStorage and
-            applies data-theme + dark class on <html> BEFORE first paint.
-            Placed at the very top of <body> so it runs synchronously before
-            any DOM content renders, eliminating the flash of the default
-            (light) theme when a dark theme was previously chosen. */}
+      <head>
+        <link rel="preconnect" href="https://fonts.googleapis.com" />
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
+        <link
+          href="https://fonts.googleapis.com/css2?family=Cinzel:wght@500;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&family=Playfair+Display:ital,wght@0,500;0,600;1,400&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap"
+          rel="stylesheet"
+        />
+        {/* Blocking inline script placed inside <head> so it executes before CSS / body paint,
+            eliminating flash of unstyled content while complying with Next.js/React rules */}
         <script dangerouslySetInnerHTML={{ __html: themeInitScript }} />
+      </head>
+      <body className="antialiased bg-background text-foreground">
         <ThemeProvider>
           <QueryProvider>
             {children}

@@ -383,6 +383,32 @@ body {
   background: rgba(255, 255, 255, 0.35);
 }
 
+/* Typography presets configurable from Appearance menu */
+[data-font="jetbrains"],
+[data-font="jetbrains"] body {
+  font-family: 'JetBrains Mono', monospace !important;
+}
+
+[data-font="inter"],
+[data-font="inter"] body {
+  font-family: 'Inter', system-ui, -apple-system, sans-serif !important;
+}
+
+[data-font="jakarta"],
+[data-font="jakarta"] body {
+  font-family: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif !important;
+}
+
+[data-font="playfair"],
+[data-font="playfair"] body {
+  font-family: 'Playfair Display', Georgia, serif !important;
+}
+
+[data-font="cinzel"],
+[data-font="cinzel"] body {
+  font-family: 'Cinzel', serif !important;
+}
+
 /* Focus ring */
 :focus-visible {
   outline: 2px solid var(--ring);

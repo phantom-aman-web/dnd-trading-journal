@@ -8,6 +8,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 interface TradingAccount {
   id: string;
   name: string;
+  accountType: string;
   currency: string;
   startingBalanceCents: number;
   currentBalanceCents: number;

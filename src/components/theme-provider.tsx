@@ -3,14 +3,22 @@
 import { useEffect, useState, useCallback } from "react";
 
 export type DndTheme = "nordic" | "terminal" | "institutional";
+export type DndFont = "default" | "jetbrains" | "inter" | "jakarta" | "playfair" | "cinzel";
 
 // Simple event-based theme store so components can reactively track the current theme.
 let currentTheme: DndTheme = "nordic";
+let currentFont: DndFont = "default";
 const themeListeners = new Set<(t: DndTheme) => void>();
+const fontListeners = new Set<(f: DndFont) => void>();
 
 function notifyTheme(t: DndTheme) {
   currentTheme = t;
   themeListeners.forEach((fn) => fn(t));
+}
+
+function notifyFont(f: DndFont) {
+  currentFont = f;
+  fontListeners.forEach((fn) => fn(f));
 }
 
 function applyThemeToDOM(t: DndTheme) {
@@ -18,6 +26,39 @@ function applyThemeToDOM(t: DndTheme) {
   document.documentElement.classList.toggle("dark", t === "terminal");
   // Also set color-scheme so native form controls + scrollbars match.
   document.documentElement.style.colorScheme = t === "terminal" ? "dark" : "light";
+}
+
+function applyFontToDOM(f: DndFont) {
+  if (f === "default") {
+    document.documentElement.removeAttribute("data-font");
+  } else {
+    document.documentElement.setAttribute("data-font", f);
+  }
+}
+
+/**
+ * Hook that returns the current font and a setter.
+ */
+export function useFont() {
+  const [font, setFontState] = useState<DndFont>(currentFont);
+
+  useEffect(() => {
+    const stored = (localStorage.getItem("alphapips-font") as DndFont) || "default";
+    currentFont = stored;
+    setFontState(stored);
+
+    const listener = (f: DndFont) => setFontState(f);
+    fontListeners.add(listener);
+    return () => {
+      fontListeners.delete(listener);
+    };
+  }, []);
+
+  const changeFont = useCallback((f: DndFont) => {
+    setFont(f);
+  }, []);
+
+  return { font, setFont: changeFont };
 }
 
 /**
@@ -62,6 +103,10 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     applyThemeToDOM(t);
     notifyTheme(t);
 
+    const storedFont = (localStorage.getItem("alphapips-font") as DndFont) || "default";
+    applyFontToDOM(storedFont);
+    notifyFont(storedFont);
+
     const density = (localStorage.getItem("dnd-density") as string) || "comfortable";
     document.documentElement.setAttribute("data-density", density);
 
@@ -69,6 +114,15 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     if (larger) document.documentElement.setAttribute("data-larger-text", "true");
   }, []);
   return <>{children}</>;
+}
+
+export function setFont(font: DndFont) {
+  if (typeof window === "undefined") return;
+  try {
+    localStorage.setItem("alphapips-font", font);
+  } catch {}
+  applyFontToDOM(font);
+  notifyFont(font);
 }
 
 export function setTheme(theme: DndTheme) {

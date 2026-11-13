@@ -91,14 +91,22 @@ export function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
       )}
     >
       {/* Header */}
-      <div className="px-3 h-16 flex items-center gap-2 border-b border-sidebar-border">
-        <div className="h-9 w-9 rounded-lg bg-sidebar-primary flex items-center justify-center text-sidebar-primary-foreground font-bold text-sm tracking-wider shrink-0">
-          D
+      <div className="px-3 h-16 flex items-center gap-2.5 border-b border-sidebar-border">
+        <div className="h-9 w-9 rounded-xl bg-gradient-to-br from-blue-600 to-indigo-700 flex items-center justify-center text-white font-bold text-sm tracking-wider shadow-md shrink-0 border border-white/10">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="h-5 w-5">
+            <path d="M12 3 L20 20 L15.5 20 L12 11 L8.5 20 L4 20 Z" fill="currentColor" fillOpacity="0.3" />
+            <circle cx="12" cy="8" r="1.5" fill="#10B981" stroke="#10B981" />
+          </svg>
         </div>
         {!sidebarCollapsed && (
           <div className="min-w-0 flex-1">
-            <div className="font-semibold text-sm tracking-tight text-sidebar-foreground">DnD</div>
-            <div className="text-[10px] text-muted-foreground/70 leading-none">Trading Journal</div>
+            <div className="font-bold text-sm tracking-tight text-sidebar-foreground flex items-center gap-1.5">
+              <span>AlphaPips</span>
+              <span className="text-[9px] font-mono px-1 py-0.2 rounded bg-primary/20 text-blue-400 font-semibold border border-blue-500/20">
+                PRO
+              </span>
+            </div>
+            <div className="text-[10px] text-sidebar-foreground/60 leading-none mt-0.5">Performance OS</div>
           </div>
         )}
         {onNavigate && (
