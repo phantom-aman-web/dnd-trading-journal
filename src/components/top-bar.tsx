@@ -81,7 +81,7 @@ export function TopBar({ onOpenMobileNav }: { onOpenMobileNav?: () => void }) {
       </button>
 
       <Select value={accountFilter} onValueChange={setAccountFilter}>
-        <SelectTrigger className="hidden sm:flex w-auto min-w-[160px] h-9 text-sm font-medium border-input bg-card">
+        <SelectTrigger className="flex w-auto max-w-[130px] sm:max-w-none sm:min-w-[160px] h-9 text-xs sm:text-sm font-medium border-input bg-card shrink-0">
           <SelectValue placeholder="All Accounts" />
         </SelectTrigger>
         <SelectContent>

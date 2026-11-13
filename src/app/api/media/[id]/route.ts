@@ -3,6 +3,7 @@ import { db } from "@/lib/db";
 import { requireUser } from "@/lib/auth";
 import { ok, bad, notFound, toApiError, parseJson } from "@/lib/api";
 import { buildSignedUrl, deleteStored } from "@/lib/storage";
+import { invalidateCache } from "@/lib/server-cache";
 
 export async function GET(_req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
   let user;
@@ -50,6 +51,10 @@ export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: strin
     where: { id },
     data,
   });
+  const affectedTradeId = (updated.tradeId || media.tradeId) as string | null;
+  if (affectedTradeId) {
+    invalidateCache(`trade:${user.id}:${affectedTradeId}`);
+  }
   return ok(updated);
 }
 
@@ -61,6 +66,9 @@ export async function DELETE(_req: NextRequest, ctx: { params: Promise<{ id: str
   if (!media) return notFound("Media not found");
   await deleteStored(media.storedPath);
   await db.tradeMedia.delete({ where: { id } });
+  if (media.tradeId) {
+    invalidateCache(`trade:${user.id}:${media.tradeId}`);
+  }
   return ok({ ok: true });
 }
 
@@ -88,6 +96,9 @@ export async function PUT(req: NextRequest, ctx: { params: Promise<{ id: string 
       where: { id },
       include: { annotations: true },
     });
+    if (media.tradeId) {
+      invalidateCache(`trade:${user.id}:${media.tradeId}`);
+    }
     return ok(updated);
   }
   return bad("Unknown action");

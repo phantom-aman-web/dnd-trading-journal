@@ -4,6 +4,7 @@ import { requireUser } from "@/lib/auth";
 import { ok, bad, toApiError, parseJson } from "@/lib/api";
 import { saveUpload, ensureStorage, isAllowedImageMime, isAllowedVideoMime, MAX_IMAGE_BYTES, MAX_VIDEO_BYTES, buildSignedUrl } from "@/lib/storage";
 import { audit } from "@/lib/audit";
+import { invalidateCache } from "@/lib/server-cache";
 
 export async function GET(req: NextRequest) {
   let user;
@@ -48,11 +49,9 @@ export async function POST(req: NextRequest) {
 
   if (!file) return bad("File is required");
 
-  if (!tradeId && !strategyId) {
-    return bad("tradeId or strategyId is required for evidence upload.");
-  }
-
-  // Validate ownership of parent
+  // Validate ownership of parent when provided.
+  // Note: tradeId is null during new trade creation (staged upload).
+  // Once the trade record is created, the client attaches it via PATCH /api/media/[id].
   if (tradeId) {
     const trade = await db.trade.findFirst({ where: { id: tradeId, userId: user.id } });
     if (!trade) return bad("Trade not found or not owned by user");
@@ -89,5 +88,8 @@ export async function POST(req: NextRequest) {
     },
   });
   await audit("media.uploaded", "trade_media", media.id, { kind: media.kind });
+  if (tradeId) {
+    invalidateCache(`trade:${user.id}:${tradeId}`);
+  }
   return ok(media);
 }

@@ -407,7 +407,86 @@ export function TradesLogView() {
         />
       ) : (
         <div className="bg-card rounded-xl border border-border shadow-sm overflow-hidden">
-          <div className="overflow-x-auto">
+          {/* Mobile Card List */}
+          <div className="sm:hidden divide-y divide-border">
+            {filtered.map((t) => {
+              const pnl = formatSignedCents(t.netPnlCents);
+              const st = statusLabel(t);
+              const setup = setupName(t);
+              const rNum = t.actualR ? dToNumber(t.actualR) : null;
+              const dateStr = t.entryTime
+                ? new Date(t.entryTime).toLocaleDateString("en-US", {
+                    month: "short",
+                    day: "numeric",
+                  })
+                : "—";
+
+              return (
+                <div
+                  key={t.id}
+                  onClick={() => navigate("tradeDetail", { id: t.id })}
+                  className="p-3.5 hover:bg-muted/50 active:bg-muted/70 cursor-pointer transition-colors space-y-2"
+                >
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <span className="font-semibold text-base text-foreground">
+                        {t.instrumentSymbol}
+                      </span>
+                      <DirectionBadge direction={t.direction} />
+                      <span
+                        className={cn(
+                          "inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium",
+                          st.className,
+                        )}
+                      >
+                        {st.label}
+                      </span>
+                    </div>
+                    <div
+                      className={cn(
+                        "text-base font-semibold tabular-nums text-right",
+                        pnl.sign < 0 ? "text-loss" : pnl.sign > 0 ? "text-profit" : "text-muted-foreground",
+                      )}
+                    >
+                      {pnl.text}
+                    </div>
+                  </div>
+
+                  <div className="flex items-center justify-between text-xs text-muted-foreground">
+                    <div className="flex items-center gap-1.5 truncate max-w-[210px]">
+                      <span>{dateStr}</span>
+                      {setup && (
+                        <>
+                          <span>•</span>
+                          <span className="truncate">{setup}</span>
+                        </>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-2">
+                      {formatR(t.actualR) && (
+                        <span
+                          className={cn(
+                            "tabular-nums font-medium",
+                            rNum != null && rNum > 0
+                              ? "text-profit"
+                              : rNum != null && rNum < 0
+                                ? "text-loss"
+                                : "text-muted-foreground",
+                          )}
+                        >
+                          {formatR(t.actualR)}
+                        </span>
+                      )}
+                      <ChevronRight className="h-4 w-4 text-muted-foreground/60" />
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+
+          {/* Desktop Table View */}
+          <div className="hidden sm:block overflow-x-auto">
             <table className="w-full text-sm">
               <thead className="bg-muted/50 border-b border-border">
                 <tr className="text-left text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">

@@ -352,6 +352,24 @@ export function TradeFormView() {
   const [restoredDraftInfo, setRestoredDraftInfo] = useState<{ timestamp?: string } | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const initialAutosaveSkipRef = useRef(true);
+  const [deletedMediaIds, setDeletedMediaIds] = useState<string[]>([]);
+  const [tagInput, setTagInput] = useState("");
+
+  function addTag(tagToAdd?: string) {
+    const val = (tagToAdd ?? tagInput).trim();
+    if (!val) return;
+    if (!(form.tags ?? []).includes(val)) {
+      setForm((f: any) => ({ ...f, tags: [...(f.tags ?? []), val] }));
+    }
+    if (!tagToAdd) setTagInput("");
+  }
+
+  function removeTag(tagToRemove: string) {
+    setForm((f: any) => ({
+      ...f,
+      tags: (f.tags ?? []).filter((t: string) => t !== tagToRemove),
+    }));
+  }
 
   // Instant real-time financial metrics preview for Quick Entry
   const quickMetrics = useMemo(() => {
@@ -992,10 +1010,18 @@ export function TradeFormView() {
     uploadFile(entry.file, tempId);
   }
 
-  function removeMedia(idx: number) {
+  function removeMedia(idx: number, item?: any) {
+    const target = item ?? form.uploadedMedia[idx];
+    if (target?.id) {
+      setDeletedMediaIds((prev) => [...prev, target.id]);
+    }
     setForm((f: any) => ({
       ...f,
-      uploadedMedia: f.uploadedMedia.filter((_: any, i: number) => i !== idx),
+      uploadedMedia: f.uploadedMedia.filter((m: any, i: number) => {
+        if (target?.id) return m.id !== target.id;
+        if (target?.tempId) return m.tempId !== target.tempId;
+        return i !== idx;
+      }),
     }));
   }
 
@@ -1384,49 +1410,36 @@ export function TradeFormView() {
         isDraft: asDraft,
       };
 
-      const url = editingId ? `/api/trades/${editingId}` : "/api/trades";
-      const method = editingId ? "PATCH" : "POST";
-      const res = await fetch(url, {
-        method,
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      });
-      const data = await res.json();
-      if (!res.ok) {
-        toast.error(data?.error ?? "Failed to save trade.");
-        setSaving(false);
-        return;
+      // 1. Delete any media explicitly removed by the user during this session
+      if (deletedMediaIds.length > 0) {
+        await Promise.allSettled(
+          deletedMediaIds.map((delId) =>
+            fetch(`/api/media/${delId}`, { method: "DELETE" })
+          )
+        );
       }
 
-      // Attach orphaned uploaded media to the newly created trade + save captions.
-      // BUG-EVID-2 fix: wait for any in-flight uploads to finish before attaching,
-      // so media uploaded during trade creation actually gets its tradeId set.
-      // Previously, the form navigated away while uploads were still in-flight,
-      // leaving the media orphaned (tradeId=null) forever.
+      // 2. Wait up to 30 seconds for any still-uploading media to complete
       if (form.uploadedMedia?.length > 0) {
-        // Wait up to 30 seconds for any still-uploading media to complete.
-        const waitForUploads = async () => {
-          const deadline = Date.now() + 30_000;
-          while (Date.now() < deadline) {
-            const stillUploading = form.uploadedMedia.some(
-              (m: any) => m.status === "uploading",
-            );
-            if (!stillUploading) break;
-            await new Promise((r) => setTimeout(r, 500));
-          }
-        };
-        await waitForUploads();
+        const deadline = Date.now() + 30_000;
+        while (Date.now() < deadline) {
+          const stillUploading = form.uploadedMedia.some(
+            (m: any) => m.status === "uploading",
+          );
+          if (!stillUploading) break;
+          await new Promise((r) => setTimeout(r, 500));
+        }
+      }
 
-        // Re-read the latest media state (form.uploadedMedia is React state;
-        // we need to use the closure value but check for completion via the
-        // XHR refs). For any media that now has an id, attach it to the trade.
+      // 3. When editing, update/attach media before or alongside the trade update
+      if (editingId && form.uploadedMedia?.length > 0) {
         for (const m of form.uploadedMedia) {
           if (m.id && m.status !== "uploading" && m.status !== "failed") {
             const patchBody: any = {};
-            if (!editingId) patchBody.tradeId = data.id;
-            // Caption is the form's "Description" textarea value (see Evidence section).
+            if (!m.tradeId || m.tradeId !== editingId) {
+              patchBody.tradeId = editingId;
+            }
             if (m.caption !== undefined && m.caption !== null) patchBody.caption = m.caption;
-            // Per-screenshot timeframe (5m / 1H / 1D / ...) for chart screenshots.
             if (m.timeframe) patchBody.timeframe = m.timeframe;
             if (Object.keys(patchBody).length > 0) {
               await fetch(`/api/media/${m.id}`, {
@@ -1436,14 +1449,6 @@ export function TradeFormView() {
               }).catch(() => {});
             }
 
-            // Persist non-destructive SVG annotations (lines, arrows, rects,
-            // circles, text) to the MediaAnnotation table via the PUT
-            // "setAnnotations" action. Without this, drawings made in the
-            // ImageAnnotator were lost on save because they only lived in
-            // client state (`m.annotations`). The API stores each annotation
-            // as `{ kind, payloadJson }`; we follow the same payload shape
-            // used by the ImageViewer (x1/y1/x2/y2/text/color) so the two
-            // viewers can read each other's drawings.
             if (Array.isArray(m.annotations) && m.annotations.length > 0) {
               await fetch(`/api/media/${m.id}`, {
                 method: "PUT",
@@ -1468,9 +1473,59 @@ export function TradeFormView() {
         }
       }
 
-      // If some uploads are STILL in-flight after the 30s wait (very large
-      // files or slow connection), flag them honestly. For new trades these
-      // will be orphaned; for edits the formData already carries tradeId.
+      // 4. Save the trade data
+      const url = editingId ? `/api/trades/${editingId}` : "/api/trades";
+      const method = editingId ? "PATCH" : "POST";
+      const res = await fetch(url, {
+        method,
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        toast.error(data?.error ?? "Failed to save trade.");
+        setSaving(false);
+        return;
+      }
+
+      // 5. If creating a new trade, link newly uploaded media to the created trade
+      if (!editingId && data?.id && form.uploadedMedia?.length > 0) {
+        for (const m of form.uploadedMedia) {
+          if (m.id && m.status !== "uploading" && m.status !== "failed") {
+            const patchBody: any = { tradeId: data.id };
+            if (m.caption !== undefined && m.caption !== null) patchBody.caption = m.caption;
+            if (m.timeframe) patchBody.timeframe = m.timeframe;
+            await fetch(`/api/media/${m.id}`, {
+              method: "PATCH",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify(patchBody),
+            }).catch(() => {});
+
+            if (Array.isArray(m.annotations) && m.annotations.length > 0) {
+              await fetch(`/api/media/${m.id}`, {
+                method: "PUT",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                  action: "setAnnotations",
+                  annotations: m.annotations.map((a: ImageAnnotation) => ({
+                    kind: a.kind,
+                    payload: {
+                      x1: a.x1,
+                      y1: a.y1,
+                      x2: a.x2,
+                      y2: a.y2,
+                      text: a.text,
+                      color: a.color,
+                    },
+                  })),
+                }),
+              }).catch(() => {});
+            }
+          }
+        }
+      }
+
+      // If some uploads are STILL in-flight after the 30s wait, notify the user.
       const stillUploading = form.uploadedMedia?.some(
         (m: any) => m.status === "uploading",
       );
@@ -1478,11 +1533,24 @@ export function TradeFormView() {
         toast.info("Some media is still uploading and will be attached when complete.");
       }
 
+      setDeletedMediaIds([]);
       toast.success(asDraft ? "Draft saved." : "Trade saved.");
       try { localStorage.removeItem(DRAFT_KEY); } catch {}
-      qc.invalidateQueries({ queryKey: ["trades"] });
-      qc.invalidateQueries({ queryKey: ["dashboard"] });
-      navigate("tradesLog");
+      const targetId = editingId || data?.id;
+      await Promise.all([
+        qc.invalidateQueries({ queryKey: ["trade", targetId] }),
+        qc.invalidateQueries({ queryKey: ["trade"] }),
+        qc.invalidateQueries({ queryKey: ["trades"] }),
+        qc.invalidateQueries({ queryKey: ["dashboard"] }),
+        qc.invalidateQueries({ queryKey: ["analytics"] }),
+        qc.invalidateQueries({ queryKey: ["calendar"] }),
+        qc.invalidateQueries({ queryKey: ["me"] }),
+      ]);
+      if (editingId) {
+        navigate("tradeDetail", { id: editingId });
+      } else {
+        navigate("tradesLog");
+      }
     } catch (err: any) {
       toast.error(err?.message ?? "Network error — please check your connection and try again.");
       setSaving(false);
@@ -1874,11 +1942,26 @@ export function TradeFormView() {
         <>
           <Tabs value={activeStep} onValueChange={(v) => setActiveStep(v as StepKey)} className="w-full">
             <TabsList className="w-full justify-start overflow-x-auto no-scrollbar h-auto">
-              <TabsTrigger value="trade-info">1. Trade Info</TabsTrigger>
-              <TabsTrigger value="checklist">2. Setup Checklist</TabsTrigger>
-              <TabsTrigger value="risk">3. Risk &amp; Sizing</TabsTrigger>
-              <TabsTrigger value="exits">4. Partial Exits</TabsTrigger>
-              <TabsTrigger value="review">5. Confirm &amp; Save</TabsTrigger>
+              <TabsTrigger value="trade-info" className="text-xs sm:text-sm px-2.5 py-1.5 whitespace-nowrap">
+                <span className="sm:hidden">1. Info</span>
+                <span className="hidden sm:inline">1. Trade Info</span>
+              </TabsTrigger>
+              <TabsTrigger value="checklist" className="text-xs sm:text-sm px-2.5 py-1.5 whitespace-nowrap">
+                <span className="sm:hidden">2. Checklist</span>
+                <span className="hidden sm:inline">2. Setup Checklist</span>
+              </TabsTrigger>
+              <TabsTrigger value="risk" className="text-xs sm:text-sm px-2.5 py-1.5 whitespace-nowrap">
+                <span className="sm:hidden">3. Sizing</span>
+                <span className="hidden sm:inline">3. Risk &amp; Sizing</span>
+              </TabsTrigger>
+              <TabsTrigger value="exits" className="text-xs sm:text-sm px-2.5 py-1.5 whitespace-nowrap">
+                <span className="sm:hidden">4. Exits</span>
+                <span className="hidden sm:inline">4. Partial Exits</span>
+              </TabsTrigger>
+              <TabsTrigger value="review" className="text-xs sm:text-sm px-2.5 py-1.5 whitespace-nowrap">
+                <span className="sm:hidden">5. Review</span>
+                <span className="hidden sm:inline">5. Confirm &amp; Save</span>
+              </TabsTrigger>
             </TabsList>
 
         {/* ─────────────────────────────────────────────────────────── */}
@@ -2126,11 +2209,16 @@ export function TradeFormView() {
             </div>
 
             {form.uploadedMedia.length === 0 && (
-              <div className="rounded-md border border-dashed border-border p-8 text-center">
+              <div
+                onClick={() => fileInputRef.current?.click()}
+                className="rounded-md border border-dashed border-border p-8 text-center cursor-pointer hover:bg-muted/30 transition-colors"
+                role="button"
+                tabIndex={0}
+              >
                 <ImageIcon className="h-8 w-8 mx-auto text-muted-foreground mb-2" />
-                <p className="text-sm text-muted-foreground">No evidence uploaded yet.</p>
+                <p className="text-sm font-medium text-foreground">Tap or Click to Upload Evidence</p>
                 <p className="text-xs text-muted-foreground mt-1">
-                  Click Upload, drag &amp; drop, or paste (Ctrl+V) to add screenshots or video clips.
+                  Take a photo, choose from library, or paste (Ctrl+V) screenshots.
                 </p>
               </div>
             )}
@@ -2266,7 +2354,7 @@ export function TradeFormView() {
                               variant="ghost"
                               size="icon"
                               className="text-muted-foreground hover:text-loss"
-                              onClick={() => removeMedia(i)}
+                              onClick={() => removeMedia(i, m)}
                               aria-label="Delete evidence"
                             >
                               <Trash2 className="h-4 w-4" />
@@ -2573,33 +2661,85 @@ export function TradeFormView() {
 
                 {/* Tags */}
                 <div className="rounded-md border border-border p-3 space-y-3">
-                  <h3 className="text-sm font-medium">Tags</h3>
-                  <div className="flex flex-wrap gap-2">
-                    {tags.length === 0 && (
-                      <p className="text-xs text-muted-foreground">
-                        No tags configured. Add some in the Tags view.
-                      </p>
-                    )}
-                    {tags.map((t: any) => {
-                      const name = typeof t === "string" ? t : (t.name ?? t.label);
-                      const active = (form.tags ?? []).includes(name);
-                      return (
-                        <button
-                          key={typeof t === "string" ? t : t.id}
-                          type="button"
-                          onClick={() => toggleArrayField("tags", name)}
-                          className={cn(
-                            "px-2 py-1 rounded-md text-xs border transition-colors",
-                            active
-                              ? "bg-primary text-primary-foreground border-primary"
-                              : "border-border hover:bg-muted",
-                          )}
-                        >
-                          {name}
-                        </button>
-                      );
-                    })}
+                  <div className="flex items-center justify-between">
+                    <h3 className="text-sm font-medium">Tags</h3>
+                    <span className="text-xs text-muted-foreground">
+                      {(form.tags ?? []).length} active
+                    </span>
                   </div>
+
+                  {/* Active tag chips with remove button */}
+                  {(form.tags ?? []).length > 0 && (
+                    <div className="flex flex-wrap gap-1.5">
+                      {(form.tags ?? []).map((t: string) => (
+                        <Badge key={t} variant="secondary" className="gap-1.5 pr-1.5 py-1 text-xs">
+                          <span>{t}</span>
+                          <button
+                            type="button"
+                            onClick={() => removeTag(t)}
+                            className="text-muted-foreground hover:text-foreground rounded-full"
+                            aria-label={`Remove tag ${t}`}
+                          >
+                            <X className="h-3 w-3" />
+                          </button>
+                        </Badge>
+                      ))}
+                    </div>
+                  )}
+
+                  {/* Tag input to type new custom tags */}
+                  <div className="flex gap-2">
+                    <Input
+                      value={tagInput}
+                      onChange={(e) => setTagInput(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") {
+                          e.preventDefault();
+                          addTag();
+                        }
+                      }}
+                      placeholder="Add tag (e.g. FOMC, A+, Re-entry)..."
+                      className="h-8 text-xs max-w-xs"
+                    />
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="h-8 text-xs"
+                      onClick={() => addTag()}
+                      disabled={!tagInput.trim()}
+                    >
+                      + Add
+                    </Button>
+                  </div>
+
+                  {/* Configured tag suggestions if available */}
+                  {tags.length > 0 && (
+                    <div className="space-y-1.5 pt-1">
+                      <span className="text-[11px] text-muted-foreground">Configured tags:</span>
+                      <div className="flex flex-wrap gap-1.5">
+                        {tags.map((t: any) => {
+                          const name = typeof t === "string" ? t : (t.name ?? t.label);
+                          const active = (form.tags ?? []).includes(name);
+                          return (
+                            <button
+                              key={typeof t === "string" ? t : t.id}
+                              type="button"
+                              onClick={() => (active ? removeTag(name) : addTag(name))}
+                              className={cn(
+                                "px-2 py-0.5 rounded-md text-xs border transition-colors",
+                                active
+                                  ? "bg-primary text-primary-foreground border-primary"
+                                  : "border-border hover:bg-muted text-muted-foreground",
+                              )}
+                            >
+                              {name}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
                 </div>
 
                 {/* Notes / Lessons */}
@@ -3449,7 +3589,7 @@ export function TradeFormView() {
       </Tabs>
 
       {/* Navigation bar */}
-      <div className="sticky bottom-0 left-0 right-0 z-20 flex gap-2 justify-between bg-background/95 backdrop-blur p-3 border-t border-border md:rounded-md md:border">
+      <div className="sticky bottom-16 md:bottom-0 left-0 right-0 z-20 flex gap-2 justify-between items-center bg-background/95 backdrop-blur p-3 border-t border-border md:rounded-md md:border shadow-lg md:shadow-none">
         <Button
           variant="outline"
           onClick={goPrev}
