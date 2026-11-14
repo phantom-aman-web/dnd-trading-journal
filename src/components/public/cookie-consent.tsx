@@ -16,7 +16,7 @@ import { useNav } from "@/lib/nav-store";
 
 /**
  * Cookie consent banner — shown on first visit (or when the consent version
- * bumps) for anonymous visitors. Matches the DnD dashboard design system:
+ * bumps) for anonymous visitors. Matches the AlphaPips design system:
  * card surfaces, border tokens, muted-foreground copy, primary CTA.
  */
 export function CookieConsent() {
@@ -61,7 +61,7 @@ export function CookieConsent() {
                     Cookies &amp; Privacy
                   </h2>
                   <p className="mt-1 text-xs text-muted-foreground leading-relaxed">
-                    DnD uses essential cookies for authentication and local storage
+                    AlphaPips uses essential cookies for authentication and local storage
                     for preferences. No advertising or tracking cookies. See our{" "}
                     <LegalLink>Cookie Policy</LegalLink>.
                   </p>
@@ -103,7 +103,7 @@ export function CookieConsent() {
               Cookie Settings
             </DialogTitle>
             <DialogDescription>
-              Manage how DnD uses cookies and local storage. Essential cookies
+              Manage how AlphaPips uses cookies and local storage. Essential cookies
               are required for the service to function and cannot be disabled.
             </DialogDescription>
           </DialogHeader>
@@ -122,7 +122,7 @@ export function CookieConsent() {
           />
           <ConsentCategory
             label="Analytics"
-            description="Anonymous usage statistics to help improve DnD. Currently not in use."
+            description="Anonymous usage statistics to help improve AlphaPips. Currently not in use."
             checked={preferences.analytics}
             onCheckedChange={(v) => savePreferences({ analytics: v })}
           />

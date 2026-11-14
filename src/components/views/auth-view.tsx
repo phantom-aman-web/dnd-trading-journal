@@ -86,11 +86,14 @@ export function AuthView() {
         <div className="rounded-xl border border-slate-200 bg-white text-slate-900 shadow-xl p-6 md:p-8 space-y-6">
           {/* Header */}
           <div className="text-center space-y-2">
-            <div className="inline-flex items-center justify-center w-12 h-12 rounded-lg bg-[#1e2330] text-white font-bold text-xl tracking-wider">
-              D
+            <div className="inline-flex items-center justify-center w-12 h-12 rounded-xl bg-gradient-to-br from-blue-600 to-indigo-700 text-white font-bold text-xl tracking-wider shadow-lg border border-white/10">
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="h-6 w-6">
+                <path d="M12 3 L20 20 L15.5 20 L12 11 L8.5 20 L4 20 Z" fill="currentColor" fillOpacity="0.3" />
+                <circle cx="12" cy="8" r="1.5" fill="#10B981" stroke="#10B981" />
+              </svg>
             </div>
             <h1 className="text-xl font-bold text-slate-900 tracking-tight">
-              {isSignup ? "Create your account" : "Sign in to DnD"}
+              {isSignup ? "Create your AlphaPips account" : "Sign in to AlphaPips"}
             </h1>
             <p className="text-xs text-slate-500">
               {isSignup
@@ -230,7 +233,7 @@ export function AuthView() {
                 </>
               ) : (
                 <>
-                  New to DnD?{" "}
+                  New to AlphaPips?{" "}
                   <button onClick={() => navigate("signup")} className="font-medium text-slate-700 hover:text-slate-900 underline underline-offset-2">
                     Create an account
                   </button>

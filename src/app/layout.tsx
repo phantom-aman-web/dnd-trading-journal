@@ -6,8 +6,22 @@ import { ThemeProvider } from "@/components/theme-provider";
 import { QueryProvider } from "@/components/query-provider";
 
 export const metadata: Metadata = {
-  title: "AlphaPips — Trading Performance OS",
-  description: "Turn every trade into measurable progress. A private trading performance system.",
+  title: "AlphaPips — Trading Journal & Performance Analytics",
+  description: "Journal your trades, analyze your strategies, track risk, and understand your trading performance with AlphaPips.",
+  keywords: ["trading journal", "trading performance", "forex journal", "crypto analytics", "prop firm challenge tracker", "risk calculator", "trading analytics"],
+  authors: [{ name: "AlphaPips Team" }],
+  openGraph: {
+    title: "AlphaPips — Trading Journal & Performance Analytics",
+    description: "Journal your trades, analyze your strategies, track risk, and understand your trading performance with AlphaPips.",
+    url: "https://alphapips.com",
+    siteName: "AlphaPips",
+    type: "website",
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "AlphaPips — Trading Journal & Performance Analytics",
+    description: "Journal your trades, analyze your strategies, track risk, and understand your trading performance with AlphaPips.",
+  },
   icons: { icon: "/logo.svg" },
 };
 
