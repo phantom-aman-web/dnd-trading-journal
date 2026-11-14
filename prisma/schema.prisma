@@ -45,6 +45,8 @@ model User {
   filterPresets      FilterPreset[]
   propChallenges     PropChallenge[]
   tradingTasks       TradingTask[]
+  noTrades           NoTradeEntry[]
+  dictionaryEntries  StrategyDictionaryEntry[]
 }
 
 // ---------------------------------------------------------------------------
@@ -64,12 +66,15 @@ model TradingAccount {
   dailyLossLimitPct Float?
   maxDrawdownPct Float?
   isDefault      Boolean  @default(false)
+  isArchived     Boolean  @default(false)
+  archivedAt     DateTime?
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 
   user   User    @relation(fields: [userId], references: [id], onDelete: Cascade)
   trades Trade[]
   propChallenges PropChallenge[]
+  noTrades NoTradeEntry[]
 
   @@index([userId])
 }
@@ -89,6 +94,7 @@ model Instrument {
 
   user   User    @relation(fields: [userId], references: [id], onDelete: Cascade)
   trades Trade[]
+  noTrades NoTradeEntry[]
 
   @@unique([userId, symbol])
   @@index([userId])
@@ -109,6 +115,8 @@ model Strategy {
   timeframe   String?
   session     String?
   status      String   @default("active") // active | paused | archived
+  isArchived  Boolean  @default(false)
+  archivedAt  DateTime?
   checklistConfigId String? // FK to the strategy's associated checklist
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
@@ -116,6 +124,8 @@ model Strategy {
   user    User              @relation(fields: [userId], references: [id], onDelete: Cascade)
   versions StrategyVersion[]
   trades  Trade[]
+  noTrades NoTradeEntry[]
+  dictionaryEntries StrategyDictionaryEntry[]
   experiments StrategyExperiment[]
   checklistConfig ChecklistConfig? @relation(fields: [checklistConfigId], references: [id], onDelete: SetNull)
 
@@ -137,6 +147,7 @@ model StrategyVersion {
 
   strategy  Strategy @relation(fields: [strategyId], references: [id], onDelete: Cascade)
   trades    Trade[]
+  noTrades  NoTradeEntry[]
   experiments StrategyExperiment[]
   checklistEvaluations TradeChecklistEvaluation[]
 
@@ -268,6 +279,7 @@ model Trade {
   // Draft / archive
   isDraft        Boolean  @default(false)
   isArchived     Boolean  @default(false)
+  archivedAt     DateTime?
   draftJson      String?  // autosaved draft payload
 
   user           User             @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -778,5 +790,95 @@ model TradingTask {
   @@index([userId, listName])
   @@index([userId, dueDate])
 }
+
+// ---------------------------------------------------------------------------
+// No-Trade Journal Entries & Market Observations
+// ---------------------------------------------------------------------------
+
+model NoTradeEntry {
+  id                  String    @id @default(cuid())
+  userId              String
+  instrumentSymbol    String
+  instrumentId        String?
+  market              String?   // forex | gold | indices | crypto | futures | stocks | custom
+  accountId           String?
+  strategyId          String?
+  strategyVersionId   String?
+  date                DateTime  @default(now())
+  time                String?   // HH:mm
+  session             String?   // asia | london | ny_am | ny_pm | custom
+  timeframe           String?   // 1m | 5m | 15m | 1h | 4h | 1d
+  bias                String?   // bullish | bearish | neutral
+  title               String?
+  observation         String?   // core observation description
+  priceLevels         String?   // key price levels, sweeps, zones
+  marketStructure     String?   // market structure context
+  liquidityConditions String?   // liquidity environment
+  setupIdentified     String?   // name or nature of setup observed
+  expectedDirection   String?   // expected move if taken
+  reasonCategory      String    @default("no_valid_setup") // no_valid_setup | poor_rr | confirmation_missing | news_risk | unclear_structure | spread_high | daily_loss_reached | emotional_psychological | limit_reached | other
+  reasonNotes         String?   // detailed explanation
+  conditionMissing    String?   // exact missing criterion
+  wouldHaveValidated  String?   // what would have made it valid
+  invalidationReason  String?   // what invalidated the idea
+  decisionType        String    @default("deliberate_avoidance") // deliberate_avoidance | missed | rejected | not_ready
+  status              String    @default("observing") // observing | waiting_confirmation | rejected | missed | invalidated | completed
+  psychologyNotes     String?
+  behaviorFlagsJson   String?   @default("[]")
+  tagsJson            String?   @default("[]")
+  customFieldsJson    String?   @default("{}")
+  followUpNotes       String?
+  isArchived          Boolean   @default(false)
+  archivedAt          DateTime?
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+
+  user            User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  account         TradingAccount?  @relation(fields: [accountId], references: [id], onDelete: SetNull)
+  instrument      Instrument?      @relation(fields: [instrumentId], references: [id], onDelete: SetNull)
+  strategy        Strategy?        @relation(fields: [strategyId], references: [id], onDelete: SetNull)
+  strategyVersion StrategyVersion? @relation(fields: [strategyVersionId], references: [id], onDelete: SetNull)
+
+  @@index([userId])
+  @@index([instrumentSymbol])
+  @@index([strategyId])
+  @@index([accountId])
+  @@index([date])
+  @@index([status])
+  @@index([reasonCategory])
+  @@index([isArchived])
+}
+
+// ---------------------------------------------------------------------------
+// Strategy-Specific Trading Dictionary
+// ---------------------------------------------------------------------------
+
+model StrategyDictionaryEntry {
+  id                   String    @id @default(cuid())
+  userId               String
+  strategyId           String?   // null for global personal concepts, or strategy-specific
+  term                 String    // e.g. "Fair Value Gap", "Order Block"
+  abbreviation         String?   // e.g. "FVG", "OB"
+  category             String?   // Market Structure | Liquidity | Entry Model | Order Flow | Risk | Execution | Other
+  definition           String    // custom explanation in trader's own words
+  practicalExplanation String?  // how to spot / apply in practice
+  exampleUsage         String?   // concrete usage example
+  relatedTermsJson     String?   @default("[]") // array of related concept strings
+  tagsJson             String?   @default("[]")
+  isFavorite           Boolean   @default(false)
+  diagramUrl           String?
+  createdAt            DateTime  @default(now())
+  updatedAt            DateTime  @updatedAt
+
+  user     User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  strategy Strategy? @relation(fields: [strategyId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([strategyId])
+  @@index([term])
+  @@index([category])
+  @@index([isFavorite])
+}
+
 
 

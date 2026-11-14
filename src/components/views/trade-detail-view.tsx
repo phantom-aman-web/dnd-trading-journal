@@ -2,6 +2,7 @@
 
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNav } from "@/lib/nav-store";
+import { useFavorites } from "@/lib/favorites-store";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -9,6 +10,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Separator } from "@/components/ui/separator";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { formatSignedCents, formatR, formatPrice, centsToNumberString } from "@/lib/money";
+import { PrivacyMask } from "@/components/common/privacy-mask";
 import { dToNumber } from "@/lib/decimal";
 import {
   parseChecklistItems,
@@ -33,6 +35,9 @@ import {
   HelpCircle,
   Lock,
   Play,
+  Star,
+  Archive,
+  BookOpen,
 } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
@@ -52,10 +57,12 @@ async function fetchTrade(id: string) {
   return res.json();
 }
 
-export function TradeDetailView() {
+export function TradeDetailView({ tradeId, onBack }: { tradeId?: string; onBack?: () => void } = {}) {
   const { params, navigate } = useNav();
   const qc = useQueryClient();
-  const id = params.id;
+  const id = tradeId || params.id;
+  const { isFavorite, toggleFavorite } = useFavorites();
+  const isFav = id ? isFavorite(id) : false;
   const { data: trade, isLoading } = useQuery({
     queryKey: ["trade", id],
     queryFn: () => fetchTrade(id),
@@ -140,12 +147,20 @@ export function TradeDetailView() {
     <div className="p-4 md:p-6 space-y-4 max-w-5xl">
       {/* Header */}
       <div className="flex items-center gap-3">
-        <Button variant="ghost" size="icon" onClick={() => navigate("tradesLog")}>
+        <Button variant="ghost" size="icon" onClick={() => onBack ? onBack() : navigate("tradesLog")}>
           <ArrowLeft className="h-4 w-4" />
         </Button>
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 flex-wrap">
             <h1 className="text-2xl font-semibold tracking-tight">{trade.instrumentSymbol}</h1>
+            <button
+              type="button"
+              onClick={() => id && toggleFavorite(id, trade.instrumentSymbol)}
+              className="p-1 rounded-md text-muted-foreground hover:text-amber-400 transition-colors"
+              title={isFav ? "Remove from Favorites (F)" : "Add to Favorites (F)"}
+            >
+              <Star className={cn("h-5 w-5", isFav ? "text-amber-400 fill-amber-400" : "text-muted-foreground/60")} />
+            </button>
             <Badge variant="outline" className={cn(trade.direction === "long" ? "text-profit" : "text-loss")}>
               {trade.direction === "long" ? "LONG" : "SHORT"}
             </Badge>
@@ -179,7 +194,7 @@ export function TradeDetailView() {
         </div>
         <div className="text-right">
           <div className={cn("text-xl font-semibold tnum", pnl.sign > 0 ? "text-profit" : pnl.sign < 0 ? "text-loss" : "")}>
-            {pnl.text}
+            <PrivacyMask value={pnl.text} />
           </div>
           <div className={cn("text-sm tnum", trade.actualR && dToNumber(trade.actualR) > 0 ? "text-profit" : trade.actualR && dToNumber(trade.actualR) < 0 ? "text-loss" : "text-muted-foreground")}>
             {formatR(trade.actualR)}
@@ -189,6 +204,23 @@ export function TradeDetailView() {
 
       {/* Actions */}
       <div className="flex flex-wrap gap-2">
+        <Button
+          variant={isFav ? "default" : "outline"}
+          size="sm"
+          onClick={() => id && toggleFavorite(id, trade.instrumentSymbol)}
+          className={cn(
+            isFav
+              ? "bg-amber-500 hover:bg-amber-600 text-white border-amber-600"
+              : "text-muted-foreground hover:text-foreground"
+          )}
+          title="Toggle Favorite (F)"
+        >
+          <Star className={cn("h-4 w-4", isFav && "fill-current")} />
+          <span>{isFav ? "Favorited" : "Favorite"}</span>
+          <kbd className={cn("text-[10px] font-mono px-1 py-0.2 rounded ml-1", isFav ? "bg-white/20 text-white" : "bg-muted text-muted-foreground")}>
+            F
+          </kbd>
+        </Button>
         {trade.status === "planned" && !trade.isDraft && (
           <Button
             variant="default"
@@ -227,6 +259,39 @@ export function TradeDetailView() {
         >
           <Copy className="h-4 w-4" /> Duplicate
         </Button>
+        <Button
+          variant="outline"
+          size="sm"
+          className="text-muted-foreground hover:text-amber-500"
+          onClick={async () => {
+            const res = await fetch("/api/archive", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ entityType: "trade", id, action: "archive" }),
+            });
+            if (res.ok) {
+              toast.success("Trade archived safely. You can restore it anytime in Archived Records.");
+              qc.invalidateQueries({ queryKey: ["trades"] });
+              navigate("tradesLog");
+            } else {
+              toast.error("Failed to archive trade.");
+            }
+          }}
+          title="Safely archive this trade (reversible)"
+        >
+          <Archive className="h-4 w-4" /> Archive
+        </Button>
+        {trade.strategyId && (
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => navigate("setups", { id: trade.strategyId })}
+            className="text-muted-foreground hover:text-foreground"
+            title="Inspect setup dictionary and definitions"
+          >
+            <BookOpen className="h-4 w-4" /> Dictionary
+          </Button>
+        )}
         <Button
           variant="outline"
           size="sm"
@@ -843,8 +908,22 @@ export function TradeDetailView() {
   );
 }
 
-function MiniStat({ label, value, tone, hint }: { label: string; value: string; tone?: "profit" | "loss" | "neutral"; hint?: string }) {
+function MiniStat({
+  label,
+  value,
+  tone,
+  hint,
+  isSensitive,
+}: {
+  label: string;
+  value: string;
+  tone?: "profit" | "loss" | "neutral";
+  hint?: string;
+  isSensitive?: boolean;
+}) {
   const [showHint, setShowHint] = useState(false);
+  const sensitive = isSensitive ?? (/p&l|pnl|costs|fee|comm|profit|loss/i.test(label));
+
   return (
     <Card className="p-3">
       <div className="text-xs text-muted-foreground flex items-center gap-1.5">
@@ -869,7 +948,7 @@ function MiniStat({ label, value, tone, hint }: { label: string; value: string; 
         )}
       </div>
       <div className={cn("font-medium tnum mt-1", tone === "profit" ? "text-profit" : tone === "loss" ? "text-loss" : "")}>
-        {value}
+        {sensitive ? <PrivacyMask value={value} /> : value}
       </div>
     </Card>
   );

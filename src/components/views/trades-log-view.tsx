@@ -4,6 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useMemo, useState, useEffect } from "react";
 import { useNav } from "@/lib/nav-store";
 import { useAuth } from "@/lib/auth-store";
+import { useFavorites } from "@/lib/favorites-store";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -26,13 +27,28 @@ import {
   Lock,
   Play,
   Loader2,
+  Star,
+  EyeOff,
+  ChevronDown,
+  Compass,
+  AlertCircle,
 } from "lucide-react";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import { formatSignedCents, formatR } from "@/lib/money";
 import { dToNumber } from "@/lib/decimal";
 import { CloseTradeModal } from "@/components/trade/close-trade-modal";
 import { ExecuteTradeModal } from "@/components/trade/execute-trade-modal";
 import { SavedFilterPresets, type FilterState } from "@/components/trades/saved-filter-presets";
+import { useWorkspaceStore } from "@/lib/workspace-store";
+import { usePrivacyStore, maskSignedCents } from "@/lib/privacy-store";
+import { ObservationDetailDialog } from "@/components/no-trades/observation-detail-dialog";
 
 /* ------------------------------------------------------------------ */
 /* Data fetching                                                       */
@@ -193,6 +209,13 @@ export function TradesLogView() {
     setSelectedAccountId(v === "all" ? "" : v);
     setPage(1);
   }
+  const { isFavorite, toggleFavorite, favoriteCount } = useFavorites();
+  const isPrivate = usePrivacyStore((s) => s.isPrivate);
+  const [entryTab, setEntryTab] = useState<"all" | "trades" | "observations" | "favorites">(
+    params.tab === "observations" ? "observations" : params.favorites === "1" ? "favorites" : "all"
+  );
+  const [selectedObservation, setSelectedObservation] = useState<any | null>(null);
+  const [observationModalOpen, setObservationModalOpen] = useState(false);
   const [setupFilter, setSetupFilter] = useState<string>(params.strategyId || "all");
   const [directionFilter, setDirectionFilter] = useState<string>(params.direction || "all");
   const [outcomeFilter, setOutcomeFilter] = useState<string>(params.outcome || "all");
@@ -235,7 +258,14 @@ export function TradesLogView() {
       setOutcomeFilter(params.outcome);
       setPage(1);
     }
-  }, [params.symbol, params.search, params.strategyId, params.direction, params.outcome]);
+    if (params.tab === "observations") {
+      setEntryTab("observations");
+      setPage(1);
+    } else if (params.favorites === "1") {
+      setEntryTab("favorites");
+      setPage(1);
+    }
+  }, [params.symbol, params.search, params.strategyId, params.direction, params.outcome, params.favorites, params.tab]);
 
   const {
     data: tradesData,
@@ -264,6 +294,31 @@ export function TradesLogView() {
       }),
   });
 
+  const { data: noTradesData, isLoading: noTradesLoading } = useQuery({
+    queryKey: [
+      "no-trades-in-log",
+      page,
+      pageSize,
+      debouncedSearch,
+      accountFilter,
+      setupFilter,
+    ],
+    queryFn: async () => {
+      const qs = new URLSearchParams({
+        page: "1",
+        limit: "100",
+        sortBy: "date",
+        sortDir: "desc",
+      });
+      if (debouncedSearch.trim()) qs.set("search", debouncedSearch.trim());
+      if (accountFilter !== "all") qs.set("accountId", accountFilter);
+      if (setupFilter !== "all") qs.set("strategyId", setupFilter);
+      const res = await fetch(`/api/no-trades?${qs.toString()}`);
+      if (!res.ok) return { items: [], total: 0 };
+      return res.json();
+    },
+  });
+
   const { data: accountsData } = useQuery({
     queryKey: ["accounts", user?.id],
     queryFn: fetchAccounts,
@@ -277,7 +332,49 @@ export function TradesLogView() {
 
   const trades: TradeRow[] = tradesData?.items ?? [];
   const totalTrades: number = tradesData?.total ?? 0;
-  const totalPages: number = Math.max(1, tradesData?.totalPages ?? 1);
+  const observations: any[] = noTradesData?.items ?? [];
+  const totalObservations: number = noTradesData?.total ?? 0;
+
+  type UnifiedEntry =
+    | { kind: "trade"; data: TradeRow; id: string; timestamp: number }
+    | { kind: "observation"; data: any; id: string; timestamp: number };
+
+  const allEntries: UnifiedEntry[] = useMemo(() => {
+    const list: UnifiedEntry[] = [];
+    if (entryTab === "all" || entryTab === "trades" || entryTab === "favorites") {
+      trades.forEach((t) => {
+        if (entryTab === "favorites" && !isFavorite(t.id)) return;
+        list.push({
+          kind: "trade",
+          data: t,
+          id: t.id,
+          timestamp: new Date(t.entryTime || (t as any).createdAt || 0).getTime(),
+        });
+      });
+    }
+    if (entryTab === "all" || entryTab === "observations") {
+      observations.forEach((o) => {
+        list.push({
+          kind: "observation",
+          data: o,
+          id: o.id,
+          timestamp: new Date(o.date || o.createdAt || 0).getTime(),
+        });
+      });
+    }
+    return list.sort((a, b) => b.timestamp - a.timestamp);
+  }, [trades, observations, entryTab, isFavorite]);
+
+  const effectiveTotal =
+    entryTab === "all"
+      ? totalTrades + totalObservations
+      : entryTab === "trades"
+        ? totalTrades
+        : entryTab === "observations"
+          ? totalObservations
+          : favoriteCount;
+
+  const totalPages: number = Math.max(1, Math.ceil(effectiveTotal / pageSize));
 
   // Auto-correct page if current page exceeds total pages
   useEffect(() => {
@@ -347,8 +444,8 @@ export function TradesLogView() {
   const availableAccountIds = useMemo(() => accounts.map((a) => a.id), [accounts]);
   const availableStrategyIds = useMemo(() => strategies.map((s) => s.id), [strategies]);
 
-  const startTradeIndex = totalTrades === 0 ? 0 : (page - 1) * pageSize + 1;
-  const endTradeIndex = Math.min(page * pageSize, totalTrades);
+  const startTradeIndex = effectiveTotal === 0 ? 0 : (page - 1) * pageSize + 1;
+  const endTradeIndex = Math.min(page * pageSize, effectiveTotal);
 
   return (
     <div className="p-4 md:p-6 space-y-4 max-w-7xl">
@@ -357,14 +454,141 @@ export function TradesLogView() {
         <div>
           <h1 className="text-2xl font-bold text-foreground">Trades Log</h1>
           <p className="text-sm text-muted-foreground mt-0.5">
-            Every trade you've logged, in chronological order.
+            Every trade and market observation, unified in chronological order.
           </p>
         </div>
-        <div className="sm:ml-auto">
-          <Button onClick={() => navigate("tradeNew")}>
-            <Plus className="h-4 w-4" /> Log Trade
-          </Button>
+        <div className="sm:ml-auto flex items-center gap-2">
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button className="bg-primary text-primary-foreground font-semibold shadow-xs gap-1.5">
+                <Plus className="h-4 w-4" />
+                <span>Add Entry</span>
+                <ChevronDown className="h-3.5 w-3.5 opacity-80" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-56 p-1.5">
+              <DropdownMenuItem
+                onClick={() => navigate("tradeNew")}
+                className="cursor-pointer py-2"
+              >
+                <div className="h-7 w-7 rounded-md bg-primary/10 text-primary flex items-center justify-center mr-2.5 shrink-0">
+                  <Plus className="h-4 w-4" />
+                </div>
+                <div className="flex flex-col flex-1">
+                  <div className="flex items-center justify-between">
+                    <span className="font-semibold text-xs">Log Trade</span>
+                    <kbd className="text-[10px] font-mono px-1 rounded bg-muted text-muted-foreground">N</kbd>
+                  </div>
+                  <span className="text-[10px] text-muted-foreground">Record executed position</span>
+                </div>
+              </DropdownMenuItem>
+
+              <DropdownMenuItem
+                onClick={() => useNav.getState().setNoTradeFormOpen(true)}
+                className="cursor-pointer py-2"
+              >
+                <div className="h-7 w-7 rounded-md bg-amber-500/10 text-amber-500 flex items-center justify-center mr-2.5 shrink-0">
+                  <EyeOff className="h-4 w-4" />
+                </div>
+                <div className="flex flex-col flex-1">
+                  <div className="flex items-center justify-between">
+                    <span className="font-semibold text-xs">Log Observation</span>
+                    <kbd className="text-[10px] font-mono px-1 rounded bg-muted text-muted-foreground">O</kbd>
+                  </div>
+                  <span className="text-[10px] text-muted-foreground">Record market restraint</span>
+                </div>
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
+      </div>
+
+      {/* Segment Tabs: All Entries, Executed Trades, Observations, Favorite Trades */}
+      <div className="flex items-center gap-1.5 sm:gap-2 border-b border-border pb-2 overflow-x-auto scroll-thin">
+        <button
+          type="button"
+          onClick={() => {
+            setEntryTab("all");
+            setPage(1);
+          }}
+          className={cn(
+            "flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs sm:text-sm font-medium transition-colors shrink-0",
+            entryTab === "all"
+              ? "bg-primary text-primary-foreground font-semibold shadow-xs"
+              : "text-muted-foreground hover:text-foreground hover:bg-muted"
+          )}
+        >
+          <BookOpen className="h-3.5 w-3.5" />
+          <span>All Entries</span>
+          <span className="text-[10px] font-mono opacity-80">({totalTrades + totalObservations})</span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => {
+            setEntryTab("trades");
+            setPage(1);
+          }}
+          className={cn(
+            "flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs sm:text-sm font-medium transition-colors shrink-0",
+            entryTab === "trades"
+              ? "bg-primary text-primary-foreground font-semibold shadow-xs"
+              : "text-muted-foreground hover:text-foreground hover:bg-muted"
+          )}
+        >
+          <span>Executed Trades</span>
+          <span className="text-[10px] font-mono opacity-80">({totalTrades})</span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => {
+            setEntryTab("observations");
+            setPage(1);
+          }}
+          className={cn(
+            "flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs sm:text-sm font-medium transition-colors shrink-0",
+            entryTab === "observations"
+              ? "bg-amber-500 text-white font-semibold shadow-xs"
+              : "text-muted-foreground hover:text-foreground hover:bg-muted"
+          )}
+        >
+          <EyeOff className="h-3.5 w-3.5 text-amber-500" />
+          <span>Observations</span>
+          <span
+            className={cn(
+              "text-[10px] font-mono px-1.5 py-0.2 rounded-full",
+              entryTab === "observations" ? "bg-white/20 text-white font-bold" : "bg-amber-500/15 text-amber-600 dark:text-amber-400 font-bold"
+            )}
+          >
+            {totalObservations}
+          </span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => {
+            setEntryTab("favorites");
+            setPage(1);
+          }}
+          className={cn(
+            "flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs sm:text-sm font-medium transition-colors shrink-0",
+            entryTab === "favorites"
+              ? "bg-amber-500 text-white font-semibold shadow-xs"
+              : "text-muted-foreground hover:text-foreground hover:bg-muted"
+          )}
+        >
+          <Star className={cn("h-3.5 w-3.5", entryTab === "favorites" ? "fill-white text-white" : "text-amber-500 fill-amber-500/20")} />
+          <span>Favorites</span>
+          <span
+            className={cn(
+              "text-[10px] font-mono px-1.5 py-0.2 rounded-full",
+              entryTab === "favorites" ? "bg-white/20 text-white font-bold" : "bg-amber-500/15 text-amber-600 dark:text-amber-400 font-bold"
+            )}
+          >
+            {favoriteCount}
+          </span>
+        </button>
       </div>
 
       {/* Filter bar */}
@@ -486,8 +710,8 @@ export function TradesLogView() {
             Showing{" "}
             <span className="font-semibold text-foreground tabular-nums">{startTradeIndex}–{endTradeIndex}</span>{" "}
             of{" "}
-            <span className="font-semibold text-foreground tabular-nums">{totalTrades}</span>{" "}
-            trades
+            <span className="font-semibold text-foreground tabular-nums">{effectiveTotal}</span>{" "}
+            {entryTab === "observations" ? "observations" : "entries"}
           </p>
           {hasActiveFilters && (
             <button
@@ -501,23 +725,110 @@ export function TradesLogView() {
       </div>
 
       {/* Table */}
-      {tradesLoading ? (
+      {(tradesLoading || (entryTab === "all" && noTradesLoading)) ? (
         <Skeleton className="h-96 w-full rounded-xl" />
-      ) : trades.length === 0 ? (
-        <EmptyTradesState
-          hasAny={totalTrades > 0}
-          onLogTrade={() => navigate("tradeNew")}
-        />
+      ) : allEntries.length === 0 ? (
+        entryTab === "favorites" ? (
+          <div className="bg-card rounded-xl border border-border p-12 text-center space-y-3 shadow-xs">
+            <div className="h-12 w-12 rounded-full bg-amber-500/10 text-amber-500 flex items-center justify-center mx-auto border border-amber-500/20">
+              <Star className="h-6 w-6 fill-amber-500/30 text-amber-500" />
+            </div>
+            <h3 className="text-base font-semibold text-foreground">No Favorite Trades Bookmarked</h3>
+            <p className="text-xs text-muted-foreground max-w-sm mx-auto">
+              You haven't bookmarked any trades yet. Click the star icon on any trade in the log to pin and quickly access your best executions here.
+            </p>
+            <Button variant="outline" size="sm" onClick={() => setEntryTab("all")} className="mt-2">
+              Browse All Entries
+            </Button>
+          </div>
+        ) : entryTab === "observations" ? (
+          <div className="bg-card rounded-xl border border-border p-12 text-center space-y-3 shadow-xs">
+            <div className="h-12 w-12 rounded-full bg-amber-500/10 text-amber-500 flex items-center justify-center mx-auto border border-amber-500/20">
+              <EyeOff className="h-6 w-6 text-amber-500" />
+            </div>
+            <h3 className="text-base font-semibold text-foreground">No Market Observations Recorded</h3>
+            <p className="text-xs text-muted-foreground max-w-sm mx-auto">
+              Record market setups where conditions were not right to enter. Log deliberate avoidance, missed setups, and patience notes.
+            </p>
+            <Button variant="outline" size="sm" onClick={() => useNav.getState().setNoTradeFormOpen(true)} className="mt-2">
+              <EyeOff className="h-3.5 w-3.5 mr-1.5" />
+              Log First Observation
+            </Button>
+          </div>
+        ) : (
+          <EmptyTradesState
+            hasAny={effectiveTotal > 0}
+            onLogTrade={() => navigate("tradeNew")}
+          />
+        )
       ) : (
         <div className="space-y-4">
           <div className="bg-card rounded-xl border border-border shadow-sm overflow-hidden">
             {/* Mobile Card List */}
             <div className="sm:hidden divide-y divide-border">
-              {trades.map((t) => {
-                const pnl = formatSignedCents(t.netPnlCents);
+              {allEntries.map((entry) => {
+                if (entry.kind === "observation") {
+                  const o = entry.data;
+                  const dateStr = o.date
+                    ? new Date(o.date).toLocaleDateString("en-US", {
+                        month: "short",
+                        day: "numeric",
+                      })
+                    : "—";
+
+                  return (
+                    <div
+                      key={entry.id}
+                      onClick={() => {
+                        setSelectedObservation(o);
+                        setObservationModalOpen(true);
+                      }}
+                      className="p-3.5 hover:bg-muted/50 active:bg-muted/70 cursor-pointer transition-colors space-y-2 bg-amber-500/[0.02]"
+                    >
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <EyeOff className="h-4 w-4 text-amber-500 shrink-0" />
+                          <span className="font-semibold text-base text-foreground">
+                            {o.instrumentSymbol}
+                          </span>
+                          <Badge variant="outline" className="text-[9px] bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/30 font-mono">
+                            OBSERVATION
+                          </Badge>
+                          {o.bias && (
+                            <Badge
+                              variant="outline"
+                              className={cn(
+                                "text-[9px] uppercase font-bold",
+                                o.bias === "bullish" ? "text-profit" : o.bias === "bearish" ? "text-loss" : "text-muted-foreground"
+                              )}
+                            >
+                              {o.bias}
+                            </Badge>
+                          )}
+                        </div>
+                        <div className="text-sm font-mono text-muted-foreground/50">
+                          —
+                        </div>
+                      </div>
+
+                      <div className="flex items-center justify-between text-xs text-muted-foreground">
+                        <div className="flex items-center gap-1.5 truncate max-w-[210px]">
+                          <span>{dateStr}</span>
+                          <span>•</span>
+                          <span className="truncate">{o.reasonCategory || "Observed"}</span>
+                        </div>
+                        <span className="text-[10px] text-primary font-medium">Details →</span>
+                      </div>
+                    </div>
+                  );
+                }
+
+                const t = entry.data;
+                const pnl = maskSignedCents(formatSignedCents(t.netPnlCents), isPrivate);
                 const st = statusLabel(t);
                 const setup = setupName(t);
                 const rNum = t.actualR ? dToNumber(t.actualR) : null;
+                const isFav = isFavorite(t.id);
                 const dateStr = t.entryTime
                   ? new Date(t.entryTime).toLocaleDateString("en-US", {
                       month: "short",
@@ -528,11 +839,25 @@ export function TradesLogView() {
                 return (
                   <div
                     key={t.id}
-                    onClick={() => navigate("tradeDetail", { id: t.id })}
+                    onClick={() => {
+                      useWorkspaceStore.getState().setLinkedTrade(t.id);
+                      navigate("tradeDetail", { id: t.id });
+                    }}
                     className="p-3.5 hover:bg-muted/50 active:bg-muted/70 cursor-pointer transition-colors space-y-2"
                   >
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            toggleFavorite(t.id, t.instrumentSymbol);
+                          }}
+                          className="p-1 rounded-md text-muted-foreground hover:text-amber-400 transition-colors shrink-0"
+                          title={isFav ? "Remove from Favorites" : "Add to Favorites"}
+                        >
+                          <Star className={cn("h-4 w-4", isFav ? "text-amber-400 fill-amber-400" : "text-muted-foreground/40")} />
+                        </button>
                         <span className="font-semibold text-base text-foreground">
                           {t.instrumentSymbol}
                         </span>
@@ -578,7 +903,7 @@ export function TradesLogView() {
                                   : "text-muted-foreground",
                             )}
                           >
-                            {formatR(t.actualR)}
+                            {isPrivate ? "••••••" : formatR(t.actualR)}
                           </span>
                         )}
                         <ChevronRight className="h-4 w-4 text-muted-foreground/60" />
@@ -594,30 +919,119 @@ export function TradesLogView() {
               <table className="w-full text-sm">
                 <thead className="bg-muted/50 border-b border-border">
                   <tr className="text-left text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                    <th className="w-8 px-3 py-3 text-center"></th>
                     <th className="px-4 py-3">Date</th>
                     <th className="px-4 py-3">Symbol</th>
-                    <th className="px-4 py-3">Direction</th>
+                    <th className="px-4 py-3">Type / Direction</th>
                     <th className="px-4 py-3 hidden md:table-cell">Setup</th>
-                    <th className="px-4 py-3">Status</th>
+                    <th className="px-4 py-3">Status / Reason</th>
                     <th className="px-4 py-3 text-right">P&amp;L</th>
                     <th className="px-4 py-3 text-right hidden sm:table-cell">R Multiple</th>
-                    <th className="px-4 py-3 text-right hidden lg:table-cell">Adherence</th>
+                    <th className="px-4 py-3 text-right hidden lg:table-cell">Adherence / Notes</th>
                     <th className="px-4 py-3 text-right"></th>
                   </tr>
                 </thead>
                 <tbody>
-                  {trades.map((t) => {
-                    const pnl = formatSignedCents(t.netPnlCents);
+                  {allEntries.map((entry) => {
+                    if (entry.kind === "observation") {
+                      const o = entry.data;
+                      return (
+                        <tr
+                          key={entry.id}
+                          onClick={() => {
+                            setSelectedObservation(o);
+                            setObservationModalOpen(true);
+                          }}
+                          className="border-b border-border last:border-b-0 hover:bg-muted/50 cursor-pointer transition-colors bg-amber-500/[0.02]"
+                        >
+                          <td className="w-8 px-3 py-3 text-center">
+                            <EyeOff className="h-4 w-4 text-amber-500/70 mx-auto" />
+                          </td>
+                          <td className="px-4 py-3 whitespace-nowrap tabular-nums text-muted-foreground">
+                            {o.date
+                              ? new Date(o.date).toLocaleDateString("en-US", {
+                                  month: "short",
+                                  day: "numeric",
+                                  year: "numeric",
+                                })
+                              : "—"}
+                          </td>
+                          <td className="px-4 py-3 font-semibold text-foreground whitespace-nowrap">
+                            {o.instrumentSymbol}
+                          </td>
+                          <td className="px-4 py-3">
+                            <div className="flex items-center gap-1.5 flex-wrap">
+                              <Badge variant="outline" className="text-[9px] bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/30 font-mono">
+                                OBSERVATION
+                              </Badge>
+                              {o.bias && (
+                                <Badge
+                                  variant="outline"
+                                  className={cn(
+                                    "text-[9px] uppercase font-bold",
+                                    o.bias === "bullish" ? "text-profit border-profit/30" : o.bias === "bearish" ? "text-loss border-loss/30" : "text-muted-foreground"
+                                  )}
+                                >
+                                  {o.bias}
+                                </Badge>
+                              )}
+                            </div>
+                          </td>
+                          <td className="px-4 py-3 hidden md:table-cell text-muted-foreground">
+                            {o.strategy?.name ?? <span className="text-muted-foreground/70">—</span>}
+                          </td>
+                          <td className="px-4 py-3">
+                            <span className="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-medium bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20 truncate max-w-[130px]">
+                              {o.reasonCategory || "Observed"}
+                            </span>
+                          </td>
+                          <td className="px-4 py-3 text-right tabular-nums text-muted-foreground/40 font-mono">
+                            —
+                          </td>
+                          <td className="px-4 py-3 text-right tabular-nums text-muted-foreground/40 font-mono hidden sm:table-cell">
+                            —
+                          </td>
+                          <td className="px-4 py-3 text-right text-muted-foreground truncate max-w-[160px] hidden lg:table-cell" title={o.conditionMissing || o.observation}>
+                            {o.conditionMissing || o.observation || "—"}
+                          </td>
+                          <td className="px-4 py-3 text-right">
+                            <Button variant="ghost" size="sm" className="h-7 px-2 text-[11px] text-muted-foreground hover:text-foreground">
+                              Details
+                            </Button>
+                          </td>
+                        </tr>
+                      );
+                    }
+
+                    const t = entry.data;
+                    const pnl = maskSignedCents(formatSignedCents(t.netPnlCents), isPrivate);
                     const st = statusLabel(t);
                     const setup = setupName(t);
                     const adherence = adherencePct(t.planAdherenceJson);
                     const rNum = t.actualR ? dToNumber(t.actualR) : null;
+                    const isFav = isFavorite(t.id);
                     return (
                       <tr
                         key={t.id}
-                        onClick={() => navigate("tradeDetail", { id: t.id })}
+                        onClick={() => {
+                          useWorkspaceStore.getState().setLinkedTrade(t.id);
+                          navigate("tradeDetail", { id: t.id });
+                        }}
                         className="border-b border-border last:border-b-0 hover:bg-muted/50 cursor-pointer transition-colors"
                       >
+                        <td className="w-8 px-3 py-3 text-center">
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              toggleFavorite(t.id, t.instrumentSymbol);
+                            }}
+                            className="p-1 rounded-md text-muted-foreground hover:text-amber-400 transition-colors"
+                            title={isFav ? "Remove from Favorites" : "Add to Favorites"}
+                          >
+                            <Star className={cn("h-4 w-4", isFav ? "text-amber-400 fill-amber-400" : "text-muted-foreground/30 hover:text-muted-foreground")} />
+                          </button>
+                        </td>
                         <td className="px-4 py-3 whitespace-nowrap tabular-nums text-muted-foreground">
                           {t.entryTime
                             ? new Date(t.entryTime).toLocaleDateString("en-US", {
@@ -666,7 +1080,7 @@ export function TradesLogView() {
                                   : "text-muted-foreground",
                           )}
                         >
-                          {formatR(t.actualR)}
+                          {isPrivate ? "••••••" : formatR(t.actualR)}
                         </td>
                         <td className="px-4 py-3 text-right tabular-nums text-muted-foreground hidden lg:table-cell">
                           {adherence == null ? (
@@ -869,6 +1283,13 @@ export function TradesLogView() {
           </div>
         </div>
       )}
+
+      {/* Observation Detail Modal */}
+      <ObservationDetailDialog
+        observation={selectedObservation}
+        open={observationModalOpen}
+        onOpenChange={setObservationModalOpen}
+      />
 
       {/* Close Trade Modal */}
       <CloseTradeModal

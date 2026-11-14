@@ -20,6 +20,7 @@ import {
   Layers,
   ChevronRight,
   ExternalLink,
+  BookOpen,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -36,6 +37,7 @@ import { formatDurationHuman } from "@/lib/duration-analytics";
 import { useNav } from "@/lib/nav-store";
 import { EditStrategyVersionModal } from "./edit-strategy-version-modal";
 import { StrategyVersionComparisonModal } from "./strategy-version-comparison-modal";
+import { StrategyDictionarySection } from "@/components/dictionary/strategy-dictionary-section";
 
 interface StrategyDetailViewProps {
   strategyId: string;
@@ -226,6 +228,9 @@ export function StrategyDetailView({ strategyId, onBack }: StrategyDetailViewPro
           </TabsTrigger>
           <TabsTrigger value="history" className="text-xs gap-1.5">
             <History className="h-3.5 w-3.5" /> Version History ({versions.length})
+          </TabsTrigger>
+          <TabsTrigger value="dictionary" className="text-xs gap-1.5">
+            <BookOpen className="h-3.5 w-3.5" /> Strategy Dictionary
           </TabsTrigger>
         </TabsList>
 
@@ -628,6 +633,11 @@ export function StrategyDetailView({ strategyId, onBack }: StrategyDetailViewPro
               );
             })}
           </div>
+        </TabsContent>
+
+        {/* ---------------- Tab 4: Strategy Dictionary ---------------- */}
+        <TabsContent value="dictionary" className="space-y-4 mt-0">
+          <StrategyDictionarySection strategyId={strategyId} strategyName={strategy.name} />
         </TabsContent>
       </Tabs>
 

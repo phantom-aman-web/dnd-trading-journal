@@ -24,6 +24,7 @@ import { Plus, PencilLine, Trash2, Wallet, Loader2, AlertTriangle, ShieldAlert }
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { formatSignedCents } from "@/lib/money";
+import { PrivacyMask } from "@/components/common/privacy-mask";
 import { useNavStore } from "@/lib/nav-store";
 import { useAuth } from "@/lib/auth-store";
 
@@ -397,7 +398,7 @@ export function AccountsView() {
                       Balance
                     </div>
                     <div className="text-2xl font-bold text-foreground tabular-nums">
-                      {balance.text}
+                      <PrivacyMask value={balance.text} />
                     </div>
                   </div>
                   <div className="text-right">
@@ -410,7 +411,7 @@ export function AccountsView() {
                         pnl.sign < 0 ? "text-loss" : pnl.sign > 0 ? "text-profit" : "text-muted-foreground",
                       )}
                     >
-                      {pnl.text}
+                      <PrivacyMask value={pnl.text} />
                     </div>
                   </div>
                 </div>
@@ -525,10 +526,10 @@ export function AccountsView() {
                         <div className="text-[11px] text-muted-foreground">{a.currency}</div>
                       </td>
                       <td className="px-3 py-2 text-right tabular-nums text-foreground">
-                        {bal.text}
+                        <PrivacyMask value={bal.text} />
                       </td>
                       <td className="px-3 py-2 text-right tabular-nums text-muted-foreground">
-                        {start.text}
+                        <PrivacyMask value={start.text} />
                       </td>
                       <td
                         className={cn(
@@ -536,7 +537,7 @@ export function AccountsView() {
                           pnl.sign < 0 ? "text-loss" : pnl.sign > 0 ? "text-profit" : "text-muted-foreground",
                         )}
                       >
-                        {pnl.text}
+                        <PrivacyMask value={pnl.text} />
                       </td>
                       <td className="px-3 py-2 text-right tabular-nums text-foreground">
                         {tradesCount}

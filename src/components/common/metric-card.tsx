@@ -2,6 +2,7 @@
 
 import { Card } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
+import { PrivacyMask } from "@/components/common/privacy-mask";
 
 interface MetricCardProps {
   label: string;
@@ -9,9 +10,12 @@ interface MetricCardProps {
   sub?: string;
   tone?: "profit" | "loss" | "neutral";
   icon?: React.ComponentType<{ className?: string }>;
+  isSensitive?: boolean;
 }
 
-export function MetricCard({ label, value, sub, tone = "neutral", icon: Icon }: MetricCardProps) {
+export function MetricCard({ label, value, sub, tone = "neutral", icon: Icon, isSensitive }: MetricCardProps) {
+  const sensitive = isSensitive ?? (/p&l|pnl|avg win|avg loss|balance|equity|drawdown/i.test(label));
+
   return (
     <Card className="p-3">
       <div className="flex items-center justify-between">
@@ -24,7 +28,7 @@ export function MetricCard({ label, value, sub, tone = "neutral", icon: Icon }: 
           tone === "profit" ? "text-profit" : tone === "loss" ? "text-loss" : "",
         )}
       >
-        {value}
+        {sensitive ? <PrivacyMask value={value} /> : value}
       </div>
       {sub && <div className="text-xs text-muted-foreground tnum">{sub}</div>}
     </Card>

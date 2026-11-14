@@ -4,21 +4,34 @@ import { useEffect, useState, useCallback } from "react";
 
 export type DndTheme = "nordic" | "terminal" | "institutional";
 export type DndFont = "default" | "jetbrains" | "inter" | "jakarta" | "playfair" | "cinzel";
+export type DndFontSize = "small" | "medium" | "large" | "xlarge";
+export type DndDensity = "compact" | "comfortable" | "spacious";
 
 // Simple event-based theme store so components can reactively track the current theme.
 let currentTheme: DndTheme = "nordic";
 let currentFont: DndFont = "default";
+let currentFontSize: DndFontSize = "medium";
+let currentDensity: DndDensity = "comfortable";
+let currentMonoNumbers = false;
+
 const themeListeners = new Set<(t: DndTheme) => void>();
 const fontListeners = new Set<(f: DndFont) => void>();
+const prefsListeners = new Set<() => void>();
+
+function notifyPrefs() {
+  prefsListeners.forEach((fn) => fn());
+}
 
 function notifyTheme(t: DndTheme) {
   currentTheme = t;
   themeListeners.forEach((fn) => fn(t));
+  notifyPrefs();
 }
 
 function notifyFont(f: DndFont) {
   currentFont = f;
   fontListeners.forEach((fn) => fn(f));
+  notifyPrefs();
 }
 
 function applyThemeToDOM(t: DndTheme) {
@@ -95,8 +108,6 @@ export function useTheme() {
  * first paint (no FOUC), then synced here after hydration.
  */
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
-  // Apply the stored theme once on mount (reinforces the inline script
-  // after hydration so React state stays in sync).
   useEffect(() => {
     const stored = (localStorage.getItem("dnd-theme") as DndTheme) || "nordic";
     const t: DndTheme = stored === "terminal" || stored === "institutional" ? stored : "nordic";
@@ -107,11 +118,23 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     applyFontToDOM(storedFont);
     notifyFont(storedFont);
 
-    const density = (localStorage.getItem("dnd-density") as string) || "comfortable";
+    const density = (localStorage.getItem("dnd-density") as DndDensity) || "comfortable";
+    currentDensity = density;
     document.documentElement.setAttribute("data-density", density);
+
+    const fontSize = (localStorage.getItem("alphapips-font-size") as DndFontSize) || "medium";
+    currentFontSize = fontSize;
+    document.documentElement.setAttribute("data-font-size", fontSize);
+
+    const monoNum = localStorage.getItem("alphapips-mono-numbers") === "true";
+    currentMonoNumbers = monoNum;
+    document.documentElement.setAttribute("data-mono-num", String(monoNum));
 
     const larger = localStorage.getItem("dnd-larger-text") === "true";
     if (larger) document.documentElement.setAttribute("data-larger-text", "true");
+
+    const reducedMotion = localStorage.getItem("dnd-reduced-motion") === "true";
+    if (reducedMotion) document.documentElement.style.setProperty("scroll-behavior", "auto");
   }, []);
   return <>{children}</>;
 }
@@ -138,20 +161,80 @@ export function getTheme(): DndTheme {
   return stored === "terminal" || stored === "institutional" ? stored : "nordic";
 }
 
-export function setDensity(d: "comfortable" | "compact") {
+export function setDensity(d: DndDensity) {
   if (typeof window === "undefined") return;
+  currentDensity = d;
   localStorage.setItem("dnd-density", d);
   document.documentElement.setAttribute("data-density", d);
+  notifyPrefs();
+}
+
+export function setFontSize(size: DndFontSize) {
+  if (typeof window === "undefined") return;
+  currentFontSize = size;
+  localStorage.setItem("alphapips-font-size", size);
+  document.documentElement.setAttribute("data-font-size", size);
+  notifyPrefs();
+}
+
+export function setMonoNumbers(on: boolean) {
+  if (typeof window === "undefined") return;
+  currentMonoNumbers = on;
+  localStorage.setItem("alphapips-mono-numbers", String(on));
+  document.documentElement.setAttribute("data-mono-num", String(on));
+  notifyPrefs();
 }
 
 export function setLargerText(on: boolean) {
   if (typeof window === "undefined") return;
   localStorage.setItem("dnd-larger-text", String(on));
   document.documentElement.setAttribute("data-larger-text", String(on));
+  notifyPrefs();
 }
 
 export function setReducedMotion(on: boolean) {
   if (typeof window === "undefined") return;
   localStorage.setItem("dnd-reduced-motion", String(on));
   if (on) document.documentElement.style.setProperty("scroll-behavior", "auto");
+  notifyPrefs();
+}
+
+/**
+ * Reactive hook for all user appearance, typography, and density preferences.
+ */
+export function usePreferences() {
+  const [theme, setThemeState] = useState<DndTheme>(currentTheme);
+  const [font, setFontState] = useState<DndFont>(currentFont);
+  const [fontSize, setFontSizeState] = useState<DndFontSize>(currentFontSize);
+  const [density, setDensityState] = useState<DndDensity>(currentDensity);
+  const [monoNumbers, setMonoNumbersState] = useState<boolean>(currentMonoNumbers);
+
+  useEffect(() => {
+    const update = () => {
+      setThemeState(currentTheme);
+      setFontState(currentFont);
+      setFontSizeState(currentFontSize);
+      setDensityState(currentDensity);
+      setMonoNumbersState(currentMonoNumbers);
+    };
+
+    update();
+    prefsListeners.add(update);
+    return () => {
+      prefsListeners.delete(update);
+    };
+  }, []);
+
+  return {
+    theme,
+    setTheme,
+    font,
+    setFont,
+    fontSize,
+    setFontSize,
+    density,
+    setDensity,
+    monoNumbers,
+    setMonoNumbers,
+  };
 }

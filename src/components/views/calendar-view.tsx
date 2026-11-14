@@ -39,6 +39,7 @@ import {
 } from "@/components/ui/select";
 import { useNav } from "@/lib/nav-store";
 import { formatSignedCents, formatR } from "@/lib/money";
+import { PrivacyMask } from "@/components/common/privacy-mask";
 import { cn } from "@/lib/utils";
 import {
   ChevronLeft,
@@ -350,7 +351,7 @@ export function CalendarView() {
                           pnl.sign > 0 ? "text-profit" : pnl.sign < 0 ? "text-loss" : "text-muted-foreground",
                         )}
                       >
-                        {pnl.text}
+                        <PrivacyMask value={pnl.text} />
                       </div>
                       <div className="text-[10px] text-muted-foreground tnum">
                         {cell.trades} trade{cell.trades === 1 ? "" : "s"}
@@ -566,7 +567,7 @@ function DayDetailModal({
                           tPnl.sign > 0 ? "text-profit" : tPnl.sign < 0 ? "text-loss" : "text-muted-foreground",
                         )}
                       >
-                        {tPnl.text}
+                        <PrivacyMask value={tPnl.text} />
                       </span>
                     </div>
                   </li>
@@ -595,11 +596,15 @@ function DayStat({
   label,
   value,
   tone = "neutral",
+  isSensitive,
 }: {
   label: string;
   value: string;
   tone?: "profit" | "loss" | "neutral";
+  isSensitive?: boolean;
 }) {
+  const sensitive = isSensitive ?? (/p&l|pnl|profit|loss|balance/i.test(label));
+
   return (
     <div className="rounded-lg border border-border bg-muted/50/50 p-3">
       <div className="text-[10px] text-muted-foreground uppercase tracking-wide font-semibold">
@@ -615,7 +620,7 @@ function DayStat({
               : "text-foreground",
         )}
       >
-        {value}
+        {sensitive ? <PrivacyMask value={value} /> : value}
       </div>
     </div>
   );

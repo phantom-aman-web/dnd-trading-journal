@@ -1,7 +1,9 @@
 "use client";
 
+import { useState, useEffect } from "react";
 import { useNav, type ViewKey } from "@/lib/nav-store";
 import { useAuth } from "@/lib/auth-store";
+import { useFavorites } from "@/lib/favorites-store";
 import { Button } from "@/components/ui/button";
 import {
   LayoutDashboard,
@@ -20,6 +22,11 @@ import {
   Trophy,
   Calculator,
   CheckSquare,
+  ChevronDown,
+  Star,
+  Keyboard,
+  EyeOff,
+  Archive,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -28,71 +35,107 @@ interface NavItem {
   label: string;
   icon: React.ComponentType<{ className?: string }>;
   dataTour?: string;
+  isFavorites?: boolean;
+  shortcut?: string;
 }
 
 interface NavGroup {
+  id: string;
   label: string;
   items: NavItem[];
 }
 
 const NAV_GROUPS: NavGroup[] = [
   {
+    id: "overview",
     label: "OVERVIEW",
     items: [
-      { view: "dashboard", label: "Dashboard", icon: LayoutDashboard, dataTour: "dashboard" },
+      { view: "dashboard", label: "Dashboard", icon: LayoutDashboard, dataTour: "dashboard", shortcut: "G D" },
     ],
   },
   {
+    id: "trade",
     label: "TRADE",
     items: [
-      { view: "tradesLog", label: "Trades Log", icon: BookOpen, dataTour: "trades-log" },
-      { view: "calendar", label: "Trading Calendar", icon: CalendarDays, dataTour: "calendar" },
+      { view: "tradesLog", label: "Trades Log", icon: BookOpen, dataTour: "trades-log", shortcut: "G T" },
+      { view: "calendar", label: "Trading Calendar", icon: CalendarDays, dataTour: "calendar", shortcut: "G C" },
       { view: "accounts", label: "Accounts", icon: Wallet, dataTour: "accounts" },
     ],
   },
   {
+    id: "understand",
     label: "UNDERSTAND",
     items: [
-      { view: "analytics", label: "Analytics Engine", icon: BarChart3, dataTour: "analytics" },
-      { view: "setups", label: "Setups & Checklists", icon: ListChecks, dataTour: "setups" },
+      { view: "analytics", label: "Analytics Engine", icon: BarChart3, dataTour: "analytics", shortcut: "G A" },
+      { view: "setups", label: "Setups & Checklists", icon: ListChecks, dataTour: "setups", shortcut: "G S" },
     ],
   },
   {
+    id: "tools",
     label: "TOOLS",
     items: [
-      { view: "propChallenges", label: "Prop Challenges", icon: Trophy, dataTour: "prop-challenges" },
-      { view: "riskCalculator", label: "Risk Calculator", icon: Calculator, dataTour: "risk-calculator" },
-      { view: "tradingTodo", label: "Trading To-Do", icon: CheckSquare, dataTour: "trading-todo" },
+      { view: "propChallenges", label: "Prop Challenges", icon: Trophy, dataTour: "prop-challenges", shortcut: "G P" },
+      { view: "riskCalculator", label: "Risk Calculator", icon: Calculator, dataTour: "risk-calculator", shortcut: "G R" },
+      { view: "tradingTodo", label: "Trading To-Do", icon: CheckSquare, dataTour: "trading-todo", shortcut: "G W" },
     ],
   },
   {
+    id: "system",
     label: "SYSTEM",
     items: [
-      { view: "settings", label: "Settings", icon: SettingsIcon, dataTour: "settings" },
+      { view: "settings", label: "Settings", icon: SettingsIcon, dataTour: "settings", shortcut: "G ," },
+      { view: "archived", label: "Archived Records", icon: Archive },
       { view: "backup", label: "Backup / Restore", icon: DatabaseBackup },
     ],
   },
 ];
 
-export function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
-  const { view, navigate, sidebarCollapsed, toggleSidebar } = useNav();
-  const { signOut } = useAuth();
+const COLLAPSED_GROUPS_KEY = "alphapips-collapsed-sidebar-groups";
 
-  function handleNav(v: ViewKey) {
-    navigate(v);
+export function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
+  const { view, params, navigate, sidebarCollapsed, toggleSidebar } = useNav();
+  const { signOut } = useAuth();
+  const favoriteCount = useFavorites((s) => s.favoriteCount);
+
+  // Collapsed sidebar groups state persisted in localStorage
+  const [collapsedGroups, setCollapsedGroups] = useState<Record<string, boolean>>({});
+
+  useEffect(() => {
+    try {
+      const stored = localStorage.getItem(COLLAPSED_GROUPS_KEY);
+      if (stored) {
+        setCollapsedGroups(JSON.parse(stored));
+      }
+    } catch {
+      // Ignore JSON parse errors
+    }
+  }, []);
+
+  function toggleGroup(groupId: string) {
+    setCollapsedGroups((prev) => {
+      const updated = { ...prev, [groupId]: !prev[groupId] };
+      try {
+        localStorage.setItem(COLLAPSED_GROUPS_KEY, JSON.stringify(updated));
+      } catch {}
+      return updated;
+    });
+  }
+
+  function handleNav(item: NavItem) {
+    navigate(item.view);
     onNavigate?.();
   }
 
   return (
     <aside
       className={cn(
-        "bg-sidebar text-sidebar-foreground flex flex-col h-screen shrink-0 transition-[width] duration-200",
+        "bg-sidebar text-sidebar-foreground flex flex-col h-screen shrink-0 transition-[width] duration-200 select-none",
         sidebarCollapsed ? "w-16" : "w-64",
       )}
     >
       {/* Header */}
       <div className="px-3 h-16 flex items-center gap-2.5 border-b border-sidebar-border">
-        <div className="h-9 w-9 rounded-xl bg-gradient-to-br from-blue-600 to-indigo-700 flex items-center justify-center text-white font-bold text-sm tracking-wider shadow-md shrink-0 border border-white/10">
+        <div className="h-9 w-9 rounded-xl bg-gradient-to-br from-indigo-500 via-purple-600 to-indigo-700 flex items-center justify-center text-white font-bold text-sm tracking-wider shadow-md shrink-0 border border-white/10">
           <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="h-5 w-5">
             <path d="M12 3 L20 20 L15.5 20 L12 11 L8.5 20 L4 20 Z" fill="currentColor" fillOpacity="0.3" />
             <circle cx="12" cy="8" r="1.5" fill="#10B981" stroke="#10B981" />
@@ -100,9 +143,9 @@ export function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
         </div>
         {!sidebarCollapsed && (
           <div className="min-w-0 flex-1">
-            <div className="font-bold text-sm tracking-tight text-sidebar-foreground flex items-center gap-1.5">
+            <div className="font-bold text-sm tracking-tight text-sidebar-foreground flex items-center gap-1.5 font-jakarta">
               <span>AlphaPips</span>
-              <span className="text-[9px] font-mono px-1 py-0.2 rounded bg-primary/20 text-blue-400 font-semibold border border-blue-500/20">
+              <span className="text-[9px] font-mono px-1.5 py-0.2 rounded bg-purple-500/20 text-purple-400 font-semibold border border-purple-500/30">
                 PRO
               </span>
             </div>
@@ -120,62 +163,119 @@ export function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
         )}
       </div>
 
-      {/* New Trade button */}
-      <div className="px-3 pt-4">
+      {/* New Trade & Observation buttons */}
+      <div className="px-3 pt-4 space-y-1.5">
         <Button
-          onClick={() => handleNav("tradeNew")}
+          onClick={() => {
+            navigate("tradeNew");
+            onNavigate?.();
+          }}
           data-tour="add-trade"
           className={cn(
-            "bg-sidebar-primary text-sidebar-primary-foreground hover:bg-sidebar-primary/90 font-semibold text-sm border-0",
-            sidebarCollapsed ? "w-9 h-9 p-0" : "w-full",
+            "bg-sidebar-primary text-sidebar-primary-foreground hover:bg-sidebar-primary/90 font-semibold text-sm border-0 relative group shadow-sm",
+            sidebarCollapsed ? "w-10 h-10 p-0 mx-auto" : "w-full",
           )}
-          title={sidebarCollapsed ? "New Trade" : undefined}
+          title={sidebarCollapsed ? "New Trade (N)" : undefined}
         >
           <PlusCircle className="h-4 w-4 shrink-0" />
-          {!sidebarCollapsed && <span className="ml-1.5">New Trade</span>}
+          {!sidebarCollapsed && (
+            <div className="flex items-center justify-between w-full ml-1.5">
+              <span>New Trade</span>
+              <kbd className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-white/15 text-sidebar-primary-foreground/90 font-normal">
+                N
+              </kbd>
+            </div>
+          )}
         </Button>
       </div>
 
       {/* Nav groups */}
       <nav className="flex-1 overflow-y-auto py-4 px-2 space-y-3 sidebar-scroll">
-        {NAV_GROUPS.map((group) => (
-          <div key={group.label} className="space-y-0.5">
-            {!sidebarCollapsed && (
-              <div className="px-3 py-1 text-[10px] font-semibold uppercase tracking-wider text-sidebar-foreground/50 select-none">
-                {group.label}
-              </div>
-            )}
-            {group.items.map((item) => {
-              const active = view === item.view;
-              const Icon = item.icon;
-              return (
+        {NAV_GROUPS.map((group) => {
+          const isCollapsed = !sidebarCollapsed && !!collapsedGroups[group.id];
+
+          return (
+            <div key={group.id} className="space-y-0.5">
+              {/* Group Header (Collapsible toggle when expanded) */}
+              {!sidebarCollapsed && (
                 <button
-                  key={item.view}
-                  onClick={() => handleNav(item.view)}
-                  title={sidebarCollapsed ? item.label : undefined}
-                  data-tour={item.dataTour}
-                  className={cn(
-                    "w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors",
-                    sidebarCollapsed && "justify-center px-0",
-                    active
-                      ? "bg-sidebar-accent text-sidebar-accent-foreground font-semibold"
-                      : "text-sidebar-foreground/75 hover:text-sidebar-foreground hover:bg-sidebar-accent/50",
-                  )}
+                  type="button"
+                  onClick={() => toggleGroup(group.id)}
+                  className="w-full px-3 py-1.5 flex items-center justify-between text-[10px] font-semibold uppercase tracking-wider text-sidebar-foreground/50 hover:text-sidebar-foreground/80 transition-colors rounded-md group/head focus:outline-hidden"
+                  aria-expanded={!isCollapsed}
                 >
-                  <Icon className="h-4 w-4 shrink-0" />
-                  {!sidebarCollapsed && <span>{item.label}</span>}
+                  <span>{group.label}</span>
+                  <ChevronDown
+                    className={cn(
+                      "h-3 w-3 text-sidebar-foreground/40 group-hover/head:text-sidebar-foreground/80 transition-transform duration-200",
+                      isCollapsed && "-rotate-90"
+                    )}
+                  />
                 </button>
-              );
-            })}
-          </div>
-        ))}
+              )}
+
+              {/* Group Items (with smooth collapse/expand transition) */}
+              <div
+                className={cn(
+                  "transition-all duration-200 ease-in-out overflow-hidden space-y-0.5",
+                  isCollapsed ? "max-h-0 opacity-0 pointer-events-none" : "max-h-96 opacity-100"
+                )}
+              >
+                {group.items.map((item) => {
+                  const active = view === item.view;
+                  const Icon = item.icon;
+
+                  return (
+                    <button
+                      key={item.label}
+                      onClick={() => handleNav(item)}
+                      title={sidebarCollapsed ? `${item.label}${item.shortcut ? ` (${item.shortcut})` : ""}` : undefined}
+                      data-tour={item.dataTour}
+                      className={cn(
+                        "w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors group/item",
+                        sidebarCollapsed && "justify-center px-0 h-10 w-10 mx-auto",
+                        active
+                          ? "bg-sidebar-accent text-sidebar-accent-foreground font-semibold shadow-xs"
+                          : "text-sidebar-foreground/75 hover:text-sidebar-foreground hover:bg-sidebar-accent/50",
+                      )}
+                    >
+                      <Icon
+                        className={cn(
+                          "h-4 w-4 shrink-0 transition-colors",
+                          item.isFavorites && (active || favoriteCount > 0) && "text-amber-400 fill-amber-400/30"
+                        )}
+                      />
+                      {!sidebarCollapsed && (
+                        <div className="flex items-center justify-between w-full">
+                          <span>{item.label}</span>
+                          <div className="flex items-center gap-1.5">
+                            {item.isFavorites && favoriteCount > 0 && (
+                              <span className="text-[10px] font-mono px-1.5 py-0.2 rounded-full bg-amber-500/20 text-amber-500 font-bold border border-amber-500/30">
+                                {favoriteCount}
+                              </span>
+                            )}
+                            {item.shortcut && (
+                              <kbd className="opacity-0 group-hover/item:opacity-70 text-[9px] font-mono text-muted-foreground px-1 py-0.2 rounded bg-muted/60 transition-opacity">
+                                {item.shortcut}
+                              </kbd>
+                            )}
+                          </div>
+                        </div>
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          );
+        })}
       </nav>
 
       {/* Collapse toggle + Sign Out */}
       <div className="p-3 border-t border-sidebar-border space-y-1">
         <button
           onClick={toggleSidebar}
-          title={sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
+          title={sidebarCollapsed ? "Expand sidebar ([)" : "Collapse sidebar ([)"}
           className={cn(
             "hidden md:flex w-full items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-sidebar-foreground/75 hover:text-sidebar-foreground hover:bg-sidebar-accent/50 transition-colors",
             sidebarCollapsed && "justify-center px-0",
@@ -187,7 +287,12 @@ export function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
           ) : (
             <PanelLeftClose className="h-4 w-4 shrink-0" />
           )}
-          {!sidebarCollapsed && <span>Collapse</span>}
+          {!sidebarCollapsed && (
+            <div className="flex items-center justify-between w-full">
+              <span>Collapse</span>
+              <kbd className="text-[10px] font-mono text-sidebar-foreground/50">[</kbd>
+            </div>
+          )}
         </button>
         <button
           onClick={() => signOut()}

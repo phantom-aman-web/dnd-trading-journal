@@ -97,19 +97,19 @@
 [data-theme="terminal"] {
   --radius: 0.4rem;
   --background: #0E1114;
-  --foreground: #E6EAF0;
-  --card: #1A2026;
-  --card-foreground: #E6EAF0;
-  --popover: #1A2026;
-  --popover-foreground: #E6EAF0;
-  --primary: #E6EAF0;
+  --foreground: #F1F5F9;
+  --card: #15191E;
+  --card-foreground: #F1F5F9;
+  --popover: #15191E;
+  --popover-foreground: #F1F5F9;
+  --primary: #10B981;
   --primary-foreground: #0E1114;
-  --secondary: #232A31;
-  --secondary-foreground: #E6EAF0;
-  --muted: #232A31;
-  --muted-foreground: #A0AEC0;
-  --accent: #232A31;
-  --accent-foreground: #E6EAF0;
+  --secondary: #1F262E;
+  --secondary-foreground: #F1F5F9;
+  --muted: #1F262E;
+  --muted-foreground: #94A3B8;
+  --accent: #1F262E;
+  --accent-foreground: #F1F5F9;
   --destructive: #F43F5E;
   --destructive-foreground: #FFFFFF;
   --border: #2A3138;
@@ -119,16 +119,16 @@
   --loss: #F43F5E;
   --warning: #F59E0B;
   --sidebar: #0E1114;
-  --sidebar-foreground: #E6EAF0;
+  --sidebar-foreground: #F1F5F9;
   --sidebar-primary: #10B981;
   --sidebar-primary-foreground: #0E1114;
   --sidebar-accent: #1A2026;
-  --sidebar-accent-foreground: #E6EAF0;
+  --sidebar-accent-foreground: #F1F5F9;
   --sidebar-border: #2A3138;
   --sidebar-ring: #4A5260;
   --chart-1: #10B981;
   --chart-2: #F43F5E;
-  --chart-3: #A0AEC0;
+  --chart-3: #94A3B8;
   --chart-4: #F59E0B;
   --chart-5: #4A5260;
 }
@@ -242,22 +242,142 @@
 }
 [data-theme="slate"] thead th,
 [data-theme="institutional"] thead th {
-  color: #94A3B8 !important;
+  color: #CBD5E1 !important;
   border-bottom-color: #1E293B !important;
 }
 [data-theme="slate"] .bg-primary,
 [data-theme="institutional"] .bg-primary {
-  background-color: #0F172A !important;
+  background-color: #2563EB !important;
   color: #FFFFFF !important;
 }
 [data-theme="slate"] .bg-primary\/10,
 [data-theme="institutional"] .bg-primary\/10 {
-  background-color: rgba(15, 23, 42, 0.08) !important;
-  color: #0F172A !important;
+  background-color: rgba(37, 99, 235, 0.15) !important;
+  color: #3B82F6 !important;
 }
 [data-theme="slate"] .text-primary,
 [data-theme="institutional"] .text-primary {
-  color: #0F172A !important;
+  color: #3B82F6 !important;
+}
+
+/* Universal High-Contrast Rules: Make texts lighter whenever the background is darker */
+
+/* 1. Sleek Terminal (dark theme everywhere) */
+[data-theme="terminal"] .text-slate-900,
+[data-theme="terminal"] .text-slate-800,
+[data-theme="terminal"] .text-slate-700,
+[data-theme="terminal"] .text-gray-900,
+[data-theme="terminal"] .text-gray-800,
+[data-theme="terminal"] .text-gray-700,
+[data-theme="terminal"] .text-zinc-900,
+[data-theme="terminal"] .text-zinc-800,
+[data-theme="terminal"] .text-neutral-900,
+[data-theme="terminal"] .text-neutral-800 {
+  color: #F8FAFC !important;
+}
+
+[data-theme="terminal"] .text-slate-600,
+[data-theme="terminal"] .text-slate-500,
+[data-theme="terminal"] .text-gray-600,
+[data-theme="terminal"] .text-gray-500,
+[data-theme="terminal"] .text-zinc-600,
+[data-theme="terminal"] .text-zinc-500 {
+  color: #CBD5E1 !important;
+}
+
+[data-theme="terminal"] thead th {
+  color: #CBD5E1 !important;
+}
+
+[data-theme="terminal"] .bg-muted,
+[data-theme="terminal"] .bg-card,
+[data-theme="terminal"] .bg-secondary,
+[data-theme="terminal"] .bg-accent,
+[data-theme="terminal"] table,
+[data-theme="terminal"] select,
+[data-theme="terminal"] input {
+  color: #F8FAFC;
+}
+
+/* 2. Institutional Blue / Slate Theme (Dark surfaces & whenever background is dark) */
+[data-theme="institutional"] header,
+[data-theme="institutional"] aside,
+[data-theme="institutional"] .bg-sidebar,
+[data-theme="institutional"] thead,
+[data-theme="slate"] header,
+[data-theme="slate"] aside,
+[data-theme="slate"] thead {
+  color: #F8FAFC !important;
+}
+
+[data-theme="institutional"] header *,
+[data-theme="institutional"] aside *,
+[data-theme="slate"] header *,
+[data-theme="slate"] aside * {
+  --tw-text-opacity: 1;
+}
+
+[data-theme="institutional"] header .text-slate-900,
+[data-theme="institutional"] header .text-slate-800,
+[data-theme="institutional"] header .text-slate-700,
+[data-theme="institutional"] aside .text-slate-900,
+[data-theme="institutional"] aside .text-slate-800,
+[data-theme="institutional"] aside .text-slate-700,
+[data-theme="institutional"] thead .text-slate-900,
+[data-theme="institutional"] thead .text-slate-800,
+[data-theme="institutional"] thead .text-slate-700 {
+  color: #FFFFFF !important;
+}
+
+[data-theme="institutional"] header .text-slate-600,
+[data-theme="institutional"] header .text-slate-500,
+[data-theme="institutional"] aside .text-slate-600,
+[data-theme="institutional"] aside .text-slate-500,
+[data-theme="institutional"] thead .text-slate-600,
+[data-theme="institutional"] thead .text-slate-500 {
+  color: #CBD5E1 !important;
+}
+
+[data-theme="institutional"] header .text-muted-foreground,
+[data-theme="institutional"] aside .text-muted-foreground,
+[data-theme="institutional"] thead th {
+  color: #CBD5E1 !important;
+}
+
+[data-theme="institutional"] header .text-primary,
+[data-theme="institutional"] aside .text-primary {
+  color: #93C5FD !important;
+}
+
+/* Any element on dark backgrounds in Institutional Blue / Slate */
+[data-theme="institutional"] [class*="bg-slate-9"],
+[data-theme="institutional"] [class*="bg-slate-8"],
+[data-theme="institutional"] [class*="bg-gray-9"],
+[data-theme="institutional"] [class*="bg-zinc-9"],
+[data-theme="institutional"] [class*="bg-black"],
+[data-theme="institutional"] [class*="bg-[#0F172A]"],
+[data-theme="institutional"] [class*="bg-[#1E293B]"] {
+  color: #F8FAFC;
+}
+
+[data-theme="institutional"] [class*="bg-slate-9"] .text-slate-900,
+[data-theme="institutional"] [class*="bg-slate-9"] .text-slate-800,
+[data-theme="institutional"] [class*="bg-slate-9"] .text-slate-700,
+[data-theme="institutional"] [class*="bg-slate-9"] .text-muted-foreground,
+[data-theme="institutional"] [class*="bg-[#0F172A]"] .text-slate-900,
+[data-theme="institutional"] [class*="bg-[#0F172A]"] .text-slate-800,
+[data-theme="institutional"] [class*="bg-[#0F172A]"] .text-slate-700,
+[data-theme="institutional"] [class*="bg-[#0F172A]"] .text-muted-foreground {
+  color: #E2E8F0 !important;
+}
+
+/* Badges on dark backgrounds */
+[data-theme="terminal"] .badge,
+[data-theme="terminal"] [data-slot="badge"],
+[data-theme="institutional"] header [data-slot="badge"],
+[data-theme="institutional"] aside [data-slot="badge"] {
+  color: #F8FAFC;
+  border-color: rgba(255, 255, 255, 0.2);
 }
 
 /* Dark class is handled by data-theme above. No fallback needed — we always set data-theme explicitly. */
@@ -334,16 +454,54 @@ body {
   }
 }
 
-/* Compact density */
+/* Functional Interface Density */
 [data-density="compact"] {
   --radius: 0.35rem;
+  --spacing-density: 0.85;
 }
-[data-density="compact"] .density-pad {
-  padding: 0.5rem;
+[data-density="compact"] .density-pad,
+[data-density="compact"] table th,
+[data-density="compact"] table td {
+  padding-top: 0.375rem !important;
+  padding-bottom: 0.375rem !important;
 }
 [data-density="compact"] .density-text {
   font-size: 0.8125rem;
 }
+
+[data-density="spacious"] {
+  --radius: 0.75rem;
+  --spacing-density: 1.2;
+}
+[data-density="spacious"] .density-pad,
+[data-density="spacious"] table th,
+[data-density="spacious"] table td {
+  padding-top: 1rem !important;
+  padding-bottom: 1rem !important;
+}
+
+/* Functional Font Size Scale */
+[data-font-size="small"] {
+  font-size: 0.875rem;
+}
+[data-font-size="medium"] {
+  font-size: 1rem;
+}
+[data-font-size="large"] {
+  font-size: 1.125rem;
+}
+[data-font-size="xlarge"] {
+  font-size: 1.25rem;
+}
+
+/* Monospace Numbers for Financial & Technical Values */
+[data-mono-num="true"] .tabular-nums,
+[data-mono-num="true"] td.tabular-nums,
+[data-mono-num="true"] .tnum {
+  font-family: 'JetBrains Mono', monospace !important;
+  font-feature-settings: "tnum" 1, "zero" 1 !important;
+}
+
 [data-larger-text="true"] {
   font-size: 1.0625rem;
 }

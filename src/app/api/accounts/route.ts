@@ -10,12 +10,17 @@ export async function GET(req: NextRequest) {
   try { user = await requireUser(); } catch (e) { return toApiError(e); }
   const url = new URL(req.url);
   const isDefault = url.searchParams.get("default") === "true";
+  const includeArchived = url.searchParams.get("includeArchived") === "true";
 
-  const cacheKey = `accounts:${user.id}:${isDefault ? "default" : "all"}`;
+  const cacheKey = `accounts:${user.id}:${isDefault ? "default" : "all"}:${includeArchived ? "archived" : "active"}`;
   const cached = getCached<any>(cacheKey);
   if (cached) return ok(cached);
 
-  const where = { userId: user.id, ...(isDefault ? { isDefault: true } : {}) };
+  const where: any = {
+    userId: user.id,
+    ...(isDefault ? { isDefault: true } : {}),
+    ...(includeArchived ? {} : { isArchived: false }),
+  };
   const items = await db.tradingAccount.findMany({
     where,
     orderBy: { createdAt: "asc" },

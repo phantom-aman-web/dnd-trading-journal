@@ -1479,14 +1479,42 @@ export function TradeFormView() {
         }
       }
 
-      // 4. Save the trade data
+      // 4. Save the trade data (with offline support)
+      if (typeof window !== "undefined" && !navigator.onLine && !editingId) {
+        try {
+          const { offlineSyncEngine } = await import("@/lib/offline-sync-engine");
+          await offlineSyncEngine.queueCreateTrade(payload);
+          toast.success("Saved offline. Trade will sync automatically when back online.");
+          qc.invalidateQueries({ queryKey: ["trades"] });
+          setSaving(false);
+          navigate("tradesLog");
+          return;
+        } catch (offErr) {
+          console.error("Offline queue failed", offErr);
+        }
+      }
+
       const url = editingId ? `/api/trades/${editingId}` : "/api/trades";
       const method = editingId ? "PATCH" : "POST";
-      const res = await fetch(url, {
-        method,
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      });
+      let res: Response;
+      try {
+        res = await fetch(url, {
+          method,
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        });
+      } catch (netErr) {
+        if (!editingId) {
+          const { offlineSyncEngine } = await import("@/lib/offline-sync-engine");
+          await offlineSyncEngine.queueCreateTrade(payload);
+          toast.success("Connection lost. Trade saved offline and queued for sync.");
+          qc.invalidateQueries({ queryKey: ["trades"] });
+          setSaving(false);
+          navigate("tradesLog");
+          return;
+        }
+        throw netErr;
+      }
       const data = await res.json();
       if (!res.ok) {
         toast.error(data?.error ?? "Failed to save trade.");

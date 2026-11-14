@@ -5,16 +5,24 @@ import { ok, bad, toApiError, parseJson } from "@/lib/api";
 import { audit } from "@/lib/audit";
 import { getCached, setCached, invalidateCache } from "@/lib/server-cache";
 
-export async function GET() {
+export async function GET(req: NextRequest) {
   let user;
   try { user = await requireUser(); } catch (e) { return toApiError(e); }
 
-  const cacheKey = `strategies:${user.id}`;
+  const url = new URL(req.url);
+  const includeArchived = url.searchParams.get("includeArchived") === "true";
+
+  const cacheKey = `strategies:${user.id}:${includeArchived ? "archived" : "active"}`;
   const cached = getCached<any>(cacheKey);
   if (cached) return ok(cached);
 
+  const where: any = {
+    userId: user.id,
+    ...(includeArchived ? {} : { isArchived: false }),
+  };
+
   const items = await db.strategy.findMany({
-    where: { userId: user.id },
+    where,
     orderBy: { createdAt: "desc" },
     include: { versions: { orderBy: { effectiveDate: "desc" } }, checklistConfig: true },
   });

@@ -60,8 +60,10 @@ import {
 } from "@/components/theme-provider";
 import { useConsent } from "@/lib/consent-store";
 import { useAuth } from "@/lib/auth-store";
+import { useNav } from "@/lib/nav-store";
 import { TimezoneSelect } from "@/components/common/timezone-select";
 import { toast } from "sonner";
+import { PreferencesCenterTab } from "@/components/settings/preferences-center-tab";
 import {
   LogOut,
   Save,
@@ -69,6 +71,7 @@ import {
   Palette,
   User,
   Sliders,
+  SlidersHorizontal,
   Check,
   AlertTriangle,
   X,
@@ -131,6 +134,23 @@ async function fetchMeta() {
 
 export function SettingsView() {
   const qc = useQueryClient();
+  const { params } = useNav();
+  const initialTab =
+    params.tab === "appearance" || params.tab === "preferences"
+      ? "preferences"
+      : params.tab || "profile";
+  const [activeTab, setActiveTab] = useState<string>(initialTab);
+
+  useEffect(() => {
+    if (params.tab) {
+      setActiveTab(
+        params.tab === "appearance" || params.tab === "preferences"
+          ? "preferences"
+          : params.tab
+      );
+    }
+  }, [params.tab]);
+
   const { data, isLoading } = useQuery({
     queryKey: ["settings"],
     queryFn: fetchSettings,
@@ -307,16 +327,16 @@ export function SettingsView() {
             Settings
           </h1>
           <p className="text-sm text-muted-foreground mt-1">
-            Profile, trading defaults, appearance &amp; legal preferences.
+            Personal profile, trading defaults, preferences center &amp; legal policies.
           </p>
         </div>
 
-        <Tabs defaultValue="profile">
+        <Tabs value={activeTab} onValueChange={setActiveTab}>
           <div className="border-b border-border overflow-x-auto">
             <TabsList className="bg-transparent h-auto p-0 rounded-none gap-0 w-auto">
               <SettingsTabTrigger value="profile" icon={User}>Profile</SettingsTabTrigger>
               <SettingsTabTrigger value="trading" icon={Sliders}>Trading</SettingsTabTrigger>
-              <SettingsTabTrigger value="appearance" icon={Palette}>Appearance</SettingsTabTrigger>
+              <SettingsTabTrigger value="preferences" icon={SlidersHorizontal}>Preferences</SettingsTabTrigger>
               <SettingsTabTrigger value="legal" icon={Shield}>Legal</SettingsTabTrigger>
             </TabsList>
           </div>
@@ -884,134 +904,14 @@ export function SettingsView() {
             </AlertDialog>
           </TabsContent>
 
-          {/* APPEARANCE TAB --------------------------------------------- */}
+          {/* PREFERENCES TAB -------------------------------------------- */}
+          <TabsContent value="preferences" className="mt-6 space-y-6 focus-visible:outline-none">
+            <PreferencesCenterTab />
+          </TabsContent>
+
+          {/* Backward-compatible alias for appearance */}
           <TabsContent value="appearance" className="mt-6 space-y-6 focus-visible:outline-none">
-            <SettingsCard>
-              <SettingsSectionHeading>Theme</SettingsSectionHeading>
-              <p className="text-xs text-muted-foreground mt-1">
-                Choose how DnD looks. Each theme is a complete visual system.
-              </p>
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mt-5">
-                {[
-                  {
-                    key: "nordic",
-                    label: "Nordic Clean",
-                    desc: "Light, quiet, precise",
-                    swatches: ["#F8FAFC", "#1E293B", "#34D399"],
-                  },
-                  {
-                    key: "terminal",
-                    label: "Sleek Terminal",
-                    desc: "Dark, technical",
-                    swatches: ["#0E1114", "#E6EAF0", "#10B981"],
-                  },
-                  {
-                    key: "institutional",
-                    label: "Institutional Blue",
-                    desc: "Navy, crimson & white",
-                    swatches: ["#235789", "#C1292E", "#FDFFFC"],
-                  },
-                ].map((t) => (
-                  <button
-                    key={t.key}
-                    onClick={() => applyTheme(t.key as any)}
-                    className={cn(
-                      "p-4 rounded-lg border text-left transition-colors flex flex-col justify-between",
-                      theme === t.key
-                        ? "border-foreground ring-2 ring-foreground/20 bg-card"
-                        : "border-border hover:bg-muted/50 bg-card",
-                    )}
-                  >
-                    <div>
-                      <div className="flex items-center justify-between gap-2">
-                        <div className="font-medium text-sm text-foreground">{t.label}</div>
-                        <div className="flex items-center gap-1">
-                          {t.swatches.map((color, i) => (
-                            <span
-                              key={i}
-                              className="h-2.5 w-2.5 rounded-full border border-border/50"
-                              style={{ backgroundColor: color }}
-                              title={color}
-                            />
-                          ))}
-                        </div>
-                      </div>
-                      <div className="text-xs text-muted-foreground mt-1">{t.desc}</div>
-                    </div>
-                    {theme === t.key && (
-                      <div className="mt-3 inline-flex items-center gap-1 text-[10px] font-semibold text-primary uppercase tracking-wide">
-                        <Check className="h-3 w-3" /> Active
-                      </div>
-                    )}
-                  </button>
-                ))}
-              </div>
-            </SettingsCard>
-
-            <SettingsCard>
-              <SettingsSectionHeading>Display</SettingsSectionHeading>
-              <div className="mt-5 space-y-4">
-                <div className="space-y-1.5">
-                  <FieldLabel required>Density</FieldLabel>
-                  <Select
-                    value={density}
-                    onValueChange={(v) => {
-                      setDensityState(v);
-                      setDensity(v as any);
-                    }}
-                  >
-                    <SelectTrigger className="border-input rounded-lg focus-visible:ring-foreground focus-visible:border-foreground">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="comfortable">Comfortable</SelectItem>
-                      <SelectItem value="compact">Compact</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                <Separator className="bg-border" />
-                <div className="flex items-center justify-between gap-3">
-                  <div>
-                    <div className="text-sm font-medium text-foreground">Larger Text</div>
-                    <div className="text-xs text-muted-foreground">
-                      Increase base font size for readability.
-                    </div>
-                  </div>
-                  <Switch
-                    checked={largerText}
-                    onCheckedChange={(v) => {
-                      setLargerTextState(v);
-                      setLargerText(v);
-                    }}
-                  />
-                </div>
-                <Separator className="bg-border" />
-                <div className="flex items-center justify-between gap-3">
-                  <div>
-                    <div className="text-sm font-medium text-foreground">Reduced Motion</div>
-                    <div className="text-xs text-muted-foreground">
-                      Minimize animations and transitions.
-                    </div>
-                  </div>
-                  <Switch
-                    checked={reducedMotion}
-                    onCheckedChange={(v) => {
-                      setReducedMotionState(v);
-                      setReducedMotion(v);
-                    }}
-                  />
-                </div>
-              </div>
-            </SettingsCard>
-
-            <div className="flex justify-end">
-              <Button
-                onClick={saveSettings}
-                className="bg-primary text-primary-foreground hover:bg-primary/90 rounded-lg shadow-sm"
-              >
-                <Save className="h-4 w-4" /> Save Appearance
-              </Button>
-            </div>
+            <PreferencesCenterTab />
           </TabsContent>
 
           {/* LEGAL TAB -------------------------------------------------- */}

@@ -14,10 +14,12 @@ export type ViewKey =
   | "tradeNew"
   | "tradesLog"
   | "tradeDetail"
+  | "noTrades"
   | "analytics"
   | "propChallenges"
   | "riskCalculator"
   | "tradingTodo"
+  | "archived"
   | "settings"
   | "backup"
   | "terms"
@@ -32,12 +34,14 @@ interface NavState {
   sidebarCollapsed: boolean;
   commandOpen: boolean;
   tradeFormOpen: boolean;
+  noTradeFormOpen: boolean;
   navigate: (view: ViewKey, params?: Record<string, string>) => void;
   setParams: (params: Record<string, string>) => void;
   setSelectedAccountId: (accountId: string) => void;
   toggleSidebar: () => void;
   setCommandOpen: (open: boolean) => void;
   setTradeFormOpen: (open: boolean) => void;
+  setNoTradeFormOpen: (open: boolean) => void;
   saveScroll: (view: ViewKey, scrollY: number) => void;
   getScroll: (view: ViewKey) => number;
   clearScroll: (view: ViewKey) => void;
@@ -53,6 +57,7 @@ export const useNav = create<NavState>()(
       sidebarCollapsed: false,
       commandOpen: false,
       tradeFormOpen: false,
+      noTradeFormOpen: false,
       navigate: (view, newParams = {}) =>
         set((s) => ({
           view,
@@ -82,6 +87,7 @@ export const useNav = create<NavState>()(
       toggleSidebar: () => set((s) => ({ sidebarCollapsed: !s.sidebarCollapsed })),
       setCommandOpen: (open) => set({ commandOpen: open }),
       setTradeFormOpen: (open) => set({ tradeFormOpen: open }),
+      setNoTradeFormOpen: (open) => set({ noTradeFormOpen: open }),
       saveScroll: (view, scrollY) =>
         set((s) => ({ scrollPositions: { ...s.scrollPositions, [view]: scrollY } })),
       getScroll: (view) => get().scrollPositions[view] ?? 0,

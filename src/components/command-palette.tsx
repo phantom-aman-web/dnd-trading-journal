@@ -23,52 +23,79 @@ import {
   TrendingUp,
   Wallet,
   DatabaseBackup,
+  Star,
+  Trophy,
+  Calculator,
+  CheckSquare,
+  Keyboard,
+  EyeOff,
+  Archive,
+  Columns3,
+  Sliders,
 } from "lucide-react";
 import { toast } from "sonner";
 import { fuzzySearch } from "@/lib/fuzzy-search";
 import { useQuery } from "@tanstack/react-query";
+import { useWorkspaceStore } from "@/lib/workspace-store";
+import { useFloatingWidgetsStore } from "@/lib/floating-widgets-store";
+import { usePrivacyStore } from "@/lib/privacy-store";
 
 interface CommandEntry {
   id: string;
   label: string;
   view?: ViewKey;
+  params?: Record<string, string>;
   action?: () => void | Promise<void>;
   icon: React.ComponentType<{ className?: string }>;
   keywords: string[];
+  shortcut?: string;
 }
 
-const BASE_COMMANDS: CommandEntry[] = [
-  { id: "dashboard", label: "Open Dashboard", view: "dashboard", icon: LayoutDashboard, keywords: ["home", "overview", "metrics", "pnl", "performance"] },
-  { id: "tradesLog", label: "Open Trades Log", view: "tradesLog", icon: BookOpen, keywords: ["trades", "history", "log", "entries", "journal"] },
-  { id: "add-trade", label: "Add Trade", view: "tradeNew", icon: Plus, keywords: ["new", "create", "log", "record"] },
-  { id: "calendar", label: "Open Trading Calendar", view: "calendar", icon: Calendar, keywords: ["monthly", "daily", "schedule", "days"] },
-  { id: "analytics", label: "Open Analytics Engine", view: "analytics", icon: BarChart3, keywords: ["stats", "charts", "breakdown", "instrument", "session"] },
-  { id: "setups", label: "Open Setups & Checklists", view: "setups", icon: ListChecks, keywords: ["strategy", "strategies", "rules", "checklist", "setups"] },
-  { id: "accounts", label: "Open Accounts", view: "accounts", icon: Wallet, keywords: ["account", "balance", "broker", "prop", "funded"] },
-  { id: "settings", label: "Open Settings", view: "settings", icon: Settings, keywords: ["profile", "accounts", "appearance", "theme", "privacy", "risk"] },
-  { id: "backup", label: "Open Backup / Restore", view: "backup", icon: DatabaseBackup, keywords: ["backup", "restore", "export", "import", "json"] },
-];
-
-async function fetchTradesForSearch(searchQuery: string) {
-  const qs = new URLSearchParams();
-  qs.set("limit", "50");
-  if (searchQuery.trim()) {
-    qs.set("search", searchQuery.trim());
-  }
-  const res = await fetch(`/api/trades?${qs.toString()}`, { cache: "no-store" });
-  if (!res.ok) return [];
-  const data = await res.json();
-  return data.items ?? [];
+interface CommandPaletteProps {
+  onOpenShortcuts?: () => void;
 }
 
-export function CommandPalette() {
+export function CommandPalette({ onOpenShortcuts }: CommandPaletteProps) {
   const { commandOpen, setCommandOpen, navigate } = useNav();
   const [query, setQuery] = useState("");
+
+  const baseCommands: CommandEntry[] = useMemo(() => [
+    { id: "dashboard", label: "Open Dashboard", view: "dashboard", icon: LayoutDashboard, shortcut: "G D", keywords: ["home", "overview", "metrics", "pnl", "performance"] },
+    { id: "tradesLog", label: "Open Trades Log", view: "tradesLog", params: { favorites: "0" } as Record<string, string>, icon: BookOpen, shortcut: "G T", keywords: ["trades", "history", "log", "entries", "journal"] },
+    { id: "favorites", label: "Open Favorite Trades", view: "tradesLog", params: { favorites: "1" } as Record<string, string>, icon: Star, shortcut: "G F", keywords: ["favorite", "starred", "bookmarks", "pinned", "best"] },
+    { id: "noTrades", label: "Open No-Trade Observations", view: "tradesLog", params: { tab: "observations" } as Record<string, string>, icon: EyeOff, shortcut: "G O", keywords: ["observation", "discipline", "avoidance", "market", "no trade"] },
+    { id: "add-trade", label: "Log Trade", view: "tradeNew", icon: Plus, shortcut: "N", keywords: ["new", "create", "log", "record"] },
+    { id: "log-observation", label: "Log No-Trade Observation", icon: EyeOff, shortcut: "O", keywords: ["observation", "restraint", "missed", "rejected"], action: () => { useNav.getState().setNoTradeFormOpen(true); } },
+    { id: "toggle-privacy", label: "Toggle Sensitive Info Privacy Mode", icon: EyeOff, keywords: ["privacy", "hide", "mask", "masking", "sensitive", "stealth"], action: () => { usePrivacyStore.getState().togglePrivacy(); } },
+    { id: "toggle-workspace", label: "Toggle Multi-Panel Workspace", icon: Columns3, shortcut: "Alt+W", keywords: ["panels", "workspace", "multi", "columns", "split"], action: () => { useWorkspaceStore.getState().toggleWorkspace(); } },
+    { id: "floating-widgets", label: "Manage Floating Mini Widgets", icon: Sliders, keywords: ["floating", "widgets", "overlay", "mini"], action: () => { useFloatingWidgetsStore.getState().toggleManager(); } },
+    { id: "calendar", label: "Open Trading Calendar", view: "calendar", icon: Calendar, shortcut: "G C", keywords: ["monthly", "daily", "schedule", "days"] },
+    { id: "analytics", label: "Open Analytics Engine", view: "analytics", icon: BarChart3, shortcut: "G A", keywords: ["stats", "charts", "breakdown", "instrument", "session"] },
+    { id: "setups", label: "Open Setups & Checklists", view: "setups", icon: ListChecks, shortcut: "G S", keywords: ["strategy", "strategies", "rules", "checklist", "setups"] },
+    { id: "propChallenges", label: "Open Prop Challenges", view: "propChallenges", icon: Trophy, shortcut: "G P", keywords: ["prop", "challenge", "firm", "evaluation", "drawdown", "ftmo"] },
+    { id: "riskCalculator", label: "Open Risk Calculator", view: "riskCalculator", icon: Calculator, shortcut: "G R", keywords: ["risk", "calculator", "lot", "sizing", "position"] },
+    { id: "tradingTodo", label: "Open Trading To-Do", view: "tradingTodo", icon: CheckSquare, shortcut: "G W", keywords: ["todo", "watchlist", "tasks", "research", "pre-market"] },
+    { id: "archived", label: "Open Archived Records", view: "archived" as ViewKey, icon: Archive, keywords: ["archive", "restore", "deleted", "history"] },
+    { id: "accounts", label: "Open Accounts", view: "accounts", icon: Wallet, keywords: ["account", "balance", "broker", "prop", "funded"] },
+    { id: "settings", label: "Open Settings", view: "settings", icon: Settings, shortcut: "G ,", keywords: ["profile", "accounts", "appearance", "theme", "privacy", "risk"] },
+    { id: "shortcuts", label: "View Keyboard Shortcuts", icon: Keyboard, shortcut: "?", keywords: ["shortcuts", "keys", "hotkeys", "help"], action: () => { onOpenShortcuts?.(); } },
+    { id: "backup", label: "Open Backup / Restore", view: "backup", icon: DatabaseBackup, keywords: ["backup", "restore", "export", "import", "json"] },
+  ], [onOpenShortcuts]);
 
   // Fetch trades with server-side query (only when palette is open)
   const { data: trades } = useQuery({
     queryKey: ["trades-search", query.trim()],
-    queryFn: () => fetchTradesForSearch(query),
+    queryFn: async () => {
+      const qs = new URLSearchParams();
+      qs.set("limit", "50");
+      if (query.trim()) {
+        qs.set("search", query.trim());
+      }
+      const res = await fetch(`/api/trades?${qs.toString()}`, { cache: "no-store" });
+      if (!res.ok) return [];
+      const data = await res.json();
+      return data.items ?? [];
+    },
     enabled: commandOpen,
   });
 
@@ -79,11 +106,11 @@ export function CommandPalette() {
 
   // Build the full searchable list
   const allCommands = useMemo(() => {
-    const cmds: CommandEntry[] = [...BASE_COMMANDS];
+    const cmds: CommandEntry[] = [...baseCommands];
     // Add export action
     cmds.push({
       id: "export-data",
-      label: "Export Data",
+      label: "Export Data (JSON)",
       icon: Download,
       keywords: ["download", "backup", "csv", "json"],
       action: async () => {
@@ -93,14 +120,14 @@ export function CommandPalette() {
         const url = URL.createObjectURL(blob);
         const a = document.createElement("a");
         a.href = url;
-        a.download = `dnd-export-${Date.now()}.json`;
+        a.download = `alphapips-export-${Date.now()}.json`;
         a.click();
         URL.revokeObjectURL(url);
         toast.success("Export ready.");
       },
     });
     return cmds;
-  }, []);
+  }, [baseCommands]);
 
   // Fuzzy search commands + trades
   const searchResults = useMemo(() => {
@@ -132,15 +159,9 @@ export function CommandPalette() {
     };
   }, [query, allCommands, trades]);
 
-  const exactCommands = searchResults.commands.filter((_, i) => {
-    if (!query.trim()) return true;
-    const r = fuzzySearch([allCommands.find(c => c.id === searchResults.commands[i]?.id) ?? { label: "", keywords: [] }], query, (c) => [c.label, ...c.keywords])[0];
-    return r?.isExact || r?.isFuzzy;
-  });
-
   return (
     <CommandDialog open={commandOpen} onOpenChange={setCommandOpen}>
-      <CommandInput placeholder="Type a command or search trades..." value={query} onValueChange={setQuery} />
+      <CommandInput placeholder="Type a command, shortcut, or search trades..." value={query} onValueChange={setQuery} />
       <CommandList>
         <CommandEmpty>
           {query.trim() ? `No results for "${query}". Try a different spelling.` : "Start typing to search..."}
@@ -159,7 +180,7 @@ export function CommandPalette() {
                   <CommandItem
                     key={`typo-${c.id}`}
                     onSelect={() => {
-                      if (c.view) navigate(c.view);
+                      if (c.view) navigate(c.view, c.params);
                       else c.action?.();
                       setCommandOpen(false);
                     }}
@@ -174,21 +195,28 @@ export function CommandPalette() {
           </CommandGroup>
         )}
 
-        <CommandGroup heading="Navigate">
-          {searchResults.commands.slice(0, 10).map((c) => {
+        <CommandGroup heading="Actions &amp; Navigation">
+          {searchResults.commands.slice(0, 12).map((c) => {
             const Icon = c.icon;
             return (
               <CommandItem
                 key={c.id}
                 onSelect={() => {
-                  if (c.view) navigate(c.view);
+                  if (c.view) navigate(c.view, c.params);
                   else c.action?.();
                   setCommandOpen(false);
                 }}
-                className="cursor-pointer"
+                className="cursor-pointer flex items-center justify-between"
               >
-                <Icon className="h-4 w-4" />
-                <span>{c.label}</span>
+                <div className="flex items-center gap-2.5">
+                  <Icon className="h-4 w-4 text-muted-foreground" />
+                  <span>{c.label}</span>
+                </div>
+                {c.shortcut && (
+                  <kbd className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-muted text-muted-foreground font-semibold border border-border">
+                    {c.shortcut}
+                  </kbd>
+                )}
               </CommandItem>
             );
           })}
