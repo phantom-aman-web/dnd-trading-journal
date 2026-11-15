@@ -636,7 +636,7 @@ async function seed() {
     await db.notification.createMany({
       data: [
         { userId: user.id, category: "journal", title: "Incomplete trade", body: "A trade from yesterday is missing exit details." },
-        { userId: user.id, category: "system", title: "Welcome to DnD", body: "Your demo data is ready. Explore the dashboard, journal, and analytics." },
+        { userId: user.id, category: "system", title: "Welcome to AlphaPips", body: "Your demo data is ready. Explore the dashboard, journal, and analytics." },
       ],
     });
   }

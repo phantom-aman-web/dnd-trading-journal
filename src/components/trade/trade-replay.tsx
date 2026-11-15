@@ -350,6 +350,70 @@ export function TradeReplay({ trade }: TradeReplayProps) {
         </Card>
       </div>
 
+      {/* Planned vs Actual Comparison Strip */}
+      {(trade.plannedEntryPrice || trade.plannedStopPrice || trade.plannedTargetPrice) && (
+        <Card className="p-4 bg-card/50 border-border">
+          <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-2.5 flex items-center justify-between">
+            <span>Planned vs Actual Comparison</span>
+            <span className="text-[11px] font-normal text-muted-foreground">Execution fidelity</span>
+          </h4>
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
+            <div className="p-2.5 rounded-lg bg-muted/20 border border-border">
+              <span className="text-muted-foreground block text-[11px]">Entry Price</span>
+              <div className="font-mono mt-0.5">
+                <span className="text-muted-foreground">Plan: </span>
+                <span className="font-semibold text-foreground">
+                  {trade.plannedEntryPrice ? formatPrice(trade.plannedEntryPrice, instrument.pricePrecision) : "—"}
+                </span>
+              </div>
+              <div className="font-mono text-[11px] text-muted-foreground mt-0.5">
+                Act VWAP: <span className="font-semibold text-foreground">{formatPrice(activeState.avgEntryPrice, instrument.pricePrecision)}</span>
+              </div>
+            </div>
+
+            <div className="p-2.5 rounded-lg bg-muted/20 border border-border">
+              <span className="text-muted-foreground block text-[11px]">Stop-Loss (SL)</span>
+              <div className="font-mono mt-0.5">
+                <span className="text-muted-foreground">Plan: </span>
+                <span className="font-semibold text-foreground">
+                  {trade.plannedStopPrice ? formatPrice(trade.plannedStopPrice, instrument.pricePrecision) : "—"}
+                </span>
+              </div>
+              <div className="font-mono text-[11px] text-muted-foreground mt-0.5">
+                Risk Buffer: <span className="text-foreground">{trade.plannedRiskAmountCents ? formatSignedCents(trade.plannedRiskAmountCents).text : "—"}</span>
+              </div>
+            </div>
+
+            <div className="p-2.5 rounded-lg bg-muted/20 border border-border">
+              <span className="text-muted-foreground block text-[11px]">Target Price (TP)</span>
+              <div className="font-mono mt-0.5">
+                <span className="text-muted-foreground">Plan: </span>
+                <span className="font-semibold text-foreground">
+                  {trade.plannedTargetPrice ? formatPrice(trade.plannedTargetPrice, instrument.pricePrecision) : "—"}
+                </span>
+              </div>
+              <div className="font-mono text-[11px] text-muted-foreground mt-0.5">
+                Status: <span className="font-semibold text-foreground uppercase text-[10px]">{trade.status}</span>
+              </div>
+            </div>
+
+            <div className="p-2.5 rounded-lg bg-muted/20 border border-border">
+              <span className="text-muted-foreground block text-[11px]">Step Realized Return</span>
+              <div className="font-mono mt-0.5">
+                <span className="font-semibold text-foreground">
+                  {formatSignedCents(activeState.realizedPnlCents).text}
+                </span>
+              </div>
+              <div className="font-mono text-[11px] text-muted-foreground mt-0.5">
+                Return R: <span className={cn("font-semibold", activeState.realizedR > 0 ? "text-profit" : activeState.realizedR < 0 ? "text-loss" : "text-foreground")}>
+                  {formatR(String(activeState.realizedR))}
+                </span>
+              </div>
+            </div>
+          </div>
+        </Card>
+      )}
+
       {/* Execution Sequence Tracker */}
       <Card className="p-4 bg-card/40">
         <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-3">

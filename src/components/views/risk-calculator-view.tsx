@@ -14,6 +14,8 @@ import {
   ShieldAlert,
   CheckCircle2,
   AlertTriangle,
+  RefreshCw,
+  ShieldCheck,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -30,11 +32,15 @@ import {
   resolveInstrument,
   unitLabel,
   distanceInUnits,
+  getInstrumentQuoteCurrency,
+  getInstrumentSizingRules,
+  convertCurrency,
   type InstrumentDef,
 } from "@/lib/instrument-catalog";
 import { formatSignedCents } from "@/lib/money";
 import { useNav } from "@/lib/nav-store";
 import { cn } from "@/lib/utils";
+import { toast } from "sonner";
 
 interface TradingAccount {
   id: string;
@@ -74,6 +80,10 @@ export function RiskCalculatorView() {
   const [riskPct, setRiskPct] = useState<string>("1.0");
   const [riskCash, setRiskCash] = useState<string>("100");
 
+  // Optional execution assumptions
+  const [spreadPoints, setSpreadPoints] = useState<string>("0");
+  const [commissionPerUnit, setCommissionPerUnit] = useState<string>("0");
+
   // Sync account selection
   const selectedAccount = useMemo(() => {
     return accounts.find((a) => a.id === selectedAccountId);
@@ -89,10 +99,18 @@ export function RiskCalculatorView() {
 
   const effectiveCurrency = selectedAccount?.currency || currency;
 
-  // Selected Instrument
+  // Selected Instrument & Sizing Rules
   const instrument: InstrumentDef = useMemo(() => {
     return resolveInstrument(symbol);
   }, [symbol]);
+
+  const sizingRules = useMemo(() => {
+    return getInstrumentSizingRules(instrument);
+  }, [instrument]);
+
+  const quoteCurrency = useMemo(() => {
+    return getInstrumentQuoteCurrency(instrument);
+  }, [instrument]);
 
   const unitsName = unitLabel(instrument.market);
 
@@ -108,8 +126,8 @@ export function RiskCalculatorView() {
   const priceDistance = hasValidPrices ? Math.abs(numEntry - numStop) : 0;
   const stopDistanceInUnits = distanceInUnits(priceDistance, instrument.pipSize);
 
-  // Risk Budget in Dollars
-  const riskBudgetDollars = useMemo(() => {
+  // Risk Budget in Account Currency
+  const riskBudgetAccount = useMemo(() => {
     if (riskMode === "pct") {
       const pct = parseFloat(riskPct);
       if (isNaN(pct) || pct <= 0) return 0;
@@ -120,44 +138,61 @@ export function RiskCalculatorView() {
     }
   }, [riskMode, riskPct, riskCash, effectiveBalance]);
 
+  // Optional Custom FX Rate Override
+  const [customFxRateOverride, setCustomFxRateOverride] = useState<string>("");
+
+  // Currency Conversion between Account Currency and Quote Currency
+  const { converted: riskBudgetQuote, rate: fxRate, isConversionNeeded } = useMemo(() => {
+    const numOverride = parseFloat(customFxRateOverride);
+    const customRates = !isNaN(numOverride) && numOverride > 0 ? { [quoteCurrency]: numOverride } : undefined;
+    return convertCurrency(riskBudgetAccount, effectiveCurrency, quoteCurrency, customRates);
+  }, [riskBudgetAccount, effectiveCurrency, quoteCurrency, customFxRateOverride]);
+
   // Financial Sizing calculation (Authoritative: priceDistance * quantity * pointValueCents)
-  // riskCents = priceDistance * quantity * pointValueCents
-  // => quantity = riskCents / (priceDistance * pointValueCents)
   const calculation = useMemo(() => {
-    if (!hasValidPrices || !isStopCorrectSide || priceDistance <= 0 || riskBudgetDollars <= 0) {
+    if (!hasValidPrices || !isStopCorrectSide || priceDistance <= 0 || riskBudgetAccount <= 0) {
       return null;
     }
 
-    const riskBudgetCents = riskBudgetDollars * 100;
+    const riskBudgetCentsQuote = riskBudgetQuote * 100;
     const centsPerUnit = priceDistance * instrument.pointValueCents;
 
     if (centsPerUnit <= 0) return null;
 
-    let rawLots = riskBudgetCents / centsPerUnit;
+    const rawLots = riskBudgetCentsQuote / centsPerUnit;
 
-    // Determine lot increment / rounding
-    let roundedLots: number;
-    let minLot: number;
-    if (instrument.market === "futures") {
-      minLot = 1;
-      roundedLots = Math.floor(rawLots); // Futures: whole contracts
-    } else if (instrument.market === "crypto") {
-      minLot = 0.001;
-      roundedLots = Math.floor(rawLots * 1000) / 1000;
-    } else {
-      minLot = 0.01;
-      roundedLots = Math.floor(rawLots * 100) / 100; // Forex & Gold: 0.01 lots
-    }
+    // Use instrument-specific quantity step and minimum quantity
+    const step = sizingRules.quantityStep;
+    let roundedLots = Math.floor(rawLots / step) * step;
+    const factor = Math.pow(10, sizingRules.decimals);
+    roundedLots = Math.round(roundedLots * factor) / factor;
 
-    const actualRiskCents = Math.round(priceDistance * roundedLots * instrument.pointValueCents);
-    const actualRiskDollars = actualRiskCents / 100;
-    const actualRiskPct = effectiveBalance > 0 ? (actualRiskDollars / effectiveBalance) * 100 : 0;
+    // Base Price Risk
+    const actualRiskQuoteCents = Math.round(priceDistance * roundedLots * instrument.pointValueCents);
+    const actualRiskQuoteDollars = actualRiskQuoteCents / 100;
+    const actualRiskAccountDollars = isConversionNeeded
+      ? convertCurrency(actualRiskQuoteDollars, quoteCurrency, effectiveCurrency).converted
+      : actualRiskQuoteDollars;
+
+    // Execution Cost Assumptions (Spread & Commission)
+    const numSpread = parseFloat(spreadPoints) || 0;
+    const numComm = parseFloat(commissionPerUnit) || 0;
+    const spreadCostQuoteDollars = (numSpread * roundedLots * instrument.pointValueCents) / 100;
+    const commCostQuoteDollars = numComm * roundedLots;
+    const totalExecutionCostQuote = spreadCostQuoteDollars + commCostQuoteDollars;
+    const totalExecutionCostAccount = isConversionNeeded
+      ? convertCurrency(totalExecutionCostQuote, quoteCurrency, effectiveCurrency).converted
+      : totalExecutionCostQuote;
+
+    // Net Risk Total (Base Price Risk + Execution Costs)
+    const totalRiskAccountDollars = actualRiskAccountDollars + totalExecutionCostAccount;
+    const actualRiskPct = effectiveBalance > 0 ? (totalRiskAccountDollars / effectiveBalance) * 100 : 0;
 
     // Take profit calculations
     let rewardDistance = 0;
     let rewardInUnits = 0;
     let rrRatio = 0;
-    let rewardDollars = 0;
+    let rewardDollarsAccount = 0;
     let rewardPct = 0;
 
     if (!isNaN(numTP) && numTP > 0) {
@@ -166,47 +201,69 @@ export function RiskCalculatorView() {
         rewardDistance = Math.abs(numTP - numEntry);
         rewardInUnits = distanceInUnits(rewardDistance, instrument.pipSize);
         rrRatio = priceDistance > 0 ? rewardDistance / priceDistance : 0;
-        const rewardCents = Math.round(rewardDistance * roundedLots * instrument.pointValueCents);
-        rewardDollars = rewardCents / 100;
-        rewardPct = effectiveBalance > 0 ? (rewardDollars / effectiveBalance) * 100 : 0;
+        const rewardQuoteCents = Math.round(rewardDistance * roundedLots * instrument.pointValueCents);
+        const rewardQuoteDollars = rewardQuoteCents / 100;
+        rewardDollarsAccount = isConversionNeeded
+          ? convertCurrency(rewardQuoteDollars, quoteCurrency, effectiveCurrency).converted
+          : rewardQuoteDollars;
+        rewardPct = effectiveBalance > 0 ? (rewardDollarsAccount / effectiveBalance) * 100 : 0;
       }
     }
 
-    // Required margin estimate (notional value / leverage approx)
-    const notionalValue = roundedLots * parseFloat(instrument.contractSize) * numEntry;
+    // Required margin estimate (notional value in quote currency)
+    const notionalValueQuote = roundedLots * parseFloat(instrument.contractSize) * numEntry;
+    const notionalValueAccount = isConversionNeeded
+      ? convertCurrency(notionalValueQuote, quoteCurrency, effectiveCurrency).converted
+      : notionalValueQuote;
 
     return {
       rawLots,
       roundedLots,
-      minLot,
-      actualRiskDollars,
+      minLot: sizingRules.minQuantity,
+      quantityStep: sizingRules.quantityStep,
+      quantityUnit: sizingRules.quantityUnit,
+      actualRiskAccountDollars,
+      totalExecutionCostAccount,
+      totalRiskAccountDollars,
       actualRiskPct,
       rewardDistance,
       rewardInUnits,
       rrRatio,
-      rewardDollars,
+      rewardDollarsAccount,
       rewardPct,
-      notionalValue,
+      notionalValueAccount,
+      isConversionNeeded,
+      fxRate,
+      quoteCurrency,
     };
   }, [
     hasValidPrices,
     isStopCorrectSide,
     priceDistance,
-    riskBudgetDollars,
+    riskBudgetAccount,
+    riskBudgetQuote,
+    sizingRules,
     instrument,
     effectiveBalance,
+    effectiveCurrency,
+    quoteCurrency,
+    isConversionNeeded,
+    fxRate,
     numTP,
     numEntry,
     direction,
+    spreadPoints,
+    commissionPerUnit,
   ]);
 
-  // Quick preset instruments
-  const popularSymbols = ["EURUSD", "GBPUSD", "USDJPY", "XAUUSD", "NQ", "ES", "BTCUSD"];
+  // Quick preset instruments spanning all 5 market categories
+  const popularSymbols = ["EURUSD", "GBPUSD", "USDJPY", "XAUUSD", "XAGUSD", "NAS100", "US30", "NQ", "ES", "BTCUSD"];
 
   function handleTransferToTrade() {
     if (!calculation || calculation.roundedLots <= 0) return;
 
-    // Navigate to trade creation form with pre-filled parameters via query params or navigation state
+    // Navigate to trade creation form with pre-filled parameters via navigation state
+    toast.success("Position sizing transferred to New Trade form");
     navigate("tradeNew", {
       symbol: instrument.symbol,
       direction,
@@ -215,6 +272,8 @@ export function RiskCalculatorView() {
       target: !isNaN(numTP) && numTP > 0 ? takeProfitPrice : "",
       size: String(calculation.roundedLots),
       accountId: selectedAccountId,
+      plannedRiskCents: String(Math.round(calculation.totalRiskAccountDollars * 100)),
+      plannedRiskPct: calculation.actualRiskPct.toFixed(2),
     });
   }
 
@@ -231,7 +290,7 @@ export function RiskCalculatorView() {
           </h1>
         </div>
         <p className="text-xs md:text-sm text-muted-foreground mt-1">
-          Calculate precise position sizing, stop distances, monetary risk, and risk-to-reward ratios before execution.
+          Calculate precise position sizing, stop distances, monetary risk, and risk-to-reward ratios before execution across Forex, Metals, Indices, Futures, and Crypto.
         </p>
       </div>
 
@@ -250,22 +309,20 @@ export function RiskCalculatorView() {
                 <Label className="text-xs">Trading Account</Label>
                 <Select
                   value={selectedAccountId}
-                  onValueChange={(v) => {
-                    setSelectedAccountId(v);
-                    const acc = accounts.find((a) => a.id === v);
-                    if (acc) {
-                      setCurrency(acc.currency || "USD");
-                    }
+                  onValueChange={(val) => {
+                    setSelectedAccountId(val);
+                    const acc = accounts.find((a) => a.id === val);
+                    if (acc) setCurrency(acc.currency || "USD");
                   }}
                 >
                   <SelectTrigger className="h-9 text-xs">
-                    <SelectValue placeholder="Custom Capital (No Account)" />
+                    <SelectValue placeholder="Select an account or use custom" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="">Custom Capital (Manual)</SelectItem>
+                    <SelectItem value="custom">Custom Capital (No Account)</SelectItem>
                     {accounts.map((acc) => (
-                      <SelectItem key={acc.id} value={acc.id} className="text-xs">
-                        {acc.name} ({formatSignedCents(acc.currentBalanceCents || acc.startingBalanceCents, acc.currency).text})
+                      <SelectItem key={acc.id} value={acc.id}>
+                        {acc.name} ({acc.currency}) · ${(acc.currentBalanceCents / 100).toLocaleString()}
                       </SelectItem>
                     ))}
                   </SelectContent>
@@ -274,34 +331,47 @@ export function RiskCalculatorView() {
 
               {!selectedAccount && (
                 <div className="space-y-1.5">
-                  <Label className="text-xs">Account Balance ({currency})</Label>
-                  <Input
-                    type="number"
-                    value={customBalance}
-                    onChange={(e) => setCustomBalance(e.target.value)}
-                    className="h-9 text-xs"
-                    placeholder="10000"
-                  />
+                  <Label className="text-xs">Custom Balance Amount</Label>
+                  <div className="relative">
+                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">$</span>
+                    <Input
+                      type="number"
+                      step="any"
+                      value={customBalance}
+                      onChange={(e) => setCustomBalance(e.target.value)}
+                      className="pl-7 h-9 text-xs font-mono"
+                      placeholder="10000"
+                    />
+                  </div>
+                </div>
+              )}
+
+              {selectedAccount && (
+                <div className="space-y-1.5">
+                  <Label className="text-xs text-muted-foreground">Settled Balance</Label>
+                  <div className="h-9 px-3 flex items-center rounded-md border border-border bg-muted/40 font-mono text-xs font-semibold text-foreground">
+                    {effectiveCurrency} {effectiveBalance.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                  </div>
                 </div>
               )}
             </div>
 
-            {/* Risk Sizing Mode */}
-            <div className="pt-2 border-t border-border/60">
-              <div className="flex items-center justify-between mb-2">
-                <Label className="text-xs font-medium">Risk Budgeting</Label>
-                <div className="flex bg-muted p-0.5 rounded-lg border border-border">
+            {/* Risk Mode: Percentage vs Cash */}
+            <div className="pt-2 border-t border-border/60 space-y-3">
+              <div className="flex items-center justify-between">
+                <Label className="text-xs font-medium">Risk Allocation Mode</Label>
+                <div className="flex rounded-lg border border-border p-0.5 bg-muted/50">
                   <button
                     type="button"
                     onClick={() => setRiskMode("pct")}
                     className={cn(
                       "px-2.5 py-1 text-xs rounded-md font-medium transition-colors",
                       riskMode === "pct"
-                        ? "bg-card text-foreground shadow-sm"
+                        ? "bg-primary text-primary-foreground shadow-sm"
                         : "text-muted-foreground hover:text-foreground",
                     )}
                   >
-                    Percentage %
+                    % of Balance
                   </button>
                   <button
                     type="button"
@@ -309,11 +379,11 @@ export function RiskCalculatorView() {
                     className={cn(
                       "px-2.5 py-1 text-xs rounded-md font-medium transition-colors",
                       riskMode === "cash"
-                        ? "bg-card text-foreground shadow-sm"
+                        ? "bg-primary text-primary-foreground shadow-sm"
                         : "text-muted-foreground hover:text-foreground",
                     )}
                   >
-                    Cash Amount $
+                    Fixed Cash ($)
                   </button>
                 </div>
               </div>
@@ -321,63 +391,47 @@ export function RiskCalculatorView() {
               <div className="grid sm:grid-cols-2 gap-4 items-center">
                 {riskMode === "pct" ? (
                   <div className="space-y-1.5">
-                    <div className="flex justify-between items-center text-xs text-muted-foreground">
-                      <span>Risk Percent</span>
-                      <span className="font-medium text-foreground">
-                        ${riskBudgetDollars.toFixed(2)} {effectiveCurrency}
-                      </span>
-                    </div>
+                    <Label className="text-xs">Risk Percentage (%)</Label>
                     <div className="relative">
                       <Input
                         type="number"
                         step="0.1"
-                        min="0.1"
-                        max="100"
                         value={riskPct}
                         onChange={(e) => setRiskPct(e.target.value)}
-                        className="h-9 text-xs pr-8"
+                        className="pr-8 h-9 text-xs font-mono font-semibold"
+                        placeholder="1.0"
                       />
-                      <Percent className="h-3.5 w-3.5 absolute right-2.5 top-3 text-muted-foreground" />
-                    </div>
-                    {/* Quick Risk Buttons */}
-                    <div className="flex gap-1.5 pt-1">
-                      {["0.25", "0.5", "1.0", "1.5", "2.0"].map((r) => (
-                        <button
-                          key={r}
-                          type="button"
-                          onClick={() => setRiskPct(r)}
-                          className={cn(
-                            "px-2 py-0.5 rounded text-[11px] border transition-colors",
-                            riskPct === r
-                              ? "bg-primary text-primary-foreground border-primary"
-                              : "border-border hover:bg-muted text-muted-foreground",
-                          )}
-                        >
-                          {r}%
-                        </button>
-                      ))}
+                      <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">%</span>
                     </div>
                   </div>
                 ) : (
                   <div className="space-y-1.5">
-                    <div className="flex justify-between items-center text-xs text-muted-foreground">
-                      <span>Risk Cash Amount</span>
-                      <span className="font-medium text-foreground">
-                        {effectiveBalance > 0 ? ((riskBudgetDollars / effectiveBalance) * 100).toFixed(2) : 0}% of capital
-                      </span>
-                    </div>
+                    <Label className="text-xs">Fixed Risk Amount ($)</Label>
                     <div className="relative">
+                      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">$</span>
                       <Input
                         type="number"
-                        min="1"
+                        step="any"
                         value={riskCash}
                         onChange={(e) => setRiskCash(e.target.value)}
-                        className="h-9 text-xs pl-7"
+                        className="pl-7 h-9 text-xs font-mono font-semibold"
+                        placeholder="100"
                       />
-                      <span className="absolute left-2.5 top-2.5 text-xs text-muted-foreground">$</span>
                     </div>
                   </div>
                 )}
+
+                <div className="p-3 rounded-lg bg-muted/40 border border-border/60 text-xs space-y-1">
+                  <span className="text-muted-foreground block text-[11px]">Effective Risk Budget</span>
+                  <div className="font-mono font-semibold text-foreground text-sm flex items-center justify-between">
+                    <span>{effectiveCurrency} {riskBudgetAccount.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+                    {effectiveBalance > 0 && (
+                      <span className="text-[11px] text-muted-foreground">
+                        ({((riskBudgetAccount / effectiveBalance) * 100).toFixed(2)}%)
+                      </span>
+                    )}
+                  </div>
+                </div>
               </div>
             </div>
           </div>
@@ -404,14 +458,42 @@ export function RiskCalculatorView() {
                         setEntryPrice("1.08500");
                         setStopPrice(direction === "long" ? "1.08200" : "1.08800");
                         setTakeProfitPrice(direction === "long" ? "1.09400" : "1.07600");
+                      } else if (s === "GBPUSD") {
+                        setEntryPrice("1.29500");
+                        setStopPrice(direction === "long" ? "1.29100" : "1.29900");
+                        setTakeProfitPrice(direction === "long" ? "1.30500" : "1.28500");
+                      } else if (s === "USDJPY") {
+                        setEntryPrice("154.500");
+                        setStopPrice(direction === "long" ? "154.000" : "155.000");
+                        setTakeProfitPrice(direction === "long" ? "155.500" : "153.500");
                       } else if (s === "XAUUSD") {
                         setEntryPrice("2650.00");
                         setStopPrice(direction === "long" ? "2640.00" : "2660.00");
                         setTakeProfitPrice(direction === "long" ? "2680.00" : "2620.00");
+                      } else if (s === "XAGUSD") {
+                        setEntryPrice("31.500");
+                        setStopPrice(direction === "long" ? "31.200" : "31.800");
+                        setTakeProfitPrice(direction === "long" ? "32.100" : "30.900");
+                      } else if (s === "NAS100") {
+                        setEntryPrice("20500.0");
+                        setStopPrice(direction === "long" ? "20400.0" : "20600.0");
+                        setTakeProfitPrice(direction === "long" ? "20700.0" : "20300.0");
+                      } else if (s === "US30") {
+                        setEntryPrice("43500.0");
+                        setStopPrice(direction === "long" ? "43350.0" : "43650.0");
+                        setTakeProfitPrice(direction === "long" ? "43800.0" : "43200.0");
                       } else if (s === "NQ") {
                         setEntryPrice("20400.00");
                         setStopPrice(direction === "long" ? "20350.00" : "20450.00");
                         setTakeProfitPrice(direction === "long" ? "20550.00" : "20250.00");
+                      } else if (s === "ES") {
+                        setEntryPrice("5800.00");
+                        setStopPrice(direction === "long" ? "5785.00" : "5815.00");
+                        setTakeProfitPrice(direction === "long" ? "5830.00" : "5770.00");
+                      } else if (s === "BTCUSD") {
+                        setEntryPrice("95000.00");
+                        setStopPrice(direction === "long" ? "94000.00" : "96000.00");
+                        setTakeProfitPrice(direction === "long" ? "97000.00" : "93000.00");
                       }
                     }}
                     className={cn(
@@ -434,10 +516,10 @@ export function RiskCalculatorView() {
                   value={symbol}
                   onChange={(e) => setSymbol(e.target.value.toUpperCase())}
                   className="h-9 text-xs font-mono font-semibold"
-                  placeholder="EURUSD, NQ, XAUUSD, BTCUSD..."
+                  placeholder="EURUSD, NQ, XAUUSD, XAGUSD, NAS100, BTCUSD..."
                 />
                 <span className="text-[11px] text-muted-foreground">
-                  {instrument.displayName} · {instrument.market.toUpperCase()}
+                  {instrument.displayName} · {instrument.market.toUpperCase()} (Min: {sizingRules.minQuantity} {sizingRules.quantityUnit}, Step: {sizingRules.quantityStep})
                 </span>
               </div>
 
@@ -448,7 +530,6 @@ export function RiskCalculatorView() {
                     type="button"
                     onClick={() => {
                       setDirection("long");
-                      // Adjust stop/target if needed
                       if (numEntry && numStop && numStop > numEntry) {
                         const dist = Math.abs(numEntry - numStop);
                         setStopPrice((numEntry - dist).toFixed(instrument.pricePrecision));
@@ -542,6 +623,38 @@ export function RiskCalculatorView() {
               </div>
             </div>
 
+            {/* Optional Spread & Commission Inputs */}
+            <div className="pt-2 border-t border-border/60">
+              <div className="text-xs font-medium text-foreground mb-2 flex items-center justify-between">
+                <span>Execution Costs &amp; Friction (Optional)</span>
+                <span className="text-[10px] text-muted-foreground">Factored into net monetary risk</span>
+              </div>
+              <div className="grid sm:grid-cols-2 gap-3">
+                <div className="space-y-1">
+                  <Label className="text-[11px] text-muted-foreground">Spread ({unitsName})</Label>
+                  <Input
+                    type="number"
+                    step="any"
+                    value={spreadPoints}
+                    onChange={(e) => setSpreadPoints(e.target.value)}
+                    className="h-8 text-xs font-mono"
+                    placeholder="0"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-[11px] text-muted-foreground">Commission (${effectiveCurrency} / {sizingRules.quantityUnit.slice(0, -1)})</Label>
+                  <Input
+                    type="number"
+                    step="any"
+                    value={commissionPerUnit}
+                    onChange={(e) => setCommissionPerUnit(e.target.value)}
+                    className="h-8 text-xs font-mono"
+                    placeholder="0.00"
+                  />
+                </div>
+              </div>
+            </div>
+
             {/* Price Side Validation Warning */}
             {!isStopCorrectSide && hasValidPrices && (
               <div className="flex items-center gap-2 p-2.5 rounded-lg bg-destructive/10 border border-destructive/20 text-xs text-destructive">
@@ -561,9 +674,14 @@ export function RiskCalculatorView() {
               <h3 className="font-semibold text-foreground text-sm flex items-center gap-1.5">
                 Calculated Sizing &amp; Risk
               </h3>
-              <span className="text-[11px] font-mono px-2 py-0.5 rounded bg-muted text-muted-foreground">
-                {instrument.market.toUpperCase()}
-              </span>
+              <div className="flex items-center gap-1.5">
+                <span className="text-[11px] font-mono px-2 py-0.5 rounded bg-muted text-muted-foreground uppercase">
+                  {instrument.market}
+                </span>
+                <span className="text-[11px] font-mono px-2 py-0.5 rounded bg-primary/10 text-primary font-semibold">
+                  {quoteCurrency}
+                </span>
+              </div>
             </div>
 
             {calculation ? (
@@ -576,19 +694,69 @@ export function RiskCalculatorView() {
                   <div className="text-3xl font-extrabold font-mono tracking-tight text-primary">
                     {calculation.roundedLots}{" "}
                     <span className="text-base font-semibold">
-                      {instrument.market === "futures" ? "contracts" : "lots"}
+                      {calculation.quantityUnit}
                     </span>
                   </div>
                   {calculation.roundedLots === 0 && (
                     <p className="text-xs text-destructive font-medium mt-1">
-                      Risk budget is too small for 1 minimum contract ({calculation.rawLots.toFixed(3)} raw).
+                      Risk budget is too small for minimum {calculation.minLot} {calculation.quantityUnit} ({calculation.rawLots.toFixed(3)} raw).
                     </p>
                   )}
                   {calculation.roundedLots > 0 && calculation.rawLots !== calculation.roundedLots && (
                     <div className="text-[11px] text-muted-foreground">
-                      Exact raw: {calculation.rawLots.toFixed(3)} (clamped to lot step)
+                      Exact raw: {calculation.rawLots.toFixed(3)} (rounded down to {calculation.quantityStep} step)
                     </div>
                   )}
+                </div>
+
+                {/* Currency Conversion Notice (if quote != account) */}
+                {calculation.isConversionNeeded && (
+                  <div className="p-3 rounded-lg bg-muted/60 border border-border text-xs text-muted-foreground space-y-2">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-1.5 font-medium text-foreground">
+                        <RefreshCw className="h-3.5 w-3.5 text-primary" />
+                        <span>Currency Conversion (Estimate)</span>
+                      </div>
+                      <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-muted text-muted-foreground font-semibold">
+                        {customFxRateOverride ? "Manual Rate" : "Static Benchmark Model"}
+                      </span>
+                    </div>
+                    <p className="text-[11px] leading-relaxed">
+                      Quote currency <strong>{quoteCurrency}</strong> converted to <strong>{effectiveCurrency}</strong> @ rate <strong>{calculation.fxRate.toFixed(4)}</strong>.
+                      Rates are estimated via static reference benchmarks, not live broker quotes.
+                    </p>
+                    <div className="pt-1 flex items-center gap-2">
+                      <span className="text-[11px] text-muted-foreground">Override rate:</span>
+                      <Input
+                        type="number"
+                        step="0.0001"
+                        placeholder={calculation.fxRate.toFixed(4)}
+                        value={customFxRateOverride}
+                        onChange={(e) => setCustomFxRateOverride(e.target.value)}
+                        className="h-7 w-28 text-xs font-mono"
+                      />
+                      {customFxRateOverride && (
+                        <button
+                          type="button"
+                          onClick={() => setCustomFxRateOverride("")}
+                          className="text-[10px] text-primary hover:underline"
+                        >
+                          Reset
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {/* Standard Contract Specifications Transparency Notice */}
+                <div className="p-3 rounded-lg border border-border/80 bg-muted/30 text-[11px] text-muted-foreground space-y-1">
+                  <div className="font-semibold text-foreground flex items-center gap-1.5">
+                    <ShieldCheck className="h-3.5 w-3.5 text-primary" />
+                    <span>Standard Contract Specifications</span>
+                  </div>
+                  <p>
+                    Calculated using standard specifications ({instrument.displayName}: 1 lot = {instrument.contractSize} {sizingRules.quantityUnit}, point value = ${(instrument.pointValueCents / 100).toFixed(2)}). Verify with your broker or prop firm if custom micro/mini lots are utilized.
+                  </p>
                 </div>
 
                 {/* Sizing Breakdown Metrics */}
@@ -604,16 +772,21 @@ export function RiskCalculatorView() {
                   </div>
 
                   <div className="p-2.5 rounded-lg bg-muted/50 border border-border/60 space-y-1">
-                    <span className="text-muted-foreground block text-[11px]">Monetary Risk</span>
+                    <span className="text-muted-foreground block text-[11px]">Net Monetary Risk</span>
                     <span className="font-mono font-semibold text-loss text-sm">
-                      ${calculation.actualRiskDollars.toFixed(2)}
+                      {effectiveCurrency} {calculation.totalRiskAccountDollars.toFixed(2)}
                     </span>
                     <span className="text-[10px] text-muted-foreground block">
                       {calculation.actualRiskPct.toFixed(2)}% of capital
                     </span>
+                    {calculation.totalExecutionCostAccount > 0 && (
+                      <span className="text-[9px] text-muted-foreground block">
+                        Includes {effectiveCurrency} {calculation.totalExecutionCostAccount.toFixed(2)} fees/spread
+                      </span>
+                    )}
                   </div>
 
-                  {calculation.rewardDollars > 0 && (
+                  {calculation.rewardDollarsAccount > 0 && (
                     <>
                       <div className="p-2.5 rounded-lg bg-muted/50 border border-border/60 space-y-1">
                         <span className="text-muted-foreground block text-[11px]">Target Distance</span>
@@ -628,7 +801,7 @@ export function RiskCalculatorView() {
                       <div className="p-2.5 rounded-lg bg-muted/50 border border-border/60 space-y-1">
                         <span className="text-muted-foreground block text-[11px]">Potential Profit</span>
                         <span className="font-mono font-semibold text-profit text-sm">
-                          +${calculation.rewardDollars.toFixed(2)}
+                          +{effectiveCurrency} {calculation.rewardDollarsAccount.toFixed(2)}
                         </span>
                         <span className="text-[10px] text-muted-foreground block">
                           +{calculation.rewardPct.toFixed(2)}% of capital
@@ -641,50 +814,52 @@ export function RiskCalculatorView() {
                 {/* Risk to Reward Badge */}
                 {calculation.rrRatio > 0 && (
                   <div className="flex items-center justify-between p-3 rounded-lg border border-border bg-card">
-                    <div className="flex items-center gap-2">
-                      <div className="p-1 rounded bg-muted text-muted-foreground">
-                        <Percent className="h-3.5 w-3.5" />
-                      </div>
-                      <span className="text-xs font-medium text-foreground">Risk / Reward Ratio</span>
-                    </div>
-                    <div className="text-right">
-                      <span className="text-sm font-mono font-bold text-foreground">
-                        1 : {calculation.rrRatio.toFixed(2)}
-                      </span>
-                      <span className="text-[10px] text-muted-foreground block">
-                        {calculation.rrRatio >= 2 ? "High Quality (≥ 2R)" : calculation.rrRatio >= 1 ? "Acceptable" : "Sub-1R"}
-                      </span>
-                    </div>
+                    <span className="text-xs text-muted-foreground font-medium">Risk-to-Reward Ratio</span>
+                    <span className="font-mono text-sm font-bold text-foreground">
+                      1 : {calculation.rrRatio.toFixed(2)}R
+                    </span>
                   </div>
                 )}
 
-                {/* Transfer to Trade Action */}
+                {/* Variance Pill */}
+                <div className="p-2.5 rounded-lg bg-muted/30 border border-border text-[11px] text-muted-foreground space-y-1">
+                  <div className="flex justify-between">
+                    <span>Target Risk Budget:</span>
+                    <span className="font-mono font-medium text-foreground">
+                      {effectiveCurrency} {riskBudgetAccount.toFixed(2)}
+                    </span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span>Actual Planned Risk:</span>
+                    <span className="font-mono font-medium text-loss">
+                      {effectiveCurrency} {calculation.totalRiskAccountDollars.toFixed(2)}
+                    </span>
+                  </div>
+                  <div className="flex justify-between text-[10px] pt-1 border-t border-border/40">
+                    <span>Variance (Safe Round-down):</span>
+                    <span className="font-mono text-profit">
+                      {riskBudgetAccount - calculation.totalRiskAccountDollars >= 0 ? "-" : "+"}
+                      {effectiveCurrency} {Math.abs(riskBudgetAccount - calculation.totalRiskAccountDollars).toFixed(2)}
+                    </span>
+                  </div>
+                </div>
+
+                {/* 1-Click Transfer Button */}
                 <Button
                   onClick={handleTransferToTrade}
                   disabled={calculation.roundedLots <= 0}
-                  className="w-full h-10 gap-2 font-semibold"
+                  className="w-full h-10 gap-2 font-semibold shadow-sm"
                 >
                   Transfer Sizing to New Trade
                   <ArrowRight className="h-4 w-4" />
                 </Button>
-
-                {/* Economics Metadata note */}
-                <div className="text-[11px] text-muted-foreground bg-muted/40 p-2.5 rounded-lg border border-border/40 space-y-1">
-                  <div className="flex items-center gap-1 font-medium text-foreground">
-                    <Info className="h-3 w-3 text-primary" />
-                    <span>Contract Specifications</span>
-                  </div>
-                  <div>Point Value: ${(instrument.pointValueCents / 100).toLocaleString()}/pt</div>
-                  <div>Contract Size: {Number(instrument.contractSize).toLocaleString()} units/lot</div>
-                  <div>Pip / Tick Size: {instrument.pipSize}</div>
-                </div>
               </div>
             ) : (
-              <div className="py-12 px-4 text-center space-y-3 text-muted-foreground">
-                <Calculator className="h-8 w-8 mx-auto opacity-30" />
-                <div className="text-xs">
-                  Enter valid entry and stop price levels to view calculated lot sizing, stop distance, and risk amounts.
-                </div>
+              <div className="p-8 text-center text-muted-foreground space-y-2">
+                <Info className="h-8 w-8 mx-auto text-muted-foreground/60" />
+                <p className="text-xs">
+                  Enter valid entry, stop loss, and risk parameters to generate position sizing and risk analytics.
+                </p>
               </div>
             )}
           </div>
@@ -693,4 +868,3 @@ export function RiskCalculatorView() {
     </div>
   );
 }
-

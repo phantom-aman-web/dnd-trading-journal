@@ -275,7 +275,7 @@ function Step1Profile({
           Let&apos;s set up your workspace.
         </h2>
         <p className="mt-1.5 text-sm text-muted-foreground leading-relaxed">
-          A few details will help DnD organize your trading day, calculations and reports around the way you trade.
+          A few details will help AlphaPips organize your trading day, calculations and reports around the way you trade.
         </p>
       </div>
 
@@ -353,7 +353,7 @@ function Step2AccountMarkets({
       <div>
         <h2 className="text-xl font-semibold tracking-tight">What do you trade?</h2>
         <p className="mt-1.5 text-sm text-muted-foreground leading-relaxed">
-          Choose the markets you trade most often. DnD will use this information throughout your trading workflow.
+          Choose the markets you trade most often. AlphaPips will use this information throughout your trading workflow.
         </p>
       </div>
 
@@ -548,7 +548,7 @@ function Step3Strategy({
       <div>
         <h2 className="text-xl font-semibold tracking-tight">How do you trade?</h2>
         <p className="mt-1.5 text-sm text-muted-foreground leading-relaxed">
-          Create the strategy you want DnD to use when evaluating your setups. These rules become the checklist DnD uses when you evaluate your trades.
+          Create the strategy you want AlphaPips to use when evaluating your setups. These rules become the checklist AlphaPips uses when you evaluate your trades.
         </p>
       </div>
 
@@ -821,7 +821,7 @@ function Step5Ready({ data }: { data: SetupData }) {
       </div>
 
       <p className="text-sm text-muted-foreground text-center">
-        You&apos;re ready to start trading with DnD.
+        You&apos;re ready to start trading with AlphaPips.
       </p>
     </div>
   );

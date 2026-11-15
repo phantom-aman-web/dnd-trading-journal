@@ -9,6 +9,7 @@ interface CalendarDay {
   pnlCents: number;
   r: number | null;
   trades: number;
+  observations: number;
   wins: number;
   losses: number;
   aplusCount: number;
@@ -63,6 +64,7 @@ function emptyDay(date: string): DayAcc {
     pnlCents: 0,
     r: null,
     trades: 0,
+    observations: 0,
     wins: 0,
     losses: 0,
     aplusCount: 0,
@@ -84,11 +86,13 @@ export async function GET(req: NextRequest) {
   const yearStr = url.searchParams.get("year");
   const monthStr = url.searchParams.get("month");
   const accountId = url.searchParams.get("accountId") || undefined;
+  const instrumentId = url.searchParams.get("instrumentId") || undefined;
+  const strategyId = url.searchParams.get("strategyId") || undefined;
   const now = new Date();
   const year = yearStr ? parseInt(yearStr) : now.getFullYear();
   const month = monthStr ? parseInt(monthStr) : now.getMonth() + 1;
 
-  const cacheKey = `calendar:${user.id}:${year}:${month}:${accountId ?? "all"}`;
+  const cacheKey = `calendar:${user.id}:${year}:${month}:${accountId ?? "all"}:${instrumentId ?? "all"}:${strategyId ?? "all"}`;
   const cached = getCached<any>(cacheKey);
   if (cached) return ok(cached);
 
@@ -103,15 +107,33 @@ export async function GET(req: NextRequest) {
   const end = new Date(Date.UTC(year, month, 0, 23, 59, 59, 999));
   end.setUTCDate(end.getUTCDate() + 1);
 
-  const trades = await db.trade.findMany({
-    where: {
-      userId: user.id,
-      isArchived: false,
-      ...(accountId ? { accountId } : {}),
-      entryTime: { gte: start, lte: end },
-    },
-    orderBy: { entryTime: "asc" },
-  });
+  const [trades, noTrades] = await Promise.all([
+    db.trade.findMany({
+      where: {
+        userId: user.id,
+        isArchived: false,
+        ...(accountId ? { accountId } : {}),
+        ...(instrumentId ? { instrumentId } : {}),
+        ...(strategyId
+          ? {
+              OR: [
+                { strategyId },
+                { strategyVersion: { strategyId } },
+              ],
+            }
+          : {}),
+        entryTime: { gte: start, lte: end },
+      },
+      orderBy: { entryTime: "asc" },
+    }),
+    db.noTradeEntry.findMany({
+      where: {
+        userId: user.id,
+        date: { gte: start, lte: end },
+        ...(accountId ? { accountId } : {}),
+      },
+    }),
+  ]);
 
   const monthPrefix = `${year}-${String(month).padStart(2, "0")}-`;
   const dayMap = new Map<string, DayAcc>();
@@ -146,6 +168,17 @@ export async function GET(req: NextRequest) {
     if (t.session) {
       entry.sessionTally.set(t.session, (entry.sessionTally.get(t.session) ?? 0) + 1);
     }
+    dayMap.set(key, entry);
+  }
+
+  // Tally No-Trade observations into the calendar days
+  // Strictly separated: observations NEVER add fake trades or fake financial P&L
+  for (const nt of noTrades) {
+    if (!nt.date) continue;
+    const key = formatDateInTimezone(new Date(nt.date), timezone);
+    if (!key.startsWith(monthPrefix)) continue;
+    const entry = dayMap.get(key) ?? emptyDay(key);
+    entry.observations = (entry.observations || 0) + 1;
     dayMap.set(key, entry);
   }
 

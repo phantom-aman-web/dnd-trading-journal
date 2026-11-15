@@ -605,7 +605,7 @@ function SetupDialog({ open, onOpenChange, strategyId, onSaved }: SetupDialogPro
               <div>
                 <div className="text-sm font-medium">Checklist Rules</div>
                 <p className="text-xs text-muted-foreground">
-                  The rules DnD will score against during a trade. Mark a rule as
+                  The rules AlphaPips will score against during a trade. Mark a rule as
                   required to gate the A+ grade on it.
                 </p>
               </div>

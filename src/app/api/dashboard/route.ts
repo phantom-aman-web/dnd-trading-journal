@@ -124,10 +124,41 @@ export async function GET(req: NextRequest) {
   const accountWhere: any = { userId: user.id };
   if (accountId) accountWhere.id = accountId;
   const accounts = await db.tradingAccount.findMany({ where: accountWhere });
-  const startingBalance = accounts.reduce((s, a) => s + a.startingBalanceCents, 0);
 
-  const aggregate = computeAggregateMetrics(trades, null);
-  const equityCurve = buildEquityCurve(trades, startingBalance);
+  // Period starting balance:
+  // Initial capital + all realized P&L prior to the filtered period start date.
+  let priorRealizedPnlCents = 0;
+  if (from) {
+    const priorWhere: any = {
+      userId: user.id,
+      isArchived: false,
+      exitTime: { lt: from },
+    };
+    if (accountId) priorWhere.accountId = accountId;
+    const priorTrades = await db.trade.findMany({
+      where: priorWhere,
+      select: { netPnlCents: true },
+    });
+    priorRealizedPnlCents = priorTrades.reduce((s, t) => s + (t.netPnlCents || 0), 0);
+  }
+
+  // Multi-currency check for All Accounts:
+  // If user has accounts in different currencies, pooling starting balances without
+  // exchange rates is financially invalid.
+  const currencies = new Set(accounts.map((a) => a.currency || "USD"));
+  const hasMixedCurrencies = !accountId && currencies.size > 1;
+
+  const baseStartingBalance = hasMixedCurrencies
+    ? null
+    : accounts.reduce((s, a) => s + (a.startingBalanceCents || 0), 0);
+
+  const effectiveStartingBalance =
+    baseStartingBalance != null && baseStartingBalance > 0
+      ? Math.max(0, baseStartingBalance + priorRealizedPnlCents)
+      : null;
+
+  const aggregate = computeAggregateMetrics(trades, effectiveStartingBalance);
+  const equityCurve = buildEquityCurve(trades, effectiveStartingBalance ?? 0);
   const dailyPnl = buildDailyPnl(trades);
   const rDist = buildRDistribution(trades);
 
@@ -249,7 +280,7 @@ export async function GET(req: NextRequest) {
     aggregate,
     comparison,
     longVsShort,
-    startingBalanceCents: startingBalance,
+    startingBalanceCents: effectiveStartingBalance,
     equityCurve,
     dailyPnl,
     rDistribution: rDist,

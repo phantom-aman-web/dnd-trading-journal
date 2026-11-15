@@ -50,7 +50,7 @@ export function PropChallengesView() {
           <Skeleton className="h-48 w-full rounded-xl" />
         </div>
       ) : (
-        <PropChallengesSection accounts={accounts} />
+        <PropChallengesSection accounts={accounts} hideHeader={true} />
       )}
     </div>
   );

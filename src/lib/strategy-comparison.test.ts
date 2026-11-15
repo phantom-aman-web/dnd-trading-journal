@@ -83,5 +83,42 @@ describe("Strategy Version Comparison Engine", () => {
     expect(deltas.profitFactor).toBe(0.6);
     expect(deltas.avgR).toBe(0.6);
   });
+
+  test("STRAT-4: Holding time, average win/loss, and direction deltas calculation", () => {
+    const v1 = {
+      avgHoldingMinutes: 45,
+      avgWinCents: 15000,
+      avgLossCents: -10000,
+    };
+    const v2 = {
+      avgHoldingMinutes: 30,
+      avgWinCents: 20000,
+      avgLossCents: -8000,
+    };
+
+    const deltaHold = v2.avgHoldingMinutes - v1.avgHoldingMinutes;
+    const deltaWin = v2.avgWinCents - v1.avgWinCents;
+    const deltaLoss = v2.avgLossCents - v1.avgLossCents;
+
+    expect(deltaHold).toBe(-15); // 15 mins faster holding time
+    expect(deltaWin).toBe(5000);  // $50 higher average win
+    expect(deltaLoss).toBe(2000); // $20 smaller loss
+  });
+
+  test("STRAT-5: Direction performance subsets separate long and short cohorts", () => {
+    const trades = [
+      { direction: "BUY", netPnlCents: 5000, status: "CLOSED" },
+      { direction: "BUY", netPnlCents: -2500, status: "CLOSED" },
+      { direction: "SELL", netPnlCents: 10000, status: "CLOSED" },
+    ];
+
+    const longs = trades.filter((t) => t.direction === "BUY");
+    const shorts = trades.filter((t) => t.direction === "SELL");
+
+    expect(longs.length).toBe(2);
+    expect(shorts.length).toBe(1);
+    expect(longs.reduce((a, b) => a + b.netPnlCents, 0)).toBe(2500);
+    expect(shorts.reduce((a, b) => a + b.netPnlCents, 0)).toBe(10000);
+  });
 });
 

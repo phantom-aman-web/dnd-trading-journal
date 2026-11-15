@@ -5,8 +5,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
   ChevronLeft, ChevronRight, X, ZoomIn, ZoomOut, Maximize,
-  Pencil, Undo, Trash2, MousePointer2, Type,
-  Square, Circle, Minus, ArrowRight, Download,
+  Pencil, Undo, Redo, Trash2, MousePointer2, Type,
+  Square, Circle, Minus, ArrowRight, Download, PenLine, Highlighter,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
@@ -26,7 +26,7 @@ interface ImageViewerProps {
   onClose: () => void;
 }
 
-type Tool = "select" | "line" | "arrow" | "rect" | "circle" | "text";
+type Tool = "select" | "pen" | "highlighter" | "line" | "arrow" | "rect" | "circle" | "text";
 type DragMode = "none" | "creating" | "moving" | "resizing";
 
 interface Annotation {
@@ -34,9 +34,20 @@ interface Annotation {
   kind: Tool;
   x1: number; y1: number; // normalized 0-1
   x2: number; y2: number;
+  points?: Array<{ x: number; y: number }>;
   text?: string;
   color: string;
   strokeWidth: number;
+}
+
+function pointsToSvgPath(points?: Array<{ x: number; y: number }>): string {
+  if (!points || points.length === 0) return "";
+  const first = points[0];
+  let d = `M ${first.x * 100} ${first.y * 100}`;
+  for (let i = 1; i < points.length; i++) {
+    d += ` L ${points[i].x * 100} ${points[i].y * 100}`;
+  }
+  return d;
 }
 
 const COLORS = [
@@ -92,9 +103,10 @@ export function ImageViewer({ mediaItems, initialIndex, onClose }: ImageViewerPr
         const payload = typeof a.payloadJson === "string" ? JSON.parse(a.payloadJson) : a.payloadJson ?? {};
         return {
           id: a.id,
-          kind: a.kind === "line" ? "line" : a.kind === "arrow" ? "arrow" : a.kind === "rect" ? "rect" : a.kind === "circle" ? "circle" : a.kind === "text" ? "text" : "line",
+          kind: a.kind === "pen" ? "pen" : a.kind === "highlighter" ? "highlighter" : a.kind === "line" ? "line" : a.kind === "arrow" ? "arrow" : a.kind === "rect" ? "rect" : a.kind === "circle" ? "circle" : a.kind === "text" ? "text" : "line",
           x1: payload.x1 ?? 0, y1: payload.y1 ?? 0,
           x2: payload.x2 ?? 0, y2: payload.y2 ?? 0,
+          points: payload.points,
           text: payload.text,
           color: payload.color ?? COLORS[0],
           strokeWidth: payload.strokeWidth ?? 2,
@@ -243,6 +255,7 @@ export function ImageViewer({ mediaItems, initialIndex, onClose }: ImageViewerPr
       id: Math.random().toString(36).slice(2),
       kind: tool,
       x1: p.x, y1: p.y, x2: p.x, y2: p.y,
+      points: [{ x: p.x, y: p.y }],
       color,
       strokeWidth,
     });
@@ -253,7 +266,11 @@ export function ImageViewer({ mediaItems, initialIndex, onClose }: ImageViewerPr
     const p = pointerPos(e);
 
     if (dragMode === "creating" && draft) {
-      setDraft({ ...draft, x2: p.x, y2: p.y });
+      if (draft.kind === "pen" || draft.kind === "highlighter") {
+        setDraft({ ...draft, x2: p.x, y2: p.y, points: [...(draft.points || []), { x: p.x, y: p.y }] });
+      } else {
+        setDraft({ ...draft, x2: p.x, y2: p.y });
+      }
       return;
     }
 
@@ -281,7 +298,8 @@ export function ImageViewer({ mediaItems, initialIndex, onClose }: ImageViewerPr
     if (dragMode === "creating" && draft) {
       // Only add if the annotation has meaningful size
       const dist = Math.sqrt(Math.pow(draft.x2 - draft.x1, 2) + Math.pow(draft.y2 - draft.y1, 2));
-      if (dist > 0.01) {
+      const isPath = draft.kind === "pen" || draft.kind === "highlighter";
+      if (dist > 0.005 || (isPath && (draft.points?.length ?? 0) > 1)) {
         setAnnotations((a) => [...a, draft]);
         setSelectedId(draft.id);
       }
@@ -353,6 +371,7 @@ export function ImageViewer({ mediaItems, initialIndex, onClose }: ImageViewerPr
       kind: a.kind,
       payload: {
         x1: a.x1, y1: a.y1, x2: a.x2, y2: a.y2,
+        points: a.points,
         text: a.text,
         color: a.color,
         strokeWidth: a.strokeWidth,
@@ -407,6 +426,8 @@ export function ImageViewer({ mediaItems, initialIndex, onClose }: ImageViewerPr
 
   const tools: { key: Tool; icon: React.ComponentType<{ className?: string }>; label: string }[] = [
     { key: "select", icon: MousePointer2, label: "Select" },
+    { key: "pen", icon: PenLine, label: "Pen" },
+    { key: "highlighter", icon: Highlighter, label: "Highlight" },
     { key: "line", icon: Minus, label: "Line" },
     { key: "arrow", icon: ArrowRight, label: "Arrow" },
     { key: "rect", icon: Square, label: "Rectangle" },
@@ -621,6 +642,45 @@ function renderAnnotation(a: Annotation, selected: boolean): React.ReactNode {
         </text>
         {selected && (
           <rect x={x1 - 0.5} y={y1 - 3} width={Math.max(3, a.text!.length * 1.5)} height={4} fill="none" stroke="#fff" strokeWidth={0.2} strokeDasharray="0.5 0.5" />
+        )}
+      </g>
+    );
+  }
+
+  if (a.kind === "pen") {
+    return (
+      <g key={a.id} style={{ filter }}>
+        <path
+          d={pointsToSvgPath(a.points)}
+          stroke={stroke}
+          strokeWidth={sw}
+          fill="none"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          vectorEffect="non-scaling-stroke"
+        />
+        {selected && (
+          <circle cx={x1} cy={y1} r={1} fill="#fff" stroke="#000" strokeWidth={0.2} />
+        )}
+      </g>
+    );
+  }
+
+  if (a.kind === "highlighter") {
+    return (
+      <g key={a.id} style={{ filter }}>
+        <path
+          d={pointsToSvgPath(a.points)}
+          stroke={stroke}
+          strokeWidth={sw * 3}
+          strokeOpacity={0.35}
+          fill="none"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          vectorEffect="non-scaling-stroke"
+        />
+        {selected && (
+          <circle cx={x1} cy={y1} r={1} fill="#fff" stroke="#000" strokeWidth={0.2} />
         )}
       </g>
     );

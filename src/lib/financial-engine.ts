@@ -556,10 +556,11 @@ export function calculatePositionSize(
   const roundedQuantity = floorToStep(rawQuantity, instrument.quantityStep);
 
   // §31 Minimum quantity check
-  const minExceeds = cmpDecimal(roundedQuantity, instrument.minimumQuantity) < 0;
+  const minQuantity = instrument.minimumQuantity || (instrument as any).minQuantity || instrument.quantityStep || "1";
+  const minExceeds = cmpDecimal(roundedQuantity, minQuantity) < 0;
 
   // actualRisk = roundedQuantity × riskPerUnit
-  const actualRiskCents = isZeroDecimal(roundedQuantity)
+  const actualRiskCents = isZeroDecimal(roundedQuantity) || minExceeds
     ? 0
     : mulCentsQty(riskPerUnitCents, roundedQuantity);
 
@@ -649,8 +650,13 @@ export interface AggregateMetrics {
   totalR: string | null;
   // §25-26 Drawdown (single account only; null for all-accounts)
   maxDrawdownCents: number | null;
+  maxDrawdownPct: string | null;
+  maxDrawdownPeakCents: number | null;
+  maxDrawdownTroughCents: number | null;
   currentDrawdownCents: number | null;
+  currentDrawdownPct: string | null;
   drawdownPct: string | null;
+  drawdownRecovered: boolean | null;
   // Streaks (§14)
   currentWinStreak: number;
   currentLossStreak: number;
@@ -828,8 +834,13 @@ export function computeAggregateMetrics(
 
   // §25-26 Equity curve + drawdown (single account only)
   let maxDrawdownCents: number | null = null;
+  let maxDrawdownPct: string | null = null;
+  let maxDrawdownPeakCents: number | null = null;
+  let maxDrawdownTroughCents: number | null = null;
   let currentDrawdownCents: number | null = null;
+  let currentDrawdownPct: string | null = null;
   let drawdownPct: string | null = null;
+  let drawdownRecovered: boolean | null = null;
   let equityCents: number | null = null;
 
   if (startingBalanceCents != null) {
@@ -844,15 +855,41 @@ export function computeAggregateMetrics(
     let equity = startingBalanceCents;
     let peak = startingBalanceCents;
     let maxDD = 0;
+    let peakAtMaxDD = startingBalanceCents;
+    let troughAtMaxDD = startingBalanceCents;
+
     for (const t of ordered) {
       equity += t.netPnlCents;
-      if (equity > peak) peak = equity;
+      if (equity > peak) {
+        peak = equity;
+      }
       const dd = peak - equity;
-      if (dd > maxDD) maxDD = dd;
+      if (dd > maxDD) {
+        maxDD = dd;
+        peakAtMaxDD = peak;
+        troughAtMaxDD = equity;
+      }
     }
+
     maxDrawdownCents = maxDD;
+    maxDrawdownPeakCents = peakAtMaxDD;
+    maxDrawdownTroughCents = troughAtMaxDD;
     currentDrawdownCents = peak - equity;
-    drawdownPct =
+    drawdownRecovered = maxDD > 0 ? equity >= peakAtMaxDD : true;
+
+    // Maximum drawdown percentage is the peak-to-trough drop from the peak that produced maxDD
+    const maxDDPctVal =
+      peakAtMaxDD > 0
+        ? fromScaledBigInt(
+            bankersRound(
+              BigInt(maxDD) * BigInt(10) ** 6n,
+              BigInt(peakAtMaxDD),
+            ),
+            6,
+          )
+        : null;
+
+    const currentDDPctVal =
       peak > 0
         ? fromScaledBigInt(
             bankersRound(
@@ -862,6 +899,11 @@ export function computeAggregateMetrics(
             6,
           )
         : null;
+
+    maxDrawdownPct = maxDDPctVal;
+    currentDrawdownPct = currentDDPctVal;
+    // drawdownPct = maxDrawdownPct so UI and existing consumers get the true maximum drawdown percentage!
+    drawdownPct = maxDDPctVal;
     equityCents = equity;
   }
 
@@ -941,8 +983,13 @@ export function computeAggregateMetrics(
     largestLossCents,
     totalR,
     maxDrawdownCents,
+    maxDrawdownPct,
+    maxDrawdownPeakCents,
+    maxDrawdownTroughCents,
     currentDrawdownCents,
+    currentDrawdownPct,
     drawdownPct,
+    drawdownRecovered,
     currentWinStreak,
     currentLossStreak,
     maxWinStreak,
@@ -1529,6 +1576,7 @@ export function groupBy<T extends TradeMetricRow>(
       expectancyR: m.expectancyR,
       expectancyCents: m.expectancyCents,
       pnlCents: m.netPnlCents,
+      netPnlCents: m.netPnlCents,
     };
   }).sort((a, b) => b.trades - a.trades);
 }
@@ -1557,7 +1605,7 @@ export function generateInsights(trades: TradeMetricRow[], minSample = 10): Insi
       insights.push({
         id: "low-sample",
         title: "Not enough data yet",
-        body: `You have ${closed.length} closed trade${closed.length === 1 ? "" : "s"}. DnD starts generating statistical insights once you have at least ${minSample} closed trades, so patterns you see now may not be reliable.`,
+        body: `You have ${closed.length} closed trade${closed.length === 1 ? "" : "s"}. AlphaPips starts generating statistical insights once you have at least ${minSample} closed trades, so patterns you see now may not be reliable.`,
         sampleSize: closed.length,
         metric: "samples",
         bucketLabel: "all",

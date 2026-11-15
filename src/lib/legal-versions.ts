@@ -49,19 +49,19 @@ export const LEGAL_DOC_CONTENT: Record<LegalDocType, string> = {
 
 Version ${CURRENT_VERSIONS.terms}
 
-This is a placeholder Terms of Service document for DnD. It should be reviewed by a legal professional before production use.
+This is a placeholder Terms of Service document for AlphaPips. It should be reviewed by a legal professional before production use.
 
 1. Acceptance of Terms
-By creating an account or accessing DnD, you agree to these terms. If you do not agree, you may not use the service.
+By creating an account or accessing AlphaPips, you agree to these terms. If you do not agree, you may not use the service.
 
 2. Description of Service
-DnD is a trading journaling, analytics and performance-management product. It helps you record trades, define strategies, capture evidence, review performance and analyze patterns. DnD is not a trading signal service, not investment advice, and does not guarantee any trading outcome or profit.
+AlphaPips is a trading journaling, analytics and performance-management product. It helps you record trades, define strategies, capture evidence, review performance and analyze patterns. AlphaPips is not a trading signal service, not investment advice, and does not guarantee any trading outcome or profit.
 
 3. User Responsibilities
 You are responsible for the accuracy of the data you enter and for maintaining the confidentiality of your account credentials. You agree not to misuse the service, attempt to access other users' data, or disrupt the service.
 
 4. Acceptable Use
-You agree to use DnD only for lawful purposes. You may not use the service to store illegal content, attempt to reverse-engineer or compromise the service, or use automated tools in a way that degrades performance for others.
+You agree to use AlphaPips only for lawful purposes. You may not use the service to store illegal content, attempt to reverse-engineer or compromise the service, or use automated tools in a way that degrades performance for others.
 
 5. Accounts and Security
 You are responsible for all activity under your account. Notify us immediately if you suspect unauthorized access. We use hashed passwords and signed session cookies to protect authentication.
@@ -70,10 +70,10 @@ You are responsible for all activity under your account. Notify us immediately i
 Your data is processed as described in our Privacy Policy. You may export or delete your data at any time from within the application.
 
 7. Intellectual Property
-DnD, its design, source code, and brand are owned by the operator. You retain ownership of the trading data and content you create.
+AlphaPips, its design, source code, and brand are owned by the operator. You retain ownership of the trading data and content you create.
 
 8. Limitation of Liability
-DnD is provided "as is" without warranties of any kind, express or implied. The operator is not liable for any trading losses, data loss, or indirect damages arising from use of the service.
+AlphaPips is provided "as is" without warranties of any kind, express or implied. The operator is not liable for any trading losses, data loss, or indirect damages arising from use of the service.
 
 9. Service Changes
 We may modify, suspend, or discontinue features at any time. We will provide reasonable notice for material changes.
@@ -88,7 +88,7 @@ For questions about these terms, contact the operator through the support channe
 
 Version ${CURRENT_VERSIONS.privacy}
 
-This is a placeholder Privacy Policy for DnD. It should be reviewed by a legal professional before production use.
+This is a placeholder Privacy Policy for AlphaPips. It should be reviewed by a legal professional before production use.
 
 1. Data We Collect
 We store the trades, strategies, reviews, media, settings and consent records you create. Authentication data (email, password hash) is stored to manage your account. Session data is managed via a signed cookie.
@@ -100,7 +100,7 @@ To provide journaling, analytics, review and performance-management features. We
 We use bcrypt password hashing, signed session cookies (httpOnly, sameSite=lax), and per-user access controls. Privacy Mode encrypts sensitive fields client-side using AES-GCM with a passphrase only you hold.
 
 4. Cookies and Local Storage
-DnD uses essential cookies for authentication and local storage for preferences (theme, density). See our Cookie Policy for details. We do not use advertising or tracking cookies.
+AlphaPips uses essential cookies for authentication and local storage for preferences (theme, density). See our Cookie Policy for details. We do not use advertising or tracking cookies.
 
 5. Data Retention
 Your data is retained until you delete your account. You may export all data as JSON or CSV at any time from Settings.
@@ -109,10 +109,10 @@ Your data is retained until you delete your account. You may export all data as 
 You may access, export, correct, or delete your data at any time. Deleting your account permanently removes your data. Legal acceptance records are retained for compliance purposes.
 
 7. Third-Party Services
-DnD is self-contained. We do not integrate third-party analytics, advertising, or tracking services. No data is shared with external parties.
+AlphaPips is self-contained. We do not integrate third-party analytics, advertising, or tracking services. No data is shared with external parties.
 
 8. Children's Privacy
-DnD is not intended for users under 18. We do not knowingly collect data from minors.
+AlphaPips is not intended for users under 18. We do not knowingly collect data from minors.
 
 9. Changes
 We may update this policy from time to time. Material changes will prompt renewed acknowledgement.
@@ -124,10 +124,10 @@ For privacy questions or data requests, contact the operator through the support
 
 Version ${CURRENT_VERSIONS.cookies}
 
-This is a placeholder Cookie Policy for DnD. It should be reviewed by a legal professional before production use.
+This is a placeholder Cookie Policy for AlphaPips. It should be reviewed by a legal professional before production use.
 
-1. What DnD Uses
-DnD uses cookies and similar technologies (local storage) for the following purposes:
+1. What AlphaPips Uses
+AlphaPips uses cookies and similar technologies (local storage) for the following purposes:
 
 Essential (always active):
 - Session cookie ("dnd_session"): httpOnly, signed JWT used for authentication. Required to keep you signed in. Expires after 30 days.
@@ -139,12 +139,12 @@ Preferences (stored in local storage, not cookies):
 - Trade-form drafts and offline sync queue — to preserve unsaved work.
 
 Non-essential (analytics, marketing, advertising):
-- DnD does not currently use any analytics, advertising, or tracking cookies. If this changes, we will update this policy and seek your consent before enabling such technologies.
+- AlphaPips does not currently use any analytics, advertising, or tracking cookies. If this changes, we will update this policy and seek your consent before enabling such technologies.
 
 2. Your Choices
 You can accept or reject non-essential cookies through the cookie consent banner on first visit, or change your preferences at any time in Settings → Legal → Cookie Settings.
 
-Because DnD currently uses only essential cookies, rejecting non-essential cookies does not limit functionality.
+Because AlphaPips currently uses only essential cookies, rejecting non-essential cookies does not limit functionality.
 
 3. Managing Cookies
 You can clear cookies and local storage through your browser settings. Note that clearing the session cookie will sign you out. Clearing local storage will reset your theme and onboarding progress.

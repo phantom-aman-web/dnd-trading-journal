@@ -347,7 +347,7 @@ export function SettingsView() {
             <SettingsCard>
               <SettingsSectionHeading>Personal</SettingsSectionHeading>
               <p className="text-xs text-muted-foreground mt-1">
-                How DnD addresses you. Email is read-only — used for sign-in and audit.
+                How AlphaPips addresses you. Email is read-only — used for sign-in and audit.
               </p>
               <div className="grid sm:grid-cols-2 gap-4 mt-5">
                 <div className="space-y-1.5">
@@ -527,7 +527,7 @@ export function SettingsView() {
             <SettingsCard>
               <SettingsSectionHeading>Risk Management</SettingsSectionHeading>
               <p className="text-xs text-muted-foreground mt-1">
-                Hard limits DnD will flag during trade entry. Leave blank to disable a guardrail.
+                Hard limits AlphaPips will flag during trade entry. Leave blank to disable a guardrail.
               </p>
               <div className="grid sm:grid-cols-3 gap-4 mt-5">
                 <div className="space-y-1.5">
@@ -576,7 +576,7 @@ export function SettingsView() {
                 Risk Threshold Banners (compact)
               </div>
               <p className="text-xs text-muted-foreground mb-3">
-                DnD flags a trade&apos;s planned risk against these thresholds.
+                AlphaPips flags a trade&apos;s planned risk against these thresholds.
               </p>
               <div className="grid sm:grid-cols-3 gap-3">
                 <CompactThreshold
@@ -759,7 +759,7 @@ export function SettingsView() {
                   Delete Account
                 </Button>
                 <p className="mt-3 text-xs text-muted-foreground">
-                  "Delete Account" removes your user record entirely. You will need to sign up again to use DnD. All data is permanently lost.
+                  "Delete Account" removes your user record entirely. You will need to sign up again to use AlphaPips. All data is permanently lost.
                 </p>
               </div>
             </SettingsCard>
@@ -870,7 +870,7 @@ export function SettingsView() {
                     Final Warning
                   </AlertDialogTitle>
                   <AlertDialogDescription className="text-sm text-muted-foreground leading-relaxed">
-                    Your account and ALL associated data will be permanently deleted. You will need to create a new account to use DnD again.
+                    Your account and ALL associated data will be permanently deleted. You will need to create a new account to use AlphaPips again.
                     <br /><br />
                     <span className="font-semibold text-foreground">All data is permanently lost.</span>
                   </AlertDialogDescription>
@@ -919,7 +919,7 @@ export function SettingsView() {
             <SettingsCard>
               <SettingsSectionHeading>Legal Documents</SettingsSectionHeading>
               <p className="text-xs text-muted-foreground mt-1">
-                Review the policies that govern your use of DnD. Acceptance is recorded against
+                Review the policies that govern your use of AlphaPips. Acceptance is recorded against
                 the version shown.
               </p>
               <div className="mt-5 space-y-2">
@@ -931,7 +931,7 @@ export function SettingsView() {
               <CookieConsentManagement />
               <Separator className="bg-border my-4" />
               <p className="text-xs text-muted-foreground">
-                DnD is a trading journaling, analytics and performance-management product. It is
+                AlphaPips is a trading journaling, analytics and performance-management product. It is
                 not financial advice, not investment advice, and does not guarantee profit.
               </p>
             </SettingsCard>

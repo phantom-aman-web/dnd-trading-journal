@@ -97,6 +97,46 @@ const ListQuerySchema = z.object({
   includeArchived: z.coerce.boolean().default(false),
 });
 
+function buildSearchConditions(token: string): any[] {
+  const s = token.trim();
+  const conds: any[] = [
+    { instrumentSymbol: { contains: s, mode: "insensitive" } },
+    { notes: { contains: s, mode: "insensitive" } },
+    { lessons: { contains: s, mode: "insensitive" } },
+    { thesisJson: { contains: s, mode: "insensitive" } },
+    { setupJson: { contains: s, mode: "insensitive" } },
+    { tagsJson: { contains: s, mode: "insensitive" } },
+    { behaviorFlagsJson: { contains: s, mode: "insensitive" } },
+    { id: { equals: s } },
+    { strategy: { name: { contains: s, mode: "insensitive" } } },
+    { strategyVersion: { versionLabel: { contains: s, mode: "insensitive" } } },
+    { account: { name: { contains: s, mode: "insensitive" } } },
+    { instrument: { name: { contains: s, mode: "insensitive" } } },
+    { executions: { some: { notes: { contains: s, mode: "insensitive" } } } },
+  ];
+
+  const sLower = s.toLowerCase();
+  if (sLower === "long" || sLower === "short") {
+    conds.push({ direction: sLower });
+  }
+  if (sLower === "win") {
+    conds.push({ netPnlCents: { gt: 0 }, status: { notIn: ["open", "planned"] }, isDraft: false });
+  }
+  if (sLower === "loss") {
+    conds.push({ netPnlCents: { lt: 0 }, status: { notIn: ["open", "planned"] }, isDraft: false });
+  }
+  if (sLower === "breakeven" || sLower === "be") {
+    conds.push({ netPnlCents: 0, status: { notIn: ["open", "planned"] }, isDraft: false });
+  }
+  if (sLower === "draft") {
+    conds.push({ isDraft: true });
+  }
+  if (sLower === "planned") {
+    conds.push({ status: "planned" });
+  }
+  return conds;
+}
+
 export async function GET(req: NextRequest) {
   let user;
   try { user = await requireUser(); } catch (e) { return toApiError(e); }
@@ -157,49 +197,23 @@ export async function GET(req: NextRequest) {
     }
   }
 
-  // Enhanced multi-field & relational search
+  // Enhanced multi-field, multi-term & relational search
   if (q.search) {
     const s = q.search.trim();
-    const searchConditions: any[] = [
-      { instrumentSymbol: { contains: s, mode: "insensitive" } },
-      { notes: { contains: s, mode: "insensitive" } },
-      { lessons: { contains: s, mode: "insensitive" } },
-      { thesisJson: { contains: s, mode: "insensitive" } },
-      { setupJson: { contains: s, mode: "insensitive" } },
-      { tagsJson: { contains: s, mode: "insensitive" } },
-      { behaviorFlagsJson: { contains: s, mode: "insensitive" } },
-      { id: { equals: s } },
-      { strategy: { name: { contains: s, mode: "insensitive" } } },
-      { strategyVersion: { versionLabel: { contains: s, mode: "insensitive" } } },
-      { account: { name: { contains: s, mode: "insensitive" } } },
-      { instrument: { name: { contains: s, mode: "insensitive" } } },
-      { executions: { some: { notes: { contains: s, mode: "insensitive" } } } },
-    ];
-
-    const sLower = s.toLowerCase();
-    if (sLower === "long" || sLower === "short") {
-      searchConditions.push({ direction: sLower });
-    }
-    if (sLower === "win") {
-      searchConditions.push({ netPnlCents: { gt: 0 }, status: { notIn: ["open", "planned"] }, isDraft: false });
-    }
-    if (sLower === "loss") {
-      searchConditions.push({ netPnlCents: { lt: 0 }, status: { notIn: ["open", "planned"] }, isDraft: false });
-    }
-    if (sLower === "breakeven" || sLower === "be") {
-      searchConditions.push({ netPnlCents: 0, status: { notIn: ["open", "planned"] }, isDraft: false });
-    }
-    if (sLower === "draft") {
-      searchConditions.push({ isDraft: true });
-    }
-    if (sLower === "planned") {
-      searchConditions.push({ status: "planned" });
-    }
-
-    if (where.OR && where.OR.length > 0) {
-      where.AND = [...(where.AND || []), { OR: searchConditions }];
-    } else {
-      where.OR = searchConditions;
+    const tokens = s.split(/\s+/).filter(Boolean);
+    if (tokens.length === 1) {
+      const searchConditions = buildSearchConditions(tokens[0]);
+      if (where.OR && where.OR.length > 0) {
+        where.AND = [...(where.AND || []), { OR: searchConditions }];
+      } else {
+        where.OR = searchConditions;
+      }
+    } else if (tokens.length > 1) {
+      // Multi-term AND search: every token must match at least one attribute
+      const tokenClauses = tokens.map((token) => ({
+        OR: buildSearchConditions(token),
+      }));
+      where.AND = [...(where.AND || []), ...tokenClauses];
     }
   }
 
@@ -213,11 +227,26 @@ export async function GET(req: NextRequest) {
   const limit = q.limit ?? 25;
   const skip = (page - 1) * limit;
 
+  const allowedSortCols: Record<string, string> = {
+    entryTime: "entryTime",
+    exitTime: "exitTime",
+    netPnlCents: "netPnlCents",
+    pnl: "netPnlCents",
+    grossPnlCents: "grossPnlCents",
+    instrumentSymbol: "instrumentSymbol",
+    createdAt: "createdAt",
+  };
+  const sortCol = allowedSortCols[q.sortBy] || "entryTime";
+  const orderBy = [
+    { [sortCol]: q.sortDir },
+    { id: "desc" as const },
+  ];
+
   const [total, trades] = await Promise.all([
     db.trade.count({ where }),
     db.trade.findMany({
       where,
-      orderBy: { [q.sortBy]: q.sortDir },
+      orderBy,
       skip: q.cursor ? undefined : skip,
       take: q.cursor ? limit + 1 : limit,
       ...(q.cursor ? { skip: 1, cursor: { id: q.cursor } } : {}),

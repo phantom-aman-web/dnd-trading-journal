@@ -2,7 +2,13 @@ import { NextRequest } from "next/server";
 import { db } from "@/lib/db";
 import { requireUser } from "@/lib/auth";
 import { ok, bad, toApiError, parseJson } from "@/lib/api";
-import { evaluatePropChallenge, type PropChallengeConfig, type TradeForChallenge } from "@/lib/prop-firm-engine";
+import {
+  evaluatePropChallenge,
+  parseChallengeMetadata,
+  serializeChallengeMetadata,
+  type PropChallengeConfig,
+  type TradeForChallenge,
+} from "@/lib/prop-firm-engine";
 
 export async function GET(req: NextRequest) {
   let user;
@@ -30,6 +36,7 @@ export async function GET(req: NextRequest) {
           currency: true,
           startingBalanceCents: true,
           currentBalanceCents: true,
+          consistencyRate: true,
         },
       },
     },
@@ -55,9 +62,14 @@ export async function GET(req: NextRequest) {
         },
       });
 
+      const meta = parseChallengeMetadata(c.notes, c.account?.consistencyRate);
+
       const metrics = evaluatePropChallenge(
         {
           ...c,
+          consistencyRuleType: meta.consistencyRuleType,
+          consistencyThresholdPct: meta.consistencyThresholdPct,
+          consistencyAction: meta.consistencyAction,
           startDate: c.startDate,
           endDate: c.endDate,
         },
@@ -66,6 +78,7 @@ export async function GET(req: NextRequest) {
 
       return {
         ...c,
+        userNotes: meta.userNotes,
         metrics,
       };
     })
@@ -100,6 +113,9 @@ export async function POST(req: NextRequest) {
     resetHour?: number;
     startDate?: string;
     notes?: string;
+    consistencyRuleType?: "single_day_max" | "daily_pnl_consistency" | "none";
+    consistencyThresholdPct?: number;
+    consistencyAction?: "soft_rule" | "hard_breach";
   }>(req);
 
   if (!body) return bad("Invalid JSON payload");
@@ -121,6 +137,9 @@ export async function POST(req: NextRequest) {
     resetHour = 17,
     startDate,
     notes,
+    consistencyRuleType,
+    consistencyThresholdPct,
+    consistencyAction,
   } = body;
 
   if (!accountId) return bad("accountId is required");
@@ -134,6 +153,17 @@ export async function POST(req: NextRequest) {
     where: { id: accountId, userId: user.id },
   });
   if (!account) return bad("Trading account not found or access denied");
+
+  const serializedNotes = serializeChallengeMetadata(
+    {
+      userNotes: notes?.trim() || "",
+      consistencyRuleType: consistencyRuleType ?? (account.consistencyRate ? "single_day_max" : "none"),
+      consistencyThresholdPct: consistencyThresholdPct ?? (account.consistencyRate ? Math.round(account.consistencyRate * 100) : null),
+      consistencyAction: consistencyAction ?? "soft_rule",
+    },
+    null,
+    account.consistencyRate
+  );
 
   const challenge = await db.propChallenge.create({
     data: {
@@ -155,7 +185,7 @@ export async function POST(req: NextRequest) {
       resetTimezone,
       resetHour,
       startDate: startDate ? new Date(startDate) : new Date(),
-      notes: notes?.trim() || null,
+      notes: serializedNotes,
     },
   });
 

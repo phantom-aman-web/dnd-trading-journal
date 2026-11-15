@@ -299,6 +299,36 @@ export function StrategyVersionComparisonModal({
                 </div>
               </div>
 
+              {/* Avg Win / Avg Loss */}
+              <div className="p-3 bg-card rounded-lg border border-border space-y-1">
+                <div className="text-[11px] font-medium text-muted-foreground">Avg Win / Loss</div>
+                <div className="flex items-baseline justify-between">
+                  <span className="text-sm font-bold font-mono">
+                    {v2?.metrics.avgWinCents ? formatSignedCents(v2.metrics.avgWinCents).text : "—"} /{" "}
+                    {v2?.metrics.avgLossCents ? formatSignedCents(-Math.abs(v2.metrics.avgLossCents)).text : "—"}
+                  </span>
+                  <span className="text-[10px] text-muted-foreground font-medium">
+                    v1: {v1?.metrics.avgWinCents ? formatSignedCents(v1.metrics.avgWinCents).text : "—"}
+                  </span>
+                </div>
+              </div>
+
+              {/* Holding Time */}
+              <div className="p-3 bg-card rounded-lg border border-border space-y-1">
+                <div className="text-[11px] font-medium text-muted-foreground">Avg Holding Time</div>
+                <div className="flex items-baseline justify-between">
+                  <span className="text-base font-bold font-mono">
+                    {v1?.avgHoldingMinutes ? `${v1.avgHoldingMinutes}m` : "—"} →{" "}
+                    {v2?.avgHoldingMinutes ? `${v2.avgHoldingMinutes}m` : "—"}
+                  </span>
+                  {deltas?.avgHoldingMinutes !== undefined && deltas?.avgHoldingMinutes !== null && (
+                    <span className="text-xs text-muted-foreground font-medium">
+                      {deltas.avgHoldingMinutes > 0 ? `+${deltas.avgHoldingMinutes}m` : `${deltas.avgHoldingMinutes}m`}
+                    </span>
+                  )}
+                </div>
+              </div>
+
               {/* Checklist Adherence */}
               <div className="p-3 bg-card rounded-lg border border-border space-y-1 col-span-2">
                 <div className="text-[11px] font-medium text-muted-foreground">Checklist Adherence</div>
@@ -319,6 +349,74 @@ export function StrategyVersionComparisonModal({
                 </div>
               </div>
             </div>
+
+            {/* Direction & Instrument Breakdown Side-by-Side */}
+            {(v1?.directionPerformance || v2?.directionPerformance) && (
+              <div className="space-y-3 pt-2">
+                <h4 className="text-sm font-bold text-foreground">Direction &amp; Instrument Subsets</h4>
+                <div className="grid sm:grid-cols-2 gap-3 text-xs">
+                  {/* Long vs Short in v1 */}
+                  <div className="p-3 bg-card rounded-lg border border-border space-y-2">
+                    <div className="font-semibold text-foreground flex items-center justify-between">
+                      <span>v{v1?.versionLabel} Direction</span>
+                      <span className="text-muted-foreground text-[10px]">{v1?.metrics.totalTrades} trades</span>
+                    </div>
+                    <div className="space-y-1 text-[11px]">
+                      <div className="flex justify-between items-center">
+                        <span className="text-muted-foreground">Long:</span>
+                        <span className="font-mono font-medium">
+                          {v1?.directionPerformance?.long.trades ?? 0} tr ·{" "}
+                          {v1?.directionPerformance?.long.winRatePct != null ? `${v1.directionPerformance.long.winRatePct}%` : "N/A"} ·{" "}
+                          <span className={v1?.directionPerformance?.long.netPnlCents >= 0 ? "text-profit" : "text-loss"}>
+                            {formatSignedCents(v1?.directionPerformance?.long.netPnlCents ?? 0).text}
+                          </span>
+                        </span>
+                      </div>
+                      <div className="flex justify-between items-center">
+                        <span className="text-muted-foreground">Short:</span>
+                        <span className="font-mono font-medium">
+                          {v1?.directionPerformance?.short.trades ?? 0} tr ·{" "}
+                          {v1?.directionPerformance?.short.winRatePct != null ? `${v1.directionPerformance.short.winRatePct}%` : "N/A"} ·{" "}
+                          <span className={v1?.directionPerformance?.short.netPnlCents >= 0 ? "text-profit" : "text-loss"}>
+                            {formatSignedCents(v1?.directionPerformance?.short.netPnlCents ?? 0).text}
+                          </span>
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Long vs Short in v2 */}
+                  <div className="p-3 bg-card rounded-lg border border-border space-y-2">
+                    <div className="font-semibold text-foreground flex items-center justify-between">
+                      <span>v{v2?.versionLabel} Direction</span>
+                      <span className="text-muted-foreground text-[10px]">{v2?.metrics.totalTrades} trades</span>
+                    </div>
+                    <div className="space-y-1 text-[11px]">
+                      <div className="flex justify-between items-center">
+                        <span className="text-muted-foreground">Long:</span>
+                        <span className="font-mono font-medium">
+                          {v2?.directionPerformance?.long.trades ?? 0} tr ·{" "}
+                          {v2?.directionPerformance?.long.winRatePct != null ? `${v2.directionPerformance.long.winRatePct}%` : "N/A"} ·{" "}
+                          <span className={v2?.directionPerformance?.long.netPnlCents >= 0 ? "text-profit" : "text-loss"}>
+                            {formatSignedCents(v2?.directionPerformance?.long.netPnlCents ?? 0).text}
+                          </span>
+                        </span>
+                      </div>
+                      <div className="flex justify-between items-center">
+                        <span className="text-muted-foreground">Short:</span>
+                        <span className="font-mono font-medium">
+                          {v2?.directionPerformance?.short.trades ?? 0} tr ·{" "}
+                          {v2?.directionPerformance?.short.winRatePct != null ? `${v2.directionPerformance.short.winRatePct}%` : "N/A"} ·{" "}
+                          <span className={v2?.directionPerformance?.short.netPnlCents >= 0 ? "text-profit" : "text-loss"}>
+                            {formatSignedCents(v2?.directionPerformance?.short.netPnlCents ?? 0).text}
+                          </span>
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
 
             {/* Checklist & Rule Diffs */}
             <div className="space-y-3 pt-2">

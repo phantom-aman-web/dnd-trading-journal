@@ -32,6 +32,9 @@ import {
   ChevronDown,
   Compass,
   AlertCircle,
+  ArrowUp,
+  ArrowDown,
+  ArrowUpDown,
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -91,12 +94,14 @@ async function fetchTradesList(params: {
   setupId: string;
   direction: string;
   outcome: string;
+  sortBy?: string;
+  sortDir?: "asc" | "desc";
 }): Promise<TradesResponse> {
   const qs = new URLSearchParams({
     page: String(params.page),
     limit: String(params.pageSize),
-    sortBy: "entryTime",
-    sortDir: "desc",
+    sortBy: params.sortBy || "entryTime",
+    sortDir: params.sortDir || "desc",
   });
   if (params.search.trim()) qs.set("search", params.search.trim());
   if (params.accountId !== "all") qs.set("accountId", params.accountId);
@@ -224,8 +229,20 @@ export function TradesLogView() {
   const [page, setPage] = useState<number>(1);
   const [pageSize, setPageSize] = useState<number>(10);
   const [jumpPageInput, setJumpPageInput] = useState<string>("");
+  const [sortBy, setSortBy] = useState<string>("entryTime");
+  const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
   const [closeTradeId, setCloseTradeId] = useState<string | null>(null);
   const [executeTradeId, setExecuteTradeId] = useState<string | null>(null);
+
+  function toggleSort(col: string) {
+    if (sortBy === col) {
+      setSortDir((d) => (d === "asc" ? "desc" : "asc"));
+    } else {
+      setSortBy(col);
+      setSortDir("desc");
+    }
+    setPage(1);
+  }
 
   // Debounce search input by 300ms
   useEffect(() => {
@@ -281,6 +298,8 @@ export function TradesLogView() {
       setupFilter,
       directionFilter,
       outcomeFilter,
+      sortBy,
+      sortDir,
     ],
     queryFn: () =>
       fetchTradesList({
@@ -291,6 +310,8 @@ export function TradesLogView() {
         setupId: setupFilter,
         direction: directionFilter,
         outcome: outcomeFilter,
+        sortBy,
+        sortDir,
       }),
   });
 
@@ -920,12 +941,39 @@ export function TradesLogView() {
                 <thead className="bg-muted/50 border-b border-border">
                   <tr className="text-left text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
                     <th className="w-8 px-3 py-3 text-center"></th>
-                    <th className="px-4 py-3">Date</th>
-                    <th className="px-4 py-3">Symbol</th>
+                    <th className="px-4 py-3 cursor-pointer select-none hover:text-foreground" onClick={() => toggleSort("entryTime")}>
+                      <div className="inline-flex items-center gap-1">
+                        Date
+                        {sortBy === "entryTime" ? (
+                          sortDir === "asc" ? <ArrowUp className="h-3 w-3 text-primary" /> : <ArrowDown className="h-3 w-3 text-primary" />
+                        ) : (
+                          <ArrowUpDown className="h-2.5 w-2.5 opacity-40" />
+                        )}
+                      </div>
+                    </th>
+                    <th className="px-4 py-3 cursor-pointer select-none hover:text-foreground" onClick={() => toggleSort("instrumentSymbol")}>
+                      <div className="inline-flex items-center gap-1">
+                        Symbol
+                        {sortBy === "instrumentSymbol" ? (
+                          sortDir === "asc" ? <ArrowUp className="h-3 w-3 text-primary" /> : <ArrowDown className="h-3 w-3 text-primary" />
+                        ) : (
+                          <ArrowUpDown className="h-2.5 w-2.5 opacity-40" />
+                        )}
+                      </div>
+                    </th>
                     <th className="px-4 py-3">Type / Direction</th>
                     <th className="px-4 py-3 hidden md:table-cell">Setup</th>
                     <th className="px-4 py-3">Status / Reason</th>
-                    <th className="px-4 py-3 text-right">P&amp;L</th>
+                    <th className="px-4 py-3 text-right cursor-pointer select-none hover:text-foreground" onClick={() => toggleSort("netPnlCents")}>
+                      <div className="inline-flex items-center justify-end gap-1 w-full">
+                        P&amp;L
+                        {sortBy === "netPnlCents" ? (
+                          sortDir === "asc" ? <ArrowUp className="h-3 w-3 text-primary" /> : <ArrowDown className="h-3 w-3 text-primary" />
+                        ) : (
+                          <ArrowUpDown className="h-2.5 w-2.5 opacity-40" />
+                        )}
+                      </div>
+                    </th>
                     <th className="px-4 py-3 text-right hidden sm:table-cell">R Multiple</th>
                     <th className="px-4 py-3 text-right hidden lg:table-cell">Adherence / Notes</th>
                     <th className="px-4 py-3 text-right"></th>
@@ -1194,15 +1242,30 @@ export function TradesLogView() {
             {/* Page controls */}
             {totalPages > 1 && (
               <div className="flex items-center gap-1 flex-wrap justify-center">
+                {/* First button */}
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-8 px-2 text-xs"
+                  onClick={() => setPage(1)}
+                  disabled={page <= 1 || tradesFetching}
+                  title="First page"
+                >
+                  <ChevronsLeft className="h-3.5 w-3.5 mr-1" />
+                  First
+                </Button>
+
+                {/* Previous button */}
                 <Button
                   variant="outline"
                   size="sm"
                   className="h-8 px-2 text-xs"
                   onClick={() => setPage((p) => Math.max(1, p - 1))}
                   disabled={page <= 1 || tradesFetching}
+                  title="Previous page"
                 >
                   <ChevronLeft className="h-3.5 w-3.5 mr-1" />
-                  Previous
+                  Prev
                 </Button>
 
                 {getPageNumbers(page, totalPages).map((pNum, idx) => {
@@ -1231,19 +1294,39 @@ export function TradesLogView() {
                   );
                 })}
 
+                {/* Next button */}
                 <Button
                   variant="outline"
                   size="sm"
                   className="h-8 px-2 text-xs"
                   onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
                   disabled={page >= totalPages || tradesFetching}
+                  title="Next page"
                 >
                   Next
                   <ChevronRight className="h-3.5 w-3.5 ml-1" />
                 </Button>
 
+                {/* Last button */}
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-8 px-2 text-xs"
+                  onClick={() => setPage(totalPages)}
+                  disabled={page >= totalPages || tradesFetching}
+                  title="Last page"
+                >
+                  Last
+                  <ChevronsRight className="h-3.5 w-3.5 ml-1" />
+                </Button>
+
+                {/* Page X of Y badge */}
+                <span className="text-xs text-muted-foreground font-mono px-1">
+                  Page {page} of {totalPages}
+                </span>
+
                 {/* Jump to page */}
-                <div className="flex items-center gap-1 ml-2">
+                <div className="flex items-center gap-1 ml-1 sm:ml-2">
                   <Input
                     type="number"
                     min={1}

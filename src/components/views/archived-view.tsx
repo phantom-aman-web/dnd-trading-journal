@@ -1,9 +1,10 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
@@ -22,6 +23,7 @@ import {
   Clock,
   ShieldCheck,
   CheckCircle2,
+  Search,
 } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
@@ -67,6 +69,53 @@ export function ArchivedView() {
   const noTrades: any[] = data?.noTrades || [];
   const totalArchived = data?.totalArchived || 0;
 
+  const [searchQuery, setSearchQuery] = useState("");
+
+  const filteredTrades = useMemo(() => {
+    if (!searchQuery.trim()) return trades;
+    const q = searchQuery.toLowerCase().trim();
+    return trades.filter(
+      (t) =>
+        t.instrumentSymbol?.toLowerCase().includes(q) ||
+        t.direction?.toLowerCase().includes(q) ||
+        t.account?.name?.toLowerCase().includes(q) ||
+        t.strategy?.name?.toLowerCase().includes(q)
+    );
+  }, [trades, searchQuery]);
+
+  const filteredAccounts = useMemo(() => {
+    if (!searchQuery.trim()) return accounts;
+    const q = searchQuery.toLowerCase().trim();
+    return accounts.filter(
+      (a) =>
+        a.name?.toLowerCase().includes(q) ||
+        a.broker?.toLowerCase().includes(q) ||
+        a.accountType?.toLowerCase().includes(q)
+    );
+  }, [accounts, searchQuery]);
+
+  const filteredStrategies = useMemo(() => {
+    if (!searchQuery.trim()) return strategies;
+    const q = searchQuery.toLowerCase().trim();
+    return strategies.filter(
+      (s) =>
+        s.name?.toLowerCase().includes(q) ||
+        s.description?.toLowerCase().includes(q) ||
+        s.market?.toLowerCase().includes(q)
+    );
+  }, [strategies, searchQuery]);
+
+  const filteredNoTrades = useMemo(() => {
+    if (!searchQuery.trim()) return noTrades;
+    const q = searchQuery.toLowerCase().trim();
+    return noTrades.filter(
+      (n) =>
+        n.instrumentSymbol?.toLowerCase().includes(q) ||
+        n.reason?.toLowerCase().includes(q) ||
+        n.observation?.toLowerCase().includes(q)
+    );
+  }, [noTrades, searchQuery]);
+
   return (
     <div className="p-4 md:p-6 space-y-6 max-w-7xl mx-auto">
       {/* Header */}
@@ -93,20 +142,31 @@ export function ArchivedView() {
         </div>
       </div>
 
+      {/* Search Input Bar */}
+      <div className="relative">
+        <Search className="h-4 w-4 absolute left-3 top-2.5 text-muted-foreground" />
+        <Input
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+          placeholder="Filter archived records by symbol, setup, account, reason..."
+          className="h-9 pl-9 text-xs"
+        />
+      </div>
+
       {/* Tabs */}
       <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
         <TabsList className="bg-muted/60 p-1 border border-border rounded-lg">
           <TabsTrigger value="trades" className="text-xs gap-1.5">
-            <TrendingUp className="h-3.5 w-3.5" /> Archived Trades ({trades.length})
+            <TrendingUp className="h-3.5 w-3.5" /> Archived Trades ({filteredTrades.length})
           </TabsTrigger>
           <TabsTrigger value="accounts" className="text-xs gap-1.5">
-            <Wallet className="h-3.5 w-3.5" /> Archived Accounts ({accounts.length})
+            <Wallet className="h-3.5 w-3.5" /> Archived Accounts ({filteredAccounts.length})
           </TabsTrigger>
           <TabsTrigger value="strategies" className="text-xs gap-1.5">
-            <Layers className="h-3.5 w-3.5" /> Archived Setups ({strategies.length})
+            <Layers className="h-3.5 w-3.5" /> Archived Setups ({filteredStrategies.length})
           </TabsTrigger>
           <TabsTrigger value="noTrades" className="text-xs gap-1.5">
-            <EyeOff className="h-3.5 w-3.5" /> Archived Observations ({noTrades.length})
+            <EyeOff className="h-3.5 w-3.5" /> Archived Observations ({filteredNoTrades.length})
           </TabsTrigger>
         </TabsList>
 
@@ -119,11 +179,11 @@ export function ArchivedView() {
                   <Skeleton key={i} className="h-14 w-full rounded-lg" />
                 ))}
               </div>
-            ) : trades.length === 0 ? (
-              <EmptyArchiveState label="No archived trades." />
+            ) : filteredTrades.length === 0 ? (
+              <EmptyArchiveState label={searchQuery ? "No matching archived trades found." : "No archived trades."} />
             ) : (
               <div className="divide-y divide-border/60">
-                {trades.map((t) => {
+                {filteredTrades.map((t) => {
                   const pnl = formatSignedCents(t.netPnlCents);
                   return (
                     <div
@@ -185,11 +245,11 @@ export function ArchivedView() {
               <div className="p-6 space-y-3">
                 <Skeleton className="h-16 w-full" />
               </div>
-            ) : accounts.length === 0 ? (
-              <EmptyArchiveState label="No archived accounts." />
+            ) : filteredAccounts.length === 0 ? (
+              <EmptyArchiveState label={searchQuery ? "No matching archived accounts found." : "No archived accounts."} />
             ) : (
               <div className="divide-y divide-border/60">
-                {accounts.map((acc) => (
+                {filteredAccounts.map((acc) => (
                   <div
                     key={acc.id}
                     className="p-4 flex items-center justify-between gap-3 hover:bg-muted/30 transition-colors"
@@ -233,11 +293,11 @@ export function ArchivedView() {
               <div className="p-6 space-y-3">
                 <Skeleton className="h-16 w-full" />
               </div>
-            ) : strategies.length === 0 ? (
-              <EmptyArchiveState label="No archived setups." />
+            ) : filteredStrategies.length === 0 ? (
+              <EmptyArchiveState label={searchQuery ? "No matching archived setups found." : "No archived setups."} />
             ) : (
               <div className="divide-y divide-border/60">
-                {strategies.map((strat) => (
+                {filteredStrategies.map((strat) => (
                   <div
                     key={strat.id}
                     className="p-4 flex items-center justify-between gap-3 hover:bg-muted/30 transition-colors"
@@ -278,11 +338,11 @@ export function ArchivedView() {
               <div className="p-6 space-y-3">
                 <Skeleton className="h-16 w-full" />
               </div>
-            ) : noTrades.length === 0 ? (
-              <EmptyArchiveState label="No archived market observations." />
+            ) : filteredNoTrades.length === 0 ? (
+              <EmptyArchiveState label={searchQuery ? "No matching archived observations found." : "No archived market observations."} />
             ) : (
               <div className="divide-y divide-border/60">
-                {noTrades.map((obs) => (
+                {filteredNoTrades.map((obs) => (
                   <div
                     key={obs.id}
                     className="p-4 flex items-center justify-between gap-3 hover:bg-muted/30 transition-colors"

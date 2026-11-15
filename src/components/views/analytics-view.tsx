@@ -55,17 +55,26 @@ import {
   Compass,
   Gauge,
   Timer,
+  BookOpen,
+  ShieldCheck,
 } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import { TimeInTradeTab } from "@/components/analytics/time-in-trade-tab";
+import { DrawdownAnalyticsTab } from "@/components/analytics/drawdown-analytics-tab";
+import { DataQualityTab } from "@/components/analytics/data-quality-tab";
+import { MetricDefinitionsModal } from "@/components/analytics/metric-definitions-modal";
+import { SharedFilterBar, type AnalyticsFilterState } from "@/components/analytics/shared-filter-bar";
 
 const TABS = [
   { key: "overall", label: "Overall Metrics" },
   { key: "instruments", label: "By Instrument" },
   { key: "setup", label: "By Setup & Strategy" },
+  { key: "drawdown", label: "Equity & Drawdown" },
   { key: "holdingTime", label: "Time in Trade" },
   { key: "checklist", label: "Checklist Adherence" },
   { key: "violations", label: "Rule Violations" },
   { key: "sessions", label: "Sessions & Weekdays" },
+  { key: "dataQuality", label: "Data Quality" },
 ] as const;
 
 type TabKey = (typeof TABS)[number]["key"];
@@ -75,19 +84,39 @@ const TAB_DIMENSION: Record<TabKey, string> = {
   overall: "overview",
   instruments: "instrument",
   setup: "strategy",
+  drawdown: "drawdown",
   holdingTime: "holding-time",
-  checklist: "strategy",
+  checklist: "checklist",
   violations: "behavior",
   sessions: "session",
+  dataQuality: "data-quality",
 };
 
-async function fetchAnalytics(dimension: string, accountId: string) {
+interface AnalyticsFetchFilters {
+  accountId?: string;
+  from?: string;
+  to?: string;
+  instrumentId?: string;
+  strategyId?: string;
+  direction?: string;
+}
+
+async function fetchAnalytics(dimension: string, filters: AnalyticsFetchFilters) {
   const url = new URL("/api/analytics", window.location.origin);
   url.searchParams.set("dimension", dimension);
-  // The /api/analytics endpoint doesn't currently filter by account, but we
-  // forward the param so the backend can honor it in a future revision.
-  if (accountId && accountId !== "all") {
-    url.searchParams.set("accountId", accountId);
+  if (filters.accountId && filters.accountId !== "all") {
+    url.searchParams.set("accountId", filters.accountId);
+  }
+  if (filters.from) url.searchParams.set("from", filters.from);
+  if (filters.to) url.searchParams.set("to", filters.to);
+  if (filters.instrumentId && filters.instrumentId !== "all") {
+    url.searchParams.set("instrumentId", filters.instrumentId);
+  }
+  if (filters.strategyId && filters.strategyId !== "all") {
+    url.searchParams.set("strategyId", filters.strategyId);
+  }
+  if (filters.direction && filters.direction !== "all") {
+    url.searchParams.set("direction", filters.direction);
   }
   const res = await fetch(url.toString(), { cache: "no-store" });
   if (!res.ok) throw new Error("Failed to fetch analytics");
@@ -102,14 +131,37 @@ async function fetchAccountsList() {
   return Array.isArray(arr) ? arr : [];
 }
 
+async function fetchInstrumentsList() {
+  const res = await fetch("/api/instruments", { cache: "no-store" });
+  if (!res.ok) return [];
+  const data = await res.json();
+  const arr = Array.isArray(data) ? data : data?.items ?? [];
+  return Array.isArray(arr) ? arr : [];
+}
+
+async function fetchStrategiesList() {
+  const res = await fetch("/api/strategies", { cache: "no-store" });
+  if (!res.ok) return [];
+  const data = await res.json();
+  const arr = (data as any)?.items ?? (Array.isArray(data) ? data : []);
+  return Array.isArray(arr) ? arr : [];
+}
+
 export function AnalyticsView() {
   const { user } = useAuth();
   const [tab, setTab] = useState<TabKey>("overall");
+  const [isDefinitionsModalOpen, setIsDefinitionsModalOpen] = useState(false);
   const { params, setParams, navigate, selectedAccountId, setSelectedAccountId } = useNav();
-  const accountId = selectedAccountId || params.accountId || "all";
-  function setAccountId(v: string) {
-    setSelectedAccountId(v === "all" ? "" : v);
-  }
+  
+  const [filters, setFilters] = useState<AnalyticsFilterState>({
+    accountId: selectedAccountId || params.accountId || "all",
+    datePreset: "all",
+    customFrom: "",
+    customTo: "",
+    instrumentId: "all",
+    strategyId: "all",
+    direction: "all",
+  });
 
   const { data: accountsData } = useQuery({
     queryKey: ["accounts", user?.id],
@@ -117,22 +169,105 @@ export function AnalyticsView() {
     enabled: !!user?.id,
   });
 
+  const { data: instrumentsData } = useQuery({
+    queryKey: ["instruments"],
+    queryFn: fetchInstrumentsList,
+  });
+
+  const { data: strategiesData } = useQuery({
+    queryKey: ["strategies", user?.id],
+    queryFn: fetchStrategiesList,
+    enabled: !!user?.id,
+  });
+
+  const selectedAccountName = useMemo(() => {
+    if (!filters.accountId || filters.accountId === "all") return "All Accounts";
+    const accList = Array.isArray(accountsData) ? accountsData : ((accountsData as any)?.items ?? []);
+    return accList.find((a: any) => a.id === filters.accountId)?.name ?? "Account";
+  }, [filters.accountId, accountsData]);
+
+  // Derive date bounds from preset
+  const { from, to } = useMemo(() => {
+    if (filters.datePreset === "all") return { from: undefined, to: undefined };
+    const now = new Date();
+    if (filters.datePreset === "today") {
+      const start = new Date(now.getFullYear(), now.getMonth(), now.getDate()).toISOString();
+      return { from: start, to: undefined };
+    }
+    if (filters.datePreset === "7d") {
+      const start = new Date(now.getTime() - 7 * 86400000).toISOString();
+      return { from: start, to: undefined };
+    }
+    if (filters.datePreset === "30d") {
+      const start = new Date(now.getTime() - 30 * 86400000).toISOString();
+      return { from: start, to: undefined };
+    }
+    if (filters.datePreset === "month") {
+      const start = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
+      return { from: start, to: undefined };
+    }
+    if (filters.datePreset === "last_month") {
+      const start = new Date(now.getFullYear(), now.getMonth() - 1, 1).toISOString();
+      const end = new Date(now.getFullYear(), now.getMonth(), 0, 23, 59, 59, 999).toISOString();
+      return { from: start, to: end };
+    }
+    if (filters.datePreset === "custom") {
+      return {
+        from: filters.customFrom ? new Date(filters.customFrom).toISOString() : undefined,
+        to: filters.customTo ? new Date(filters.customTo).toISOString() : undefined,
+      };
+    }
+    return { from: undefined, to: undefined };
+  }, [filters.datePreset, filters.customFrom, filters.customTo]);
+
+  const queryFilters: AnalyticsFetchFilters = useMemo(() => ({
+    accountId: filters.accountId,
+    from,
+    to,
+    instrumentId: filters.instrumentId !== "all" ? filters.instrumentId : undefined,
+    strategyId: filters.strategyId !== "all" ? filters.strategyId : undefined,
+    direction: filters.direction !== "all" ? filters.direction : undefined,
+  }), [filters.accountId, from, to, filters.instrumentId, filters.strategyId, filters.direction]);
+
   const dimension = TAB_DIMENSION[tab];
 
   const { data, isLoading } = useQuery({
-    queryKey: ["analytics", dimension, accountId],
-    queryFn: () => fetchAnalytics(dimension, accountId),
+    queryKey: ["analytics", dimension, queryFilters],
+    queryFn: () => fetchAnalytics(dimension, queryFilters),
   });
 
   // Sessions tab also needs the time dimension (weekday + hour).
   const needsTime = tab === "sessions";
   const { data: timeData, isLoading: timeLoading } = useQuery({
-    queryKey: ["analytics", "time", accountId],
-    queryFn: () => fetchAnalytics("time", accountId),
+    queryKey: ["analytics", "time", queryFilters],
+    queryFn: () => fetchAnalytics("time", queryFilters),
     enabled: needsTime,
   });
 
   const loading = isLoading || (needsTime && timeLoading);
+
+  function handleFilterChange(updated: Partial<AnalyticsFilterState>) {
+    setFilters((prev) => {
+      const next = { ...prev, ...updated };
+      if ("accountId" in updated) {
+        setSelectedAccountId(updated.accountId === "all" ? "" : updated.accountId ?? "");
+      }
+      return next;
+    });
+  }
+
+  function handleResetFilters() {
+    setSelectedAccountId("");
+    setFilters({
+      accountId: "all",
+      datePreset: "all",
+      customFrom: "",
+      customTo: "",
+      instrumentId: "all",
+      strategyId: "all",
+      direction: "all",
+    });
+  }
 
   return (
     <div className="min-h-full bg-background">
@@ -144,24 +279,48 @@ export function AnalyticsView() {
               Analytics Engine
             </h1>
             <p className="text-sm text-muted-foreground mt-1">
-              Decompose your performance by setup, instrument, behavior, session, and time.
+              Decompose your performance by setup, instrument, behavior, session, time, and capital drawdown.
             </p>
           </div>
-          <div className="w-full sm:w-64">
-            <Select value={accountId} onValueChange={setAccountId}>
-              <SelectTrigger className="bg-card border-input text-foreground h-10">
-                <SelectValue placeholder="All Accounts" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Accounts</SelectItem>
-                {(Array.isArray(accountsData) ? accountsData : ((accountsData as any)?.items ?? [])).map((a: any) => (
-                  <SelectItem key={a.id} value={a.id}>
-                    {a.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setIsDefinitionsModalOpen(true)}
+              className="h-9 text-xs gap-1.5"
+            >
+              <BookOpen className="h-3.5 w-3.5 text-primary" />
+              <span>Metric Formulas</span>
+            </Button>
           </div>
+        </div>
+
+        {/* Shared Analytical Filter Bar */}
+        <SharedFilterBar
+          filters={filters}
+          onChange={handleFilterChange}
+          onReset={handleResetFilters}
+          accounts={Array.isArray(accountsData) ? accountsData : []}
+          instruments={Array.isArray(instrumentsData) ? instrumentsData : []}
+          strategies={Array.isArray(strategiesData) ? strategiesData : []}
+        />
+
+        {/* Active Scope & Audit Context Banner */}
+        <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-2.5 rounded-lg border border-border/80 bg-muted/30 text-xs">
+          <div className="flex items-center gap-2 text-muted-foreground">
+            <span className="font-semibold text-foreground">Active Scope:</span>
+            <span className="font-medium text-foreground">{selectedAccountName}</span>
+            <span>·</span>
+            <span>{filters.datePreset === "all" ? "All Recorded History" : "Filtered Window"}</span>
+            <span>·</span>
+            <span className="text-foreground font-medium">Closed Realized Trades Only</span>
+          </div>
+          <button
+            onClick={() => navigate("tradesLog", filters.accountId !== "all" ? { accountId: filters.accountId } : undefined)}
+            className="text-primary hover:underline font-medium inline-flex items-center gap-1 transition-colors cursor-pointer"
+          >
+            Inspect contributing trades in Journal →
+          </button>
         </div>
 
         {/* Tab bar */}
@@ -218,6 +377,14 @@ export function AnalyticsView() {
             )}
           </TabsContent>
 
+          <TabsContent value="drawdown" className="mt-6 focus-visible:outline-none">
+            {loading || tab !== "drawdown" ? (
+              <AnalyticsSkeleton />
+            ) : (
+              <DrawdownAnalyticsTab data={data as any} />
+            )}
+          </TabsContent>
+
           <TabsContent value="holdingTime" className="mt-6 focus-visible:outline-none">
             {loading || tab !== "holdingTime" ? (
               <AnalyticsSkeleton />
@@ -230,7 +397,7 @@ export function AnalyticsView() {
             {loading || tab !== "checklist" ? (
               <AnalyticsSkeleton />
             ) : (
-              <ChecklistAdherence items={(data as any)?.items ?? []} />
+              <ChecklistAdherence data={data} />
             )}
           </TabsContent>
 
@@ -240,6 +407,7 @@ export function AnalyticsView() {
             ) : (
               <RuleViolations
                 items={(data as any)?.items ?? []}
+                totalTrades={(data as any)?.totalTrades ?? 0}
                 onSelectRule={(flag) => navigate("tradesLog", { search: flag })}
               />
             )}
@@ -253,10 +421,30 @@ export function AnalyticsView() {
                 sessionItems={(data as any)?.items ?? []}
                 weekday={timeData?.weekday ?? []}
                 hour={timeData?.hour ?? []}
+                entryHour={timeData?.entryHour}
+                realizationHour={timeData?.realizationHour}
+                onSelectSession={(sess) => navigate("tradesLog", { session: sess })}
+              />
+            )}
+          </TabsContent>
+
+          <TabsContent value="dataQuality" className="mt-6 focus-visible:outline-none">
+            {loading || tab !== "dataQuality" ? (
+              <AnalyticsSkeleton />
+            ) : (
+              <DataQualityTab
+                data={data as any}
+                onFixTrade={(tradeId) => navigate("tradeDetail", { id: tradeId })}
               />
             )}
           </TabsContent>
         </Tabs>
+
+        {/* Metric Definitions Modal */}
+        <MetricDefinitionsModal
+          open={isDefinitionsModalOpen}
+          onOpenChange={setIsDefinitionsModalOpen}
+        />
       </div>
     </div>
   );
@@ -384,9 +572,15 @@ function OverallMetrics({
             tone="loss"
           />
           <DistributionMetric
-            label="Max Drawdown"
-            value={m.maxDrawdownCents != null ? formatSignedCents(-Math.abs(m.maxDrawdownCents)).text : "N/A"}
-            tone="loss"
+            label="Max Drawdown (Realized)"
+            value={
+              m.maxDrawdownCents != null
+                ? `${formatSignedCents(-Math.abs(m.maxDrawdownCents)).text}${
+                    m.drawdownPct != null ? ` (${(dToNumber(m.drawdownPct) * 100).toFixed(1)}%)` : ""
+                  }`
+                : "Unavailable (Starting balance required)"
+            }
+            tone={m.maxDrawdownCents != null ? "loss" : "neutral"}
           />
         </div>
       </Card>
@@ -717,92 +911,183 @@ function SetupBreakdown({
 // Tab 3 — Checklist Adherence
 // ---------------------------------------------------------------------------
 
-/**
- * Renders per-setup adherence as a derived metric.
- *
- * The analytics API doesn't expose checklist evaluation directly, so we
- * derive an "adherence %" from each setup's win rate (a reasonable proxy:
- * the more disciplined a setup is followed, the higher its win rate tends
- * to be) plus the setup's trade volume. Setups with no closed trades show
- * "No data" rather than a misleading 0%.
- */
-function ChecklistAdherence({ items }: { items: any[] }) {
-  const rows = useMemo(() => {
-    return items
-      .filter((s) => (s.trades ?? 0) > 0)
-      .map((s) => {
-        const winRate = s.winRate ? dToNumber(s.winRate) : 0;
-        // Adherence proxy: win-rate weighted by sample size. Trades under
-        // 5 are flagged as "low confidence" with a muted color.
-        const lowConfidence = (s.trades ?? 0) < 5;
-        const adherence = Math.round(winRate * 100);
-        return { ...s, adherence, lowConfidence };
-      })
-      .sort((a, b) => b.adherence - a.adherence);
-  }, [items]);
+interface ChecklistAdherenceData {
+  overallAdherencePct: number | null;
+  totalTrades: number;
+  totalEvaluatedTrades: number;
+  totalMissingDataTrades: number;
+  totalCompletedRequiredItems: number;
+  totalApplicableRequiredItems: number;
+  strategies: Array<{
+    strategyId: string;
+    strategyName: string;
+    totalTrades: number;
+    evaluatedTrades: number;
+    missingDataTrades: number;
+    completedRequiredItems: number;
+    totalRequiredItems: number;
+    adherencePct: number | null;
+    winRate: number | null;
+    wins: number;
+    losses: number;
+    breakevens: number;
+    netPnlCents: number;
+    avgR: string | null;
+    versions: Array<{
+      versionId: string;
+      versionLabel: string;
+      evaluatedTrades: number;
+      totalTrades: number;
+      missingDataTrades: number;
+      completedRequiredItems: number;
+      totalRequiredItems: number;
+      adherencePct: number | null;
+      winRate: number | null;
+    }>;
+  }>;
+}
 
-  if (rows.length === 0) {
-    return <NoDataState message="No checklist adherence data yet — log trades tagged with setups to see your adherence rates." />;
+function ChecklistAdherence({ data }: { data: any }) {
+  const summary = (data as ChecklistAdherenceData) || { strategies: [] };
+  const strategies = summary.strategies ?? [];
+
+  if (strategies.length === 0) {
+    return (
+      <NoDataState message="No checklist adherence data recorded yet. Tag your trades with strategies and checklists to measure execution discipline." />
+    );
   }
 
   return (
     <div className="space-y-6">
+      {/* KPI Overview Strip */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+        <DistributionMetric
+          label="Overall Discipline"
+          value={summary.overallAdherencePct != null ? `${summary.overallAdherencePct}%` : "Insufficient data"}
+          tone={summary.overallAdherencePct != null && summary.overallAdherencePct >= 70 ? "profit" : summary.overallAdherencePct != null && summary.overallAdherencePct >= 50 ? "neutral" : "loss"}
+        />
+        <DistributionMetric
+          label="Evaluated Trades"
+          value={`${summary.totalEvaluatedTrades ?? 0} of ${summary.totalTrades ?? 0}`}
+        />
+        <DistributionMetric
+          label="Required Rules Followed"
+          value={`${summary.totalCompletedRequiredItems ?? 0} / ${summary.totalApplicableRequiredItems ?? 0}`}
+          tone="profit"
+        />
+        <DistributionMetric
+          label="Missing Checklist Data"
+          value={String(summary.totalMissingDataTrades ?? 0)}
+          tone={summary.totalMissingDataTrades > 0 ? "loss" : "neutral"}
+        />
+      </div>
+
       <Card>
-        <SectionHeading>Adherence by Setup</SectionHeading>
+        <div className="flex items-center justify-between">
+          <SectionHeading>Checklist Adherence by Strategy</SectionHeading>
+          <span className="text-[10px] uppercase font-mono text-muted-foreground">Strict Rule Discipline</span>
+        </div>
         <p className="text-xs text-muted-foreground mt-1">
-          Adherence is computed from your setup's win-rate (a proxy for rule discipline). Setups with fewer than 5 trades are flagged as low-confidence.
+          Adherence is calculated strictly from actual checklist answers against applicable required strategy rules:{" "}
+          <span className="font-mono text-foreground font-semibold">Completed Required / Total Applicable Required × 100</span>. Strategy win rate is shown independently and is never used as a discipline proxy.
         </p>
-        <div className="space-y-3 mt-4">
-          {rows.map((s, i) => (
-            <div key={i} className="rounded-lg border border-border p-4">
-              <div className="flex items-center justify-between gap-3">
-                <div className="min-w-0">
-                  <div className="text-sm font-semibold text-foreground truncate">
-                    {s.label}
-                  </div>
-                  <div className="text-xs text-muted-foreground mt-0.5">
-                    {s.trades} trade{s.trades === 1 ? "" : "s"} · {s.wins} wins
-                    {s.lowConfidence && (
-                      <span className="ml-2 inline-flex items-center gap-1 rounded bg-amber-50 px-1.5 py-0.5 text-[10px] font-medium text-warning border border-amber-200">
-                        <AlertTriangle className="h-3 w-3" /> low confidence
+
+        <div className="space-y-4 mt-5">
+          {strategies.map((s) => {
+            const hasData = s.adherencePct != null && s.evaluatedTrades > 0;
+            const adherence = s.adherencePct ?? 0;
+            const winRatePct = s.winRate != null ? Math.round(s.winRate * 100) : null;
+
+            return (
+              <div key={s.strategyId} className="rounded-xl border border-border bg-card p-5 space-y-4 shadow-2xs">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-2">
+                      <span className="text-base font-semibold text-foreground truncate">
+                        {s.strategyName}
                       </span>
+                      {s.missingDataTrades > 0 && (
+                        <span className="inline-flex items-center gap-1 rounded bg-amber-500/10 px-2 py-0.5 text-[10px] font-medium text-amber-600 dark:text-amber-400 border border-amber-500/20">
+                          <AlertTriangle className="h-3 w-3" /> {s.missingDataTrades} trade{s.missingDataTrades === 1 ? "" : "s"} missing checklist
+                        </span>
+                      )}
+                    </div>
+                    <div className="text-xs text-muted-foreground mt-1 flex flex-wrap items-center gap-x-3 gap-y-1">
+                      <span>{s.evaluatedTrades} evaluated trade{s.evaluatedTrades === 1 ? "" : "s"}</span>
+                      <span>·</span>
+                      <span>{s.completedRequiredItems} of {s.totalRequiredItems} required items completed</span>
+                      <span>·</span>
+                      <span className="font-medium text-foreground">
+                        Strategy Win Rate: {winRatePct != null ? `${winRatePct}%` : "N/A"} (Independent)
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="text-right shrink-0">
+                    {hasData ? (
+                      <>
+                        <div
+                          className={cn(
+                            "text-2xl font-bold tabular-nums font-mono",
+                            adherence >= 70 ? "text-profit" : adherence >= 50 ? "text-warning" : "text-loss",
+                          )}
+                        >
+                          {adherence}%
+                        </div>
+                        <div className="text-[10px] uppercase tracking-wide text-muted-foreground font-semibold">
+                          Checklist Adherence
+                        </div>
+                      </>
+                    ) : (
+                      <div className="text-xs text-muted-foreground italic bg-muted/40 px-3 py-1.5 rounded-md border border-border">
+                        Insufficient checklist data
+                      </div>
                     )}
                   </div>
                 </div>
-                <div className="text-right shrink-0">
-                  <div
-                    className={cn(
-                      "text-2xl font-bold tabular-nums",
-                      s.adherence >= 60
-                        ? "text-profit"
-                        : s.adherence >= 40
-                          ? "text-warning"
-                          : "text-loss",
-                    )}
-                  >
-                    {s.adherence}%
+
+                {/* Progress bar */}
+                {hasData && (
+                  <div className="h-2 w-full rounded-full bg-muted/60 overflow-hidden">
+                    <div
+                      className={cn(
+                        "h-full rounded-full transition-all duration-300",
+                        adherence >= 70 ? "bg-emerald-500" : adherence >= 50 ? "bg-amber-500" : "bg-red-500",
+                      )}
+                      style={{ width: `${Math.min(100, adherence)}%` }}
+                    />
                   </div>
-                  <div className="text-[10px] uppercase tracking-wide text-muted-foreground font-semibold">
-                    Adherence
+                )}
+
+                {/* Strategy Version Breakdown (if multiple versions) */}
+                {s.versions && s.versions.length > 1 && (
+                  <div className="pt-2 border-t border-border/60">
+                    <div className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider mb-2">
+                      Version Cohort Breakdown
+                    </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2">
+                      {s.versions.map((v) => (
+                        <div key={v.versionId} className="p-2.5 rounded-lg border border-border/70 bg-muted/30 text-xs">
+                          <div className="flex items-center justify-between font-medium">
+                            <span>Version {v.versionLabel}</span>
+                            <span className={cn(
+                              "font-mono font-bold",
+                              v.adherencePct != null && v.adherencePct >= 70 ? "text-profit" : v.adherencePct != null && v.adherencePct >= 50 ? "text-warning" : "text-loss"
+                            )}>
+                              {v.adherencePct != null ? `${v.adherencePct}%` : "No data"}
+                            </span>
+                          </div>
+                          <div className="text-[10px] text-muted-foreground mt-0.5">
+                            {v.evaluatedTrades} trades · {v.completedRequiredItems}/{v.totalRequiredItems} req items
+                          </div>
+                        </div>
+                      ))}
+                    </div>
                   </div>
-                </div>
+                )}
               </div>
-              {/* Progress bar */}
-              <div className="mt-3 h-2 w-full rounded-full bg-background overflow-hidden">
-                <div
-                  className={cn(
-                    "h-full rounded-full transition-all",
-                    s.adherence >= 60
-                      ? "bg-emerald-500"
-                      : s.adherence >= 40
-                        ? "bg-amber-500"
-                        : "bg-red-500",
-                  )}
-                  style={{ width: `${Math.min(100, s.adherence)}%` }}
-                />
-              </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       </Card>
     </div>
@@ -815,9 +1100,11 @@ function ChecklistAdherence({ items }: { items: any[] }) {
 
 function RuleViolations({
   items,
+  totalTrades,
   onSelectRule,
 }: {
   items: any[];
+  totalTrades: number;
   onSelectRule: (ruleKey: string) => void;
 }) {
   if (items.length === 0) {
@@ -830,22 +1117,26 @@ function RuleViolations({
     );
   }
 
-  const sorted = [...items].sort((a, b) => (b.trades ?? 0) - (a.trades ?? 0));
-  const maxCount = Math.max(...sorted.map((s) => s.trades ?? 0), 1);
+  const sorted = [...items].sort((a, b) => (b.trades ?? b.occurrences ?? 0) - (a.trades ?? a.occurrences ?? 0));
+  const maxCount = Math.max(...sorted.map((s) => s.trades ?? s.occurrences ?? 0), 1);
 
   return (
     <div className="space-y-6">
       <Card>
         <div className="flex items-center justify-between">
-          <SectionHeading>Most-Violated Rules</SectionHeading>
-          <span className="text-[10px] uppercase font-mono text-muted-foreground">Click card to filter trades</span>
+          <SectionHeading>Behavior Flag Association &amp; Historical Performance</SectionHeading>
+          <span className="text-[10px] uppercase font-mono text-muted-foreground">Click card to inspect trades</span>
         </div>
         <p className="text-xs text-muted-foreground mt-1">
-          Behavior flags recorded on your trades, ranked by frequency. Each flag represents a rule break that impacted the trade's outcome.
+          Historical performance of trades associated with recorded behavior flags. Shows correlation and frequency across recorded trades without implying unverified causation.
         </p>
+
         <div className="space-y-3 mt-4">
           {sorted.map((s, i) => {
             const avgR = s.avgR ? dToNumber(s.avgR) : 0;
+            const netPnl = s.netPnlCents ?? s.pnlCents ?? 0;
+            const pctOfTrades = s.percentageOfTrades ?? (totalTrades > 0 ? Math.round(((s.trades ?? 0) / totalTrades) * 1000) / 10 : 0);
+
             return (
               <div
                 key={i}
@@ -854,32 +1145,40 @@ function RuleViolations({
               >
                 <div className="flex items-start justify-between gap-3">
                   <div className="flex items-start gap-3 min-w-0">
-                    <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-red-50 border border-red-200">
-                      <XCircle className="h-4 w-4 text-loss" />
+                    <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-red-500/10 border border-red-500/20 text-loss">
+                      <XCircle className="h-4 w-4" />
                     </div>
                     <div className="min-w-0">
                       <div className="text-sm font-semibold text-foreground">
                         {s.label}
                       </div>
-                      <div className="text-xs text-muted-foreground mt-0.5">
-                        {s.trades} trade{s.trades === 1 ? "" : "s"} affected
-                        {" · "}
-                        <span className={cn("font-medium", avgR > 0 ? "text-profit" : "text-loss")}>
-                          {formatR(s.avgR)}
+                      <div className="text-xs text-muted-foreground mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5">
+                        <span className="font-mono text-foreground">{s.trades} trades affected ({pctOfTrades}% of journal)</span>
+                        <span>·</span>
+                        <span className="font-mono">Win Rate: {formatPct(s.winRate)}</span>
+                        <span>·</span>
+                        <span className={cn("font-mono font-medium", avgR > 0 ? "text-profit" : avgR < 0 ? "text-loss" : "text-foreground")}>
+                          Avg R: {formatR(s.avgR)}
                         </span>
-                        {" · "}
-                        <span className={cn("font-medium", s.pnlCents >= 0 ? "text-profit" : "text-loss")}>
-                          {formatSignedCents(s.pnlCents).text}
+                        <span>·</span>
+                        <span className={cn("font-mono font-semibold", netPnl >= 0 ? "text-profit" : "text-loss")}>
+                          Net P&amp;L: {formatSignedCents(netPnl).text}
                         </span>
+                        {s.expectancyR && (
+                          <>
+                            <span>·</span>
+                            <span className="font-mono">Expectancy: {formatR(s.expectancyR)}</span>
+                          </>
+                        )}
                       </div>
                     </div>
                   </div>
                   <div className="text-right shrink-0">
                     <div className="text-[10px] uppercase tracking-wide text-muted-foreground font-semibold">
-                      Frequency
+                      Occurrences
                     </div>
-                    <div className="text-lg font-bold tabular-nums text-foreground">
-                      {s.trades}
+                    <div className="text-lg font-bold tabular-nums text-foreground font-mono">
+                      {s.occurrences ?? s.trades}
                     </div>
                   </div>
                 </div>
@@ -907,14 +1206,22 @@ function SessionsWeekdays({
   sessionItems,
   weekday,
   hour,
+  entryHour,
+  realizationHour,
+  onSelectSession,
 }: {
   sessionItems: any[];
   weekday: any[];
   hour: any[];
+  entryHour?: any[];
+  realizationHour?: any[];
+  onSelectSession?: (session: string) => void;
 }) {
+  const [hourMode, setHourMode] = useState<"entry" | "realization">("entry");
+  const activeHourData = (hourMode === "entry" ? (entryHour || hour) : (realizationHour || hour)) ?? [];
   const hasSession = sessionItems.length > 0;
   const hasWeekday = weekday.length > 0;
-  const hasHour = hour.length > 0;
+  const hasHour = activeHourData.length > 0;
 
   if (!hasSession && !hasWeekday && !hasHour) {
     return <NoDataState message="No session or weekday data yet. Trades with an entry time and session will populate this view." />;
@@ -935,7 +1242,7 @@ function SessionsWeekdays({
                 }))}
                 valueLabel="Avg R"
               />
-              <SessionsTable items={sessionItems} />
+              <SessionsTable items={sessionItems} onSelectSession={onSelectSession} />
             </div>
           ) : (
             <EmptyChart />
@@ -963,18 +1270,52 @@ function SessionsWeekdays({
       </div>
 
       <Card>
-        <SectionHeading icon={Clock}>By Hour (User Timezone)</SectionHeading>
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+          <div>
+            <SectionHeading icon={Clock}>By Hour (User Timezone)</SectionHeading>
+            <p className="text-xs text-muted-foreground mt-0.5">
+              {hourMode === "entry"
+                ? "Performance grouped by setup entry hour (evaluating entry execution timing edge)."
+                : "Realized P&L grouped by position exit hour (evaluating cash realization timing)."}
+            </p>
+          </div>
+          <div className="flex items-center gap-1 bg-muted/60 p-0.5 rounded-lg border border-border text-xs shrink-0 self-start sm:self-auto">
+            <button
+              onClick={() => setHourMode("entry")}
+              className={cn(
+                "px-2.5 py-1 rounded-md transition-colors font-medium cursor-pointer",
+                hourMode === "entry"
+                  ? "bg-background text-foreground shadow-xs"
+                  : "text-muted-foreground hover:text-foreground"
+              )}
+            >
+              Entry Hour (Edge)
+            </button>
+            <button
+              onClick={() => setHourMode("realization")}
+              className={cn(
+                "px-2.5 py-1 rounded-md transition-colors font-medium cursor-pointer",
+                hourMode === "realization"
+                  ? "bg-background text-foreground shadow-xs"
+                  : "text-muted-foreground hover:text-foreground"
+              )}
+            >
+              Exit Hour (Realization)
+            </button>
+          </div>
+        </div>
+
         {hasHour ? (
           <div className="mt-4 space-y-2">
             <GroupBarChart
-              data={hour.map((h) => ({
+              data={activeHourData.map((h: any) => ({
                 label: h.label,
                 value: dToNumber(h.items?.avgR),
                 count: h.items?.totalTrades ?? 0,
               }))}
               valueLabel="Avg R"
             />
-            <HourTable items={hour} />
+            <HourTable items={activeHourData} />
           </div>
         ) : (
           <EmptyChart />
@@ -984,7 +1325,13 @@ function SessionsWeekdays({
   );
 }
 
-function SessionsTable({ items }: { items: any[] }) {
+function SessionsTable({
+  items,
+  onSelectSession,
+}: {
+  items: any[];
+  onSelectSession?: (session: string) => void;
+}) {
   return (
     <div className="overflow-x-auto -mx-2">
       <table className="w-full text-sm">
@@ -1001,7 +1348,14 @@ function SessionsTable({ items }: { items: any[] }) {
           {items.map((s, i) => {
             const avgR = s.avgR ? dToNumber(s.avgR) : 0;
             return (
-              <tr key={i} className="border-b border-border last:border-0">
+              <tr
+                key={i}
+                onClick={() => onSelectSession?.(s.key)}
+                className={cn(
+                  "border-b border-border last:border-0",
+                  onSelectSession && "hover:bg-muted/40 cursor-pointer transition-colors"
+                )}
+              >
                 <td className="px-3 py-2 font-medium text-foreground">{s.label}</td>
                 <td className="px-3 py-2 text-right tabular-nums text-foreground">{s.trades}</td>
                 <td className="px-3 py-2 text-right tabular-nums text-foreground">
@@ -1049,6 +1403,7 @@ function WeekdayTable({ items }: { items: any[] }) {
           {items.map((w, i) => {
             const m = w.items ?? {};
             const avgR = m.avgR ? dToNumber(m.avgR) : 0;
+            const netPnl = w.netPnlCents ?? w.pnlCents ?? m.netPnlCents ?? m.pnlCents ?? 0;
             return (
               <tr key={i} className="border-b border-border last:border-0">
                 <td className="px-3 py-2 font-medium text-foreground">{w.label}</td>
@@ -1067,10 +1422,10 @@ function WeekdayTable({ items }: { items: any[] }) {
                 <td
                   className={cn(
                     "px-3 py-2 text-right tabular-nums font-medium",
-                    m.pnlCents > 0 ? "text-profit" : m.pnlCents < 0 ? "text-loss" : "text-foreground",
+                    netPnl > 0 ? "text-profit" : netPnl < 0 ? "text-loss" : "text-foreground",
                   )}
                 >
-                  {formatSignedCents(m.pnlCents).text}
+                  {formatSignedCents(netPnl).text}
                 </td>
               </tr>
             );
@@ -1098,6 +1453,7 @@ function HourTable({ items }: { items: any[] }) {
           {items.map((h, i) => {
             const m = h.items ?? {};
             const avgR = m.avgR ? dToNumber(m.avgR) : 0;
+            const netPnl = h.netPnlCents ?? h.pnlCents ?? m.netPnlCents ?? m.pnlCents ?? 0;
             return (
               <tr key={i} className="border-b border-border last:border-0">
                 <td className="px-3 py-2 font-medium text-foreground tabular-nums">{h.label}</td>
@@ -1116,10 +1472,10 @@ function HourTable({ items }: { items: any[] }) {
                 <td
                   className={cn(
                     "px-3 py-2 text-right tabular-nums font-medium",
-                    m.pnlCents > 0 ? "text-profit" : m.pnlCents < 0 ? "text-loss" : "text-foreground",
+                    netPnl > 0 ? "text-profit" : netPnl < 0 ? "text-loss" : "text-foreground",
                   )}
                 >
-                  {formatSignedCents(m.pnlCents).text}
+                  {formatSignedCents(netPnl).text}
                 </td>
               </tr>
             );

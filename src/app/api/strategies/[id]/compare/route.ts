@@ -156,6 +156,75 @@ export async function GET(
   const v1Adherence = calcAdherence(v1TradesRaw);
   const v2Adherence = calcAdherence(v2TradesRaw);
 
+  // Holding time in minutes
+  const calcAvgHoldMinutes = (trades: any[]): number | null => {
+    const valid = trades.filter((t) => t.entryTime && t.exitTime);
+    if (valid.length === 0) return null;
+    let sum = 0;
+    for (const t of valid) {
+      sum += Math.abs(new Date(t.exitTime).getTime() - new Date(t.entryTime).getTime()) / 60000;
+    }
+    return Math.round(sum / valid.length);
+  };
+
+  const v1HoldMins = calcAvgHoldMinutes(v1TradesRaw);
+  const v2HoldMins = calcAvgHoldMinutes(v2TradesRaw);
+
+  // Direction performance breakdown
+  const calcDirectionPerformance = (trades: any[]) => {
+    const calcSide = (sideTrades: any[]) => {
+      const closed = sideTrades.filter((t) => !t.isDraft && t.status !== "planned" && t.status !== "open");
+      const wins = closed.filter((t) => (t.netPnlCents ?? 0) > 0).length;
+      const losses = closed.filter((t) => (t.netPnlCents ?? 0) < 0).length;
+      const total = wins + losses;
+      const netPnlCents = closed.reduce((acc, t) => acc + (t.netPnlCents ?? 0), 0);
+      return {
+        trades: closed.length,
+        wins,
+        losses,
+        winRatePct: total > 0 ? Math.round((wins / total) * 100) : null,
+        netPnlCents,
+      };
+    };
+    return {
+      long: calcSide(trades.filter((t) => t.direction === "long" || t.direction === "BUY")),
+      short: calcSide(trades.filter((t) => t.direction === "short" || t.direction === "SELL")),
+    };
+  };
+
+  const v1Direction = calcDirectionPerformance(v1TradesRaw);
+  const v2Direction = calcDirectionPerformance(v2TradesRaw);
+
+  // Instrument performance breakdown
+  const calcInstrumentPerformance = (trades: any[]) => {
+    const symMap = new Map<string, { trades: number; wins: number; totalDecisive: number; netPnlCents: number }>();
+    for (const t of trades) {
+      if (t.isDraft || t.status === "planned" || t.status === "open") continue;
+      const sym = t.instrumentSymbol || "Unknown";
+      const cur = symMap.get(sym) ?? { trades: 0, wins: 0, totalDecisive: 0, netPnlCents: 0 };
+      cur.trades++;
+      cur.netPnlCents += t.netPnlCents ?? 0;
+      if ((t.netPnlCents ?? 0) > 0) {
+        cur.wins++;
+        cur.totalDecisive++;
+      } else if ((t.netPnlCents ?? 0) < 0) {
+        cur.totalDecisive++;
+      }
+      symMap.set(sym, cur);
+    }
+    return [...symMap.entries()]
+      .map(([symbol, stat]) => ({
+        symbol,
+        trades: stat.trades,
+        winRatePct: stat.totalDecisive > 0 ? Math.round((stat.wins / stat.totalDecisive) * 100) : null,
+        netPnlCents: stat.netPnlCents,
+      }))
+      .sort((a, b) => b.trades - a.trades);
+  };
+
+  const v1Instruments = calcInstrumentPerformance(v1TradesRaw);
+  const v2Instruments = calcInstrumentPerformance(v2TradesRaw);
+
   // Parse rules
   const v1Rules = parseChecklistRules(v1.rulesJson);
   const v2Rules = parseChecklistRules(v2.rulesJson);
@@ -185,6 +254,17 @@ export async function GET(
   const deltaExpectancyCents = (v2Metrics.expectancyCents ?? 0) - (v1Metrics.expectancyCents ?? 0);
   const deltaAdherence = v1Adherence !== null && v2Adherence !== null ? v2Adherence - v1Adherence : null;
 
+  const deltaAvgWinCents =
+    v2Metrics.avgWinCents != null && v1Metrics.avgWinCents != null
+      ? v2Metrics.avgWinCents - v1Metrics.avgWinCents
+      : null;
+  const deltaAvgLossCents =
+    v2Metrics.avgLossCents != null && v1Metrics.avgLossCents != null
+      ? v2Metrics.avgLossCents - v1Metrics.avgLossCents
+      : null;
+  const deltaHoldMins =
+    v2HoldMins != null && v1HoldMins != null ? v2HoldMins - v1HoldMins : null;
+
   return ok({
     strategy: {
       id: strategy.id,
@@ -200,6 +280,9 @@ export async function GET(
       rules: v1Rules,
       metrics: v1Metrics,
       checklistAdherencePct: v1Adherence,
+      avgHoldingMinutes: v1HoldMins,
+      directionPerformance: v1Direction,
+      instrumentPerformance: v1Instruments,
       isLowSample: v1TradesRaw.length < 20,
     },
     version2: {
@@ -211,6 +294,9 @@ export async function GET(
       rules: v2Rules,
       metrics: v2Metrics,
       checklistAdherencePct: v2Adherence,
+      avgHoldingMinutes: v2HoldMins,
+      directionPerformance: v2Direction,
+      instrumentPerformance: v2Instruments,
       isLowSample: v2TradesRaw.length < 20,
     },
     ruleDiff: {
@@ -226,6 +312,9 @@ export async function GET(
       avgR: deltaAvgR,
       expectancyCents: deltaExpectancyCents,
       checklistAdherencePct: deltaAdherence,
+      avgWinCents: deltaAvgWinCents,
+      avgLossCents: deltaAvgLossCents,
+      avgHoldingMinutes: deltaHoldMins,
     },
   });
 }

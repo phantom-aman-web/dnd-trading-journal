@@ -2,7 +2,12 @@ import { NextRequest } from "next/server";
 import { db } from "@/lib/db";
 import { requireUser } from "@/lib/auth";
 import { ok, bad, notFound, toApiError, parseJson } from "@/lib/api";
-import { evaluatePropChallenge, type TradeForChallenge } from "@/lib/prop-firm-engine";
+import {
+  evaluatePropChallenge,
+  parseChallengeMetadata,
+  serializeChallengeMetadata,
+  type TradeForChallenge,
+} from "@/lib/prop-firm-engine";
 
 export async function GET(
   req: NextRequest,
@@ -43,9 +48,14 @@ export async function GET(
     },
   });
 
+  const meta = parseChallengeMetadata(challenge.notes, challenge.account?.consistencyRate);
+
   const metrics = evaluatePropChallenge(
     {
       ...challenge,
+      consistencyRuleType: meta.consistencyRuleType,
+      consistencyThresholdPct: meta.consistencyThresholdPct,
+      consistencyAction: meta.consistencyAction,
       startDate: challenge.startDate,
       endDate: challenge.endDate,
     },
@@ -54,6 +64,7 @@ export async function GET(
 
   return ok({
     ...challenge,
+    userNotes: meta.userNotes,
     metrics,
   });
 }
@@ -72,6 +83,7 @@ export async function PATCH(
   const { id } = await params;
   const existing = await db.propChallenge.findUnique({
     where: { id },
+    include: { account: true },
   });
 
   if (!existing || existing.userId !== user.id) {
@@ -97,7 +109,6 @@ export async function PATCH(
     "maxTradingDays",
     "resetTimezone",
     "resetHour",
-    "notes",
   ];
 
   const data: any = {};
@@ -109,6 +120,24 @@ export async function PATCH(
 
   if (body.endDate !== undefined) {
     data.endDate = body.endDate ? new Date(body.endDate) : null;
+  }
+
+  if (
+    body.notes !== undefined ||
+    body.consistencyRuleType !== undefined ||
+    body.consistencyThresholdPct !== undefined ||
+    body.consistencyAction !== undefined
+  ) {
+    data.notes = serializeChallengeMetadata(
+      {
+        userNotes: body.notes !== undefined ? body.notes : undefined,
+        consistencyRuleType: body.consistencyRuleType,
+        consistencyThresholdPct: body.consistencyThresholdPct,
+        consistencyAction: body.consistencyAction,
+      },
+      existing.notes,
+      existing.account?.consistencyRate
+    );
   }
 
   const updated = await db.propChallenge.update({

@@ -21,10 +21,103 @@ export interface PropChallengeConfig {
   trailingHighWaterMarkCents?: number | null;
   minTradingDays?: number | null;
   maxTradingDays?: number | null;
+  consistencyRuleType?: "single_day_max" | "daily_pnl_consistency" | "none";
+  consistencyThresholdPct?: number | null; // e.g. 50 (max 50% profit from single day)
+  consistencyAction?: ConsistencyAction;
   resetTimezone?: string; // e.g. "America/New_York", "UTC", "Europe/London"
   resetHour?: number; // 0-23, e.g. 17 for 5:00 PM New York
   startDate: string | Date;
   endDate?: string | Date | null;
+}
+
+export type ConsistencyAction =
+  | "warning"
+  | "dilution_required"
+  | "payout_restricted"
+  | "hard_breach"
+  | "soft_rule"; // backward compatible alias for dilution_required
+
+export interface ChallengeMetadata {
+  userNotes: string;
+  consistencyRuleType: "single_day_max" | "daily_pnl_consistency" | "none";
+  consistencyThresholdPct: number | null;
+  consistencyAction: ConsistencyAction;
+}
+
+export function parseChallengeMetadata(
+  rawNotes: string | null | undefined,
+  accountConsistencyRate?: number | null,
+): ChallengeMetadata {
+  const fallback: ChallengeMetadata = {
+    userNotes: "",
+    consistencyRuleType: accountConsistencyRate ? "single_day_max" : "none",
+    consistencyThresholdPct: accountConsistencyRate ? Math.round(accountConsistencyRate * 100) : null,
+    consistencyAction: "soft_rule",
+  };
+
+  if (!rawNotes || typeof rawNotes !== "string") {
+    return fallback;
+  }
+
+  const trimmed = rawNotes.trim();
+  if (trimmed.startsWith("{") && trimmed.endsWith("}")) {
+    try {
+      const parsed = JSON.parse(trimmed);
+      if (typeof parsed === "object" && parsed !== null) {
+        let action: ConsistencyAction = "soft_rule";
+        if (
+          parsed.consistencyAction === "warning" ||
+          parsed.consistencyAction === "dilution_required" ||
+          parsed.consistencyAction === "payout_restricted" ||
+          parsed.consistencyAction === "hard_breach" ||
+          parsed.consistencyAction === "soft_rule"
+        ) {
+          action = parsed.consistencyAction;
+        }
+
+        return {
+          userNotes: typeof parsed.userNotes === "string" ? parsed.userNotes : "",
+          consistencyRuleType:
+            parsed.consistencyRuleType === "single_day_max" ||
+            parsed.consistencyRuleType === "daily_pnl_consistency" ||
+            parsed.consistencyRuleType === "none"
+              ? parsed.consistencyRuleType
+              : fallback.consistencyRuleType,
+          consistencyThresholdPct:
+            parsed.consistencyThresholdPct != null && !isNaN(Number(parsed.consistencyThresholdPct))
+              ? Number(parsed.consistencyThresholdPct)
+              : fallback.consistencyThresholdPct,
+          consistencyAction: action,
+        };
+      }
+    } catch {
+      return { ...fallback, userNotes: trimmed };
+    }
+  }
+
+  return { ...fallback, userNotes: trimmed };
+}
+
+export function serializeChallengeMetadata(
+  meta: Partial<ChallengeMetadata>,
+  existingRaw?: string | null,
+  accountConsistencyRate?: number | null,
+): string {
+  const current = parseChallengeMetadata(existingRaw, accountConsistencyRate);
+  const updated: ChallengeMetadata = {
+    userNotes: meta.userNotes !== undefined ? meta.userNotes : current.userNotes,
+    consistencyRuleType: meta.consistencyRuleType !== undefined ? meta.consistencyRuleType : current.consistencyRuleType,
+    consistencyThresholdPct: meta.consistencyThresholdPct !== undefined ? meta.consistencyThresholdPct : current.consistencyThresholdPct,
+    consistencyAction: meta.consistencyAction !== undefined ? meta.consistencyAction : current.consistencyAction,
+  };
+
+  return JSON.stringify({
+    __format: "alphapips_challenge_meta_v1",
+    userNotes: updated.userNotes,
+    consistencyRuleType: updated.consistencyRuleType,
+    consistencyThresholdPct: updated.consistencyThresholdPct,
+    consistencyAction: updated.consistencyAction,
+  });
 }
 
 export interface TradeForChallenge {
@@ -48,6 +141,7 @@ export interface PropChallengeMetrics {
   dailyLossLimitCents: number | null;
   todayPnlCents: number;
   todayLossCents: number;
+  remainingDailyLossCents: number | null;
   dailyLossUsedPct: number | null;
   dailyLossBreached: boolean;
   cycleResetTime: string;
@@ -57,6 +151,7 @@ export interface PropChallengeMetrics {
   drawdownType: "static" | "trailing";
   highWaterMarkCents: number;
   currentDrawdownCents: number;
+  remainingDrawdownCents: number | null;
   drawdownUsedPct: number | null;
   drawdownBreached: boolean;
 
@@ -65,9 +160,14 @@ export interface PropChallengeMetrics {
   tradingDaysCount: number;
   minDaysMet: boolean;
 
-  // Consistency (single day max profit rule)
+  // Consistency (single day max profit rule or custom)
+  consistencyRuleType: "single_day_max" | "daily_pnl_consistency" | "none";
+  consistencyThresholdPct: number | null;
+  consistencyAction: ConsistencyAction;
   bestDayProfitCents: number;
   bestDayPctOfTotal: number | null;
+  consistencyBreached: boolean;
+  consistencyStatus: "satisfied" | "at_risk" | "breached" | "unconfigured";
 
   // Aggregate Status
   status: "safe" | "approaching_limit" | "at_risk" | "breached" | "passed";
@@ -228,7 +328,10 @@ export function evaluatePropChallenge(
   const minTradingDays = config.minTradingDays ?? null;
   const minDaysMet = minTradingDays ? tradingDaysCount >= minTradingDays : true;
 
-  // Consistency Metric (Single-day profit dominance)
+  // Consistency Metric (Single-day profit dominance or configured rule)
+  const consistencyRuleType = config.consistencyRuleType ?? (config.consistencyThresholdPct ? "single_day_max" : "none");
+  const consistencyThresholdPct = config.consistencyThresholdPct ?? null;
+
   let bestDayProfitCents = 0;
   for (const dayPnl of dailyPnlMap.values()) {
     if (dayPnl > bestDayProfitCents) {
@@ -241,6 +344,26 @@ export function evaluatePropChallenge(
     bestDayPctOfTotal = Math.round((bestDayProfitCents / netProfitCents) * 100);
   }
 
+  let consistencyBreached = false;
+  let consistencyStatus: "satisfied" | "at_risk" | "breached" | "unconfigured" = "unconfigured";
+
+  if (consistencyRuleType !== "none" && consistencyThresholdPct != null && consistencyThresholdPct > 0) {
+    if (bestDayPctOfTotal !== null) {
+      if (bestDayPctOfTotal > consistencyThresholdPct) {
+        consistencyBreached = true;
+        consistencyStatus = "breached";
+      } else if (bestDayPctOfTotal >= consistencyThresholdPct * 0.85) {
+        consistencyStatus = "at_risk";
+      } else {
+        consistencyStatus = "satisfied";
+      }
+    } else {
+      consistencyStatus = "satisfied";
+    }
+  }
+
+  const consistencyAction = config.consistencyAction ?? "dilution_required";
+
   // Determine Overall Status
   let status: "safe" | "approaching_limit" | "at_risk" | "breached" | "passed" = "safe";
   let statusReason = "All challenge parameters within normal boundaries.";
@@ -251,22 +374,55 @@ export function evaluatePropChallenge(
   } else if (drawdownBreached) {
     status = "breached";
     statusReason = `Maximum ${drawdownType} drawdown limit of $${((maxDrawdownLimitCents || 0) / 100).toFixed(2)} was breached.`;
+  } else if (consistencyBreached && consistencyAction === "hard_breach") {
+    status = "breached";
+    statusReason = `Consistency rule hard breach: single-day profit made up ${bestDayPctOfTotal}% of total profit (exceeded ${consistencyThresholdPct}% limit). Challenge failed.`;
+  } else if (profitTargetReached && minDaysMet) {
+    if (consistencyBreached) {
+      if (consistencyAction === "warning") {
+        status = "passed";
+        statusReason = `Target profit achieved, minimum trading days fulfilled. (Note: Single-day profit concentration was ${bestDayPctOfTotal}% vs ${consistencyThresholdPct}% informational limit).`;
+      } else if (consistencyAction === "payout_restricted") {
+        status = "at_risk";
+        statusReason = `Profit target achieved, but passing and payout eligibility restricted due to profit concentration (${bestDayPctOfTotal}% vs ${consistencyThresholdPct}% limit).`;
+      } else {
+        // dilution_required / soft_rule
+        status = "at_risk";
+        statusReason = `Profit target achieved, but single-day profit (${bestDayPctOfTotal}%) exceeds consistency limit (${consistencyThresholdPct}%). Dilution required: continue trading on subsequent days to dilute and satisfy consistency.`;
+      }
+    } else {
+      status = "passed";
+      statusReason = "Target profit achieved, minimum trading days fulfilled, and rules respected.";
+    }
+  } else if (consistencyBreached) {
+    if (consistencyAction === "warning") {
+      status = "safe";
+      statusReason = `Parameters within normal boundaries. Note: Single-day profit reached ${bestDayPctOfTotal}% of total (informational warning).`;
+    } else {
+      status = "at_risk";
+      statusReason = `Single-day profit makes up ${bestDayPctOfTotal}% of total profit (exceeds ${consistencyThresholdPct}% consistency limit). Additional trading days required to dilute best day.`;
+    }
   } else if (
     (dailyLossUsedPct !== null && dailyLossUsedPct >= 90) ||
-    (drawdownUsedPct !== null && drawdownUsedPct >= 90)
+    (drawdownUsedPct !== null && drawdownUsedPct >= 90) ||
+    consistencyStatus === "at_risk"
   ) {
     status = "at_risk";
-    statusReason = "Critical: Within 10% of maximum loss or drawdown boundary.";
+    statusReason = consistencyStatus === "at_risk"
+      ? `Approaching consistency limit: single-day profit is ${bestDayPctOfTotal}% (threshold: ${consistencyThresholdPct}%).`
+      : "Critical: Within 10% of maximum loss or drawdown boundary.";
   } else if (
     (dailyLossUsedPct !== null && dailyLossUsedPct >= 75) ||
     (drawdownUsedPct !== null && drawdownUsedPct >= 75)
   ) {
     status = "approaching_limit";
     statusReason = "Caution: More than 75% of allowable risk buffer consumed.";
-  } else if (profitTargetReached && minDaysMet) {
-    status = "passed";
-    statusReason = "Target profit achieved and minimum trading days fulfilled.";
   }
+
+  const remainingDailyLossCents =
+    dailyLossLimitCents !== null ? Math.max(0, dailyLossLimitCents - todayLossCents) : null;
+  const remainingDrawdownCents =
+    maxDrawdownLimitCents !== null ? Math.max(0, maxDrawdownLimitCents - currentDrawdownCents) : null;
 
   return {
     startingBalanceCents,
@@ -278,6 +434,7 @@ export function evaluatePropChallenge(
     dailyLossLimitCents,
     todayPnlCents,
     todayLossCents,
+    remainingDailyLossCents,
     dailyLossUsedPct,
     dailyLossBreached,
     cycleResetTime: `${String(resetHour).padStart(2, "0")}:00 ${timezone}`,
@@ -285,13 +442,19 @@ export function evaluatePropChallenge(
     drawdownType,
     highWaterMarkCents,
     currentDrawdownCents,
+    remainingDrawdownCents,
     drawdownUsedPct,
     drawdownBreached,
     minTradingDays,
     tradingDaysCount,
     minDaysMet,
+    consistencyRuleType,
+    consistencyThresholdPct,
+    consistencyAction,
     bestDayProfitCents,
     bestDayPctOfTotal,
+    consistencyBreached,
+    consistencyStatus,
     status,
     statusReason,
   };

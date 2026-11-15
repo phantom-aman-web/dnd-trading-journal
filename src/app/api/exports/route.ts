@@ -55,7 +55,7 @@ export async function GET(req: NextRequest) {
         status: 200,
         headers: {
           "Content-Type": "text/csv; charset=utf-8",
-          "Content-Disposition": `attachment; filename="dnd-trades-${Date.now()}.csv"`,
+          "Content-Disposition": `attachment; filename="alphapips-trades-${Date.now()}.csv"`,
         },
       });
     }

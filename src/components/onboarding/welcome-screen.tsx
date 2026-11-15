@@ -45,9 +45,9 @@ export function WelcomeScreen() {
           {/* Brand mark */}
           <div className="flex items-center gap-2 mb-5">
             <div className="h-10 w-10 rounded-full bg-primary flex items-center justify-center text-primary-foreground font-bold text-lg">
-              D
+              α
             </div>
-            <span className="font-semibold tracking-tight text-xl">DnD</span>
+            <span className="font-semibold tracking-tight text-xl">AlphaPips</span>
           </div>
 
           <h1 id="welcome-title" className="text-2xl md:text-3xl font-semibold tracking-tight">
@@ -61,7 +61,7 @@ export function WelcomeScreen() {
           </p>
 
           <p className="mt-4 text-sm text-muted-foreground leading-relaxed">
-            A few quick steps will personalize DnD around how you trade.
+            A few quick steps will personalize AlphaPips around how you trade.
           </p>
         </div>
 

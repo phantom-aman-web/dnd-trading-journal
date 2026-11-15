@@ -41,7 +41,7 @@ const TOUR_STEPS: TourStepDef[] = [
   {
     title: "Instrument Selection",
     description:
-      "Choose your market. DnD uses the instrument definition for the correct pricing and risk behavior.",
+      "Choose your market. AlphaPips uses the instrument definition for the correct pricing and risk behavior.",
   },
   {
     title: "Strategy + Checklist",
@@ -423,10 +423,10 @@ export function TourCompletion() {
             <Check className="h-6 w-6" />
           </div>
           <h3 id="tour-done-title" className="text-xl font-semibold tracking-tight">
-            You are ready to trade with DnD
+            You are ready to trade with AlphaPips
           </h3>
           <p className="mt-2 text-sm text-muted-foreground">
-            The DnD workflow connects every part of your trading:
+            The AlphaPips workflow connects every part of your trading:
           </p>
           <div className="mt-4 flex flex-wrap items-center justify-center gap-1.5">
             {WORKFLOW.map((w, i) => (

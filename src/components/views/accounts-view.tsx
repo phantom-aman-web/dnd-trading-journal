@@ -20,7 +20,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Plus, PencilLine, Trash2, Wallet, Loader2, AlertTriangle, ShieldAlert } from "lucide-react";
+import { Plus, PencilLine, Trash2, Wallet, Loader2, AlertTriangle, ShieldAlert, Trophy, Info, Archive } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { formatSignedCents } from "@/lib/money";
@@ -118,6 +118,7 @@ async function fetchTrades(): Promise<TradeRow[]> {
 export function AccountsView() {
   const qc = useQueryClient();
   const { user } = useAuth();
+  const navigate = useNavStore((s) => s.navigate);
   const selectedAccountId = useNavStore((s) => s.selectedAccountId);
   const setSelectedAccountId = useNavStore((s) => s.setSelectedAccountId);
   const { data: accountsData, isLoading } = useQuery({
@@ -128,6 +129,15 @@ export function AccountsView() {
   const { data: tradesData } = useQuery({
     queryKey: ["trades", { log: true }],
     queryFn: fetchTrades,
+  });
+  const { data: propChallengesData = [] } = useQuery({
+    queryKey: ["prop-challenges"],
+    queryFn: async () => {
+      const res = await fetch("/api/prop-challenges", { cache: "no-store" });
+      if (!res.ok) return [];
+      const json = await res.json();
+      return json.items ?? [];
+    },
   });
 
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -214,11 +224,22 @@ export function AccountsView() {
             Manage your trading accounts, balances, and risk limits.
           </p>
         </div>
-        <div className="sm:ml-auto">
-          <Button onClick={openCreate}>
+        <div className="sm:ml-auto flex items-center gap-2">
+          <Button variant="outline" onClick={() => navigate("archived")} className="gap-1.5 text-xs h-9">
+            <Archive className="h-4 w-4 text-muted-foreground" /> Archived Accounts
+          </Button>
+          <Button onClick={openCreate} className="gap-1.5 text-xs h-9">
             <Plus className="h-4 w-4" /> Add Account
           </Button>
         </div>
+      </div>
+
+      {/* Financial Source Transparency Notice */}
+      <div className="flex items-center gap-2.5 p-3 rounded-lg border border-border/70 bg-muted/20 text-xs text-muted-foreground">
+        <Info className="h-4 w-4 text-primary shrink-0" />
+        <span>
+          <strong className="text-foreground">Source Disclosure:</strong> Account balances reflect initial capital plus realized net P&amp;L from closed trade executions. Floating equity and open position mark-to-market reflect active trades or broker sync.
+        </span>
       </div>
 
       {/* Aggregate summary */}
@@ -339,6 +360,37 @@ export function AccountsView() {
                           Default
                         </span>
                       )}
+                      {(() => {
+                        const linkedChallenge = (propChallengesData as any[]).find(
+                          (c: any) => c.accountId === a.id || c.account?.id === a.id
+                        );
+                        if (linkedChallenge) {
+                          return (
+                            <button
+                              type="button"
+                              onClick={() => navigate("propChallenges")}
+                              className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-semibold bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20 hover:bg-amber-500/20 transition-colors"
+                              title="View linked prop challenge"
+                            >
+                              <Trophy className="h-3 w-3" />
+                              <span>{linkedChallenge.propFirm} · {linkedChallenge.stage}</span>
+                            </button>
+                          );
+                        }
+                        if (a.accountType === "prop" || a.accountType === "funded") {
+                          return (
+                            <button
+                              type="button"
+                              onClick={() => navigate("propChallenges")}
+                              className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] text-muted-foreground border border-dashed border-border hover:border-primary hover:text-primary transition-colors"
+                              title="Connect prop firm challenge tracker"
+                            >
+                              <Plus className="h-2.5 w-2.5" /> Track Challenge
+                            </button>
+                          );
+                        }
+                        return null;
+                      })()}
                     </div>
                     <h3 className="font-bold text-foreground truncate">{a.name}</h3>
                     <p className="text-xs text-muted-foreground truncate">

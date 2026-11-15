@@ -99,17 +99,52 @@ export const DEFAULT_ICT_FIELDS: StrategyCustomField[] = [
   },
 ];
 
+export const GENERAL_TRADE_FIELDS: StrategyCustomField[] = [
+  {
+    id: "marketCondition",
+    name: "Market Condition",
+    description: "Overall market regime (Trending, Range, Volatile)",
+    type: "select",
+    options: ["Trending Up", "Trending Down", "Consolidation / Range", "High Volatility", "Choppy"],
+    order: 0,
+    enabled: true,
+  },
+  {
+    id: "primaryTimeframe",
+    name: "Primary Timeframe",
+    description: "Main chart timeframe used for execution",
+    type: "select",
+    options: ["1m", "5m", "15m", "1h", "4h", "Daily"],
+    order: 1,
+    enabled: true,
+  },
+  {
+    id: "keyConfluence",
+    name: "Key Confluences",
+    description: "Key technical or macro factors supporting this setup",
+    type: "text",
+    order: 2,
+    enabled: true,
+  },
+];
+
 /**
  * Extracts custom trade fields from a StrategyVersion's rulesJson.
- * Falls back to default ICT fields if none are defined.
+ * If hasStrategySelected is false, returns GENERAL_TRADE_FIELDS to avoid forcing ICT fields.
+ * If a strategy is selected, returns the strategy's defined customFields.
  */
 export function extractCustomFields(
   rulesJson: string | null | undefined,
-  fallbackToDefault = true
+  hasStrategySelected = true
 ): StrategyCustomField[] {
-  if (!rulesJson) {
-    return fallbackToDefault ? DEFAULT_ICT_FIELDS : [];
+  if (!hasStrategySelected) {
+    return GENERAL_TRADE_FIELDS;
   }
+
+  if (!rulesJson) {
+    return [];
+  }
+
   try {
     const parsed = JSON.parse(rulesJson);
     if (parsed && typeof parsed === "object") {
@@ -122,7 +157,7 @@ export function extractCustomFields(
     }
   } catch {}
 
-  return fallbackToDefault ? DEFAULT_ICT_FIELDS : [];
+  return [];
 }
 
 /**

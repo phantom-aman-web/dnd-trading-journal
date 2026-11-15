@@ -32,6 +32,10 @@ import {
   Archive,
   Columns3,
   Sliders,
+  BookA,
+  FolderKanban,
+  FileText,
+  StickyNote,
 } from "lucide-react";
 import { toast } from "sonner";
 import { fuzzySearch } from "@/lib/fuzzy-search";
@@ -39,6 +43,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useWorkspaceStore } from "@/lib/workspace-store";
 import { useFloatingWidgetsStore } from "@/lib/floating-widgets-store";
 import { usePrivacyStore } from "@/lib/privacy-store";
+import { formatSignedCents } from "@/lib/money";
 
 interface CommandEntry {
   id: string;
@@ -82,21 +87,17 @@ export function CommandPalette({ onOpenShortcuts }: CommandPaletteProps) {
     { id: "backup", label: "Open Backup / Restore", view: "backup", icon: DatabaseBackup, keywords: ["backup", "restore", "export", "import", "json"] },
   ], [onOpenShortcuts]);
 
-  // Fetch trades with server-side query (only when palette is open)
-  const { data: trades } = useQuery({
-    queryKey: ["trades-search", query.trim()],
+  // Unified global search across multiple entity domains
+  const trimmedQuery = query.trim();
+  const { data: searchData } = useQuery({
+    queryKey: ["global-search", trimmedQuery],
     queryFn: async () => {
-      const qs = new URLSearchParams();
-      qs.set("limit", "50");
-      if (query.trim()) {
-        qs.set("search", query.trim());
-      }
-      const res = await fetch(`/api/trades?${qs.toString()}`, { cache: "no-store" });
-      if (!res.ok) return [];
-      const data = await res.json();
-      return data.items ?? [];
+      if (!trimmedQuery) return null;
+      const res = await fetch(`/api/search?q=${encodeURIComponent(trimmedQuery)}`, { cache: "no-store" });
+      if (!res.ok) return null;
+      return res.json();
     },
-    enabled: commandOpen,
+    enabled: commandOpen && trimmedQuery.length > 0,
   });
 
   // Clear query when palette closes
@@ -129,74 +130,82 @@ export function CommandPalette({ onOpenShortcuts }: CommandPaletteProps) {
     return cmds;
   }, [baseCommands]);
 
-  // Fuzzy search commands + trades
-  const searchResults = useMemo(() => {
-    if (!query.trim()) return { commands: allCommands, trades: [], hasTypoResults: false };
+  // Fuzzy search commands
+  const filteredCommands = useMemo(() => {
+    if (!trimmedQuery) return allCommands;
+    const cmdResults = fuzzySearch(allCommands, trimmedQuery, (c) => [c.label, ...c.keywords]);
+    return cmdResults.map((r) => r.item);
+  }, [trimmedQuery, allCommands]);
 
-    // Search commands
-    const cmdResults = fuzzySearch(allCommands, query, (c) => [c.label, ...c.keywords]);
+  const trades = searchData?.trades || [];
+  const observations = searchData?.observations || [];
+  const strategies = searchData?.strategies || [];
+  const strategyVersions = searchData?.strategyVersions || [];
+  const accounts = searchData?.accounts || [];
+  const tasks = searchData?.tasks || [];
+  const dictionary = searchData?.dictionary || [];
 
-    // Search trades
-    const tradeResults = trades
-      ? fuzzySearch(trades as any[], query, (t: any) => [
-          t.instrumentSymbol,
-          t.direction,
-          t.status,
-          t.setupGrade ?? "",
-          t.session ?? "",
-          ...((() => {
-            try { return JSON.parse(t.tagsJson ?? "[]"); } catch { return []; }
-          })()),
-        ]).slice(0, 8)
-      : [];
+  // Local Notes search (Quick Notes & Sticky Notes)
+  const [localQuickNotes, setLocalQuickNotes] = useState<Array<{ id: string; title: string; content: string }>>([]);
+  const [localStickyNotes, setLocalStickyNotes] = useState<Array<{ id: string; text: string }>>([]);
 
-    const hasTypoResults = cmdResults.some(r => r.isTypoCorrection) || tradeResults.some(r => r.isTypoCorrection);
+  useEffect(() => {
+    if (!commandOpen) return;
+    try {
+      const qnRaw = localStorage.getItem("alphapips-quick-notes-list");
+      let qList: Array<{ id: string; title: string; content: string }> = [];
+      if (qnRaw) {
+        const parsed = JSON.parse(qnRaw);
+        if (Array.isArray(parsed)) qList = parsed;
+      }
+      const draftRaw = localStorage.getItem("alphapips-quick-notes-active-draft");
+      if (draftRaw) {
+        const draft = JSON.parse(draftRaw);
+        if (draft && (draft.title || draft.content)) {
+          qList = [{ id: "active-draft", title: draft.title || "Active Draft", content: draft.content || "" }, ...qList];
+        }
+      }
+      setLocalQuickNotes(qList);
 
-    return {
-      commands: cmdResults.map(r => r.item),
-      trades: tradeResults.map(r => ({ ...r.item, _isTypo: r.isTypoCorrection, _isFuzzy: r.isFuzzy })),
-      hasTypoResults,
-    };
-  }, [query, allCommands, trades]);
+      const snRaw = localStorage.getItem("alphapips-sticky-notes-data");
+      if (snRaw) {
+        const parsed = JSON.parse(snRaw);
+        if (Array.isArray(parsed)) setLocalStickyNotes(parsed);
+      }
+    } catch {}
+  }, [commandOpen]);
+
+  const filteredQuickNotes = useMemo(() => {
+    if (!trimmedQuery) return [];
+    const q = trimmedQuery.toLowerCase();
+    return localQuickNotes.filter(
+      (n) => (n.title && n.title.toLowerCase().includes(q)) || (n.content && n.content.toLowerCase().includes(q))
+    ).slice(0, 5);
+  }, [trimmedQuery, localQuickNotes]);
+
+  const filteredStickyNotes = useMemo(() => {
+    if (!trimmedQuery) return [];
+    const q = trimmedQuery.toLowerCase();
+    return localStickyNotes.filter(
+      (n) => n.text && n.text.toLowerCase().includes(q)
+    ).slice(0, 5);
+  }, [trimmedQuery, localStickyNotes]);
 
   return (
     <CommandDialog open={commandOpen} onOpenChange={setCommandOpen}>
-      <CommandInput placeholder="Type a command, shortcut, or search trades..." value={query} onValueChange={setQuery} />
+      <CommandInput
+        placeholder="Type a command, shortcut, or search trades, setups, tasks, dictionary..."
+        value={query}
+        onValueChange={setQuery}
+      />
       <CommandList>
         <CommandEmpty>
-          {query.trim() ? `No results for "${query}". Try a different spelling.` : "Start typing to search..."}
+          {trimmedQuery ? `No results for "${query}". Try a different term or keyword.` : "Start typing to search..."}
         </CommandEmpty>
 
-        {searchResults.hasTypoResults && (
-          <CommandGroup heading="Did you mean?">
-            {searchResults.commands
-              .filter((_, i) => {
-                const r = fuzzySearch([allCommands[i] ?? { label: "", keywords: [] }], query, (c) => [c.label, ...c.keywords])[0];
-                return r?.isTypoCorrection;
-              })
-              .map((c) => {
-                const Icon = c.icon;
-                return (
-                  <CommandItem
-                    key={`typo-${c.id}`}
-                    onSelect={() => {
-                      if (c.view) navigate(c.view, c.params);
-                      else c.action?.();
-                      setCommandOpen(false);
-                    }}
-                    className="cursor-pointer"
-                  >
-                    <Icon className="h-4 w-4 text-warning" />
-                    <span>{c.label}</span>
-                    <span className="ml-auto text-xs text-muted-foreground">similar</span>
-                  </CommandItem>
-                );
-              })}
-          </CommandGroup>
-        )}
-
-        <CommandGroup heading="Actions &amp; Navigation">
-          {searchResults.commands.slice(0, 12).map((c) => {
+        {/* 1. Actions & Navigation */}
+        <CommandGroup heading="Actions & Navigation">
+          {filteredCommands.slice(0, 8).map((c) => {
             const Icon = c.icon;
             return (
               <CommandItem
@@ -222,22 +231,235 @@ export function CommandPalette({ onOpenShortcuts }: CommandPaletteProps) {
           })}
         </CommandGroup>
 
-        {searchResults.trades.length > 0 && (
+        {/* 2. Trades */}
+        {trades.length > 0 && (
           <CommandGroup heading="Trades">
-            {searchResults.trades.map((t: any) => (
+            {trades.map((t: any) => {
+              const pnl = formatSignedCents(t.netPnlCents || 0);
+              return (
+                <CommandItem
+                  key={`trade-${t.id}`}
+                  onSelect={() => {
+                    navigate("tradeDetail", { id: t.id });
+                    setCommandOpen(false);
+                  }}
+                  className="cursor-pointer flex items-center justify-between"
+                >
+                  <div className="flex items-center gap-2">
+                    <TrendingUp className={`h-4 w-4 ${t.direction === "long" ? "text-profit" : "text-loss"}`} />
+                    <span className="font-semibold font-mono">{t.instrumentSymbol}</span>
+                    <span className="text-xs uppercase text-muted-foreground">({t.direction})</span>
+                    {t.setupGrade && <span className="text-xs text-muted-foreground">· Grade {t.setupGrade}</span>}
+                    {t.session && <span className="text-xs text-muted-foreground">· {t.session}</span>}
+                  </div>
+                  <div className={`text-xs font-mono font-medium ${pnl.sign > 0 ? "text-profit" : pnl.sign < 0 ? "text-loss" : "text-muted-foreground"}`}>
+                    {pnl.text}
+                  </div>
+                </CommandItem>
+              );
+            })}
+          </CommandGroup>
+        )}
+
+        {/* 3. No-Trade Observations */}
+        {observations.length > 0 && (
+          <CommandGroup heading="No-Trade Observations">
+            {observations.map((o: any) => (
               <CommandItem
-                key={t.id}
+                key={`obs-${o.id}`}
                 onSelect={() => {
-                  navigate("tradeDetail", { id: t.id });
+                  navigate("tradesLog", { tab: "observations" });
                   setCommandOpen(false);
                 }}
-                className="cursor-pointer"
+                className="cursor-pointer flex items-center justify-between"
               >
-                <TrendingUp className={`h-4 w-4 ${t.direction === "long" ? "text-profit" : "text-loss"}`} />
-                <span className="font-medium">{t.instrumentSymbol}</span>
-                <span className="text-xs text-muted-foreground">{t.direction}</span>
-                {t.setupGrade && <span className="text-xs text-muted-foreground">· {t.setupGrade}</span>}
-                {(t as any)._isTypo && <span className="ml-auto text-xs text-warning">similar</span>}
+                <div className="flex items-center gap-2">
+                  <EyeOff className="h-4 w-4 text-amber-500" />
+                  <span className="font-semibold font-mono">{o.instrumentSymbol}</span>
+                  <span className="text-xs text-muted-foreground truncate max-w-[280px]">
+                    · {o.title || o.observation || o.reasonCategory}
+                  </span>
+                </div>
+                <span className="text-[11px] capitalize text-muted-foreground">{o.decisionType?.replace(/_/g, " ")}</span>
+              </CommandItem>
+            ))}
+          </CommandGroup>
+        )}
+
+        {/* 4. Setups & Strategies */}
+        {strategies.length > 0 && (
+          <CommandGroup heading="Setups & Strategies">
+            {strategies.map((s: any) => (
+              <CommandItem
+                key={`strat-${s.id}`}
+                onSelect={() => {
+                  navigate("setups", { strategyId: s.id });
+                  setCommandOpen(false);
+                }}
+                className="cursor-pointer flex items-center justify-between"
+              >
+                <div className="flex items-center gap-2">
+                  <ListChecks className="h-4 w-4 text-primary" />
+                  <span className="font-semibold">{s.name}</span>
+                  {s.market && <span className="text-xs text-muted-foreground">· {s.market}</span>}
+                  {s.timeframe && <span className="text-xs text-muted-foreground">· {s.timeframe}</span>}
+                </div>
+                <span className="text-xs text-muted-foreground">Open Setup</span>
+              </CommandItem>
+            ))}
+          </CommandGroup>
+        )}
+
+        {/* 4b. Strategy Versions */}
+        {strategyVersions.length > 0 && (
+          <CommandGroup heading="Strategy Versions">
+            {strategyVersions.map((v: any) => (
+              <CommandItem
+                key={`strat-ver-${v.id}`}
+                onSelect={() => {
+                  navigate("setups", { strategyId: v.strategyId });
+                  setCommandOpen(false);
+                }}
+                className="cursor-pointer flex items-center justify-between"
+              >
+                <div className="flex items-center gap-2">
+                  <ListChecks className="h-4 w-4 text-primary/70" />
+                  <span className="font-semibold">{v.strategy?.name || "Setup"}</span>
+                  <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-muted text-muted-foreground font-semibold">
+                    v{v.versionLabel}
+                  </span>
+                  {v.changeSummary && (
+                    <span className="text-xs text-muted-foreground truncate max-w-[220px]">
+                      · {v.changeSummary}
+                    </span>
+                  )}
+                </div>
+                <span className="text-xs text-muted-foreground">Inspect Version</span>
+              </CommandItem>
+            ))}
+          </CommandGroup>
+        )}
+
+        {/* 5. Trading Accounts */}
+        {accounts.length > 0 && (
+          <CommandGroup heading="Accounts">
+            {accounts.map((a: any) => (
+              <CommandItem
+                key={`acc-${a.id}`}
+                onSelect={() => {
+                  navigate("accounts");
+                  setCommandOpen(false);
+                }}
+                className="cursor-pointer flex items-center justify-between"
+              >
+                <div className="flex items-center gap-2">
+                  <Wallet className="h-4 w-4 text-emerald-500" />
+                  <span className="font-semibold">{a.name}</span>
+                  <span className="text-xs text-muted-foreground">
+                    ({a.broker || a.accountType}) · {a.currency}
+                  </span>
+                </div>
+                <span className="text-xs text-muted-foreground">Manage</span>
+              </CommandItem>
+            ))}
+          </CommandGroup>
+        )}
+
+        {/* 6. Trading Tasks */}
+        {tasks.length > 0 && (
+          <CommandGroup heading="Tasks & To-Dos">
+            {tasks.map((tk: any) => (
+              <CommandItem
+                key={`task-${tk.id}`}
+                onSelect={() => {
+                  navigate("tradingTodo");
+                  setCommandOpen(false);
+                }}
+                className="cursor-pointer flex items-center justify-between"
+              >
+                <div className="flex items-center gap-2">
+                  <CheckSquare className="h-4 w-4 text-blue-500" />
+                  <span className="font-medium truncate max-w-[280px]">{tk.title}</span>
+                  <span className="text-xs text-muted-foreground">[{tk.listName}]</span>
+                </div>
+                <span className="text-xs capitalize text-muted-foreground">{tk.priority}</span>
+              </CommandItem>
+            ))}
+          </CommandGroup>
+        )}
+
+        {/* 7. Trading Dictionary */}
+        {dictionary.length > 0 && (
+          <CommandGroup heading="Strategy Glossary & Concepts">
+            {dictionary.map((d: any) => (
+              <CommandItem
+                key={`dict-${d.id}`}
+                onSelect={() => {
+                  navigate("setups");
+                  setCommandOpen(false);
+                }}
+                className="cursor-pointer flex items-center justify-between"
+              >
+                <div className="flex items-center gap-2">
+                  <BookA className="h-4 w-4 text-purple-500" />
+                  <span className="font-semibold">{d.term}</span>
+                  {d.abbreviation && <span className="text-xs font-mono text-muted-foreground">({d.abbreviation})</span>}
+                  <span className="text-xs text-muted-foreground truncate max-w-[260px]">· {d.definition}</span>
+                </div>
+                {d.category && <span className="text-xs text-muted-foreground">{d.category}</span>}
+              </CommandItem>
+            ))}
+          </CommandGroup>
+        )}
+
+        {/* 8. Quick Notes */}
+        {filteredQuickNotes.length > 0 && (
+          <CommandGroup heading="Quick Notes">
+            {filteredQuickNotes.map((qn) => (
+              <CommandItem
+                key={`qn-${qn.id}`}
+                onSelect={() => {
+                  useFloatingWidgetsStore.getState().setWidgetVisible("quick_notes", true);
+                  useFloatingWidgetsStore.getState().bringToFront("quick_notes");
+                  setCommandOpen(false);
+                  toast.success(`Opened Quick Note: ${qn.title || "Untitled"}`);
+                }}
+                className="cursor-pointer flex items-center justify-between"
+              >
+                <div className="flex items-center gap-2">
+                  <FileText className="h-4 w-4 text-amber-500" />
+                  <span className="font-semibold">{qn.title || "Quick Note"}</span>
+                  <span className="text-xs text-muted-foreground truncate max-w-[260px]">
+                    · {qn.content.replace(/\n/g, " ")}
+                  </span>
+                </div>
+                <span className="text-xs text-muted-foreground">Open Widget</span>
+              </CommandItem>
+            ))}
+          </CommandGroup>
+        )}
+
+        {/* 9. Sticky Notes */}
+        {filteredStickyNotes.length > 0 && (
+          <CommandGroup heading="Sticky Notes">
+            {filteredStickyNotes.map((sn) => (
+              <CommandItem
+                key={`sn-${sn.id}`}
+                onSelect={() => {
+                  useFloatingWidgetsStore.getState().setWidgetVisible("sticky_notes", true);
+                  useFloatingWidgetsStore.getState().bringToFront("sticky_notes");
+                  setCommandOpen(false);
+                  toast.success("Opened Sticky Notes widget");
+                }}
+                className="cursor-pointer flex items-center justify-between"
+              >
+                <div className="flex items-center gap-2">
+                  <StickyNote className="h-4 w-4 text-yellow-500" />
+                  <span className="font-medium text-xs truncate max-w-[320px]">
+                    {sn.text.replace(/\n/g, " ")}
+                  </span>
+                </div>
+                <span className="text-xs text-muted-foreground">Open Widget</span>
               </CommandItem>
             ))}
           </CommandGroup>

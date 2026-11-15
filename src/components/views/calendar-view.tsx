@@ -49,6 +49,10 @@ import {
   TrendingUp,
   Loader2,
   ArrowUpRight,
+  EyeOff,
+  List as ListIcon,
+  Grid3X3,
+  Calendar as CalendarIcon,
 } from "lucide-react";
 
 // ---------------------------------------------------------------------------
@@ -78,6 +82,7 @@ interface CalendarDay {
   pnlCents: number;
   r: number | null;
   trades: number;
+  observations?: number;
   wins: number;
   losses: number;
   aplusCount: number;
@@ -112,6 +117,7 @@ export function CalendarView() {
   const now = useMemo(() => new Date(), []);
   const [year, setYear] = useState(now.getFullYear());
   const [month, setMonth] = useState(now.getMonth() + 1); // 1..12
+  const [viewMode, setViewMode] = useState<"month" | "week" | "list">("month");
   const [selectedDay, setSelectedDay] = useState<CalendarDay | null>(null);
   const { navigate, params, selectedAccountId } = useNav();
   const accountId = selectedAccountId || params.accountId || undefined;
@@ -150,11 +156,27 @@ export function CalendarView() {
   // Monthly summary metrics derived from the calendar days.
   const summary = useMemo(() => {
     const tradingDays = days.filter((d) => d.trades > 0).length;
+    const observationDays = days.filter((d) => (d.observations ?? 0) > 0 && d.trades === 0).length;
     const totalPnlCents = days.reduce((s, d) => s + d.pnlCents, 0);
     const totalR = days.reduce((s, d) => s + (d.r ?? 0), 0);
     const totalTrades = days.reduce((s, d) => s + d.trades, 0);
-    return { tradingDays, totalPnlCents, totalR, totalTrades };
+    const totalObservations = days.reduce((s, d) => s + (d.observations ?? 0), 0);
+    return { tradingDays, observationDays, totalPnlCents, totalR, totalTrades, totalObservations };
   }, [days]);
+
+  // Filtered days for list view (days with trades or observations)
+  const activeDaysList = useMemo(() => {
+    return days.filter((d) => d.trades > 0 || (d.observations ?? 0) > 0);
+  }, [days]);
+
+  // Current week slice for week view
+  const currentWeekDays = useMemo(() => {
+    // Find week that contains today or first trading day
+    const targetDate = todayStr.startsWith(`${year}-${String(month).padStart(2, "0")}`) ? todayStr : `${year}-${String(month).padStart(2, "0")}-01`;
+    const targetIdx = cells.findIndex((c) => c && c.date === targetDate);
+    const weekStartIdx = targetIdx >= 0 ? Math.floor(targetIdx / 7) * 7 : 0;
+    return cells.slice(weekStartIdx, weekStartIdx + 7);
+  }, [cells, todayStr, year, month]);
 
   function prevMonth() {
     if (month === 1) { setMonth(12); setYear(year - 1); }
@@ -222,6 +244,49 @@ export function CalendarView() {
             </Select>
           </div>
 
+          {/* View mode switcher: Month, Week, List */}
+          <div className="flex items-center rounded-lg border border-border p-0.5 bg-muted/40">
+            <button
+              type="button"
+              onClick={() => setViewMode("month")}
+              className={cn(
+                "px-2.5 py-1 text-xs font-medium rounded-md flex items-center gap-1.5 transition-colors",
+                viewMode === "month"
+                  ? "bg-card text-foreground shadow-xs font-semibold"
+                  : "text-muted-foreground hover:text-foreground",
+              )}
+            >
+              <CalendarIcon className="h-3.5 w-3.5" />
+              <span>Month</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setViewMode("week")}
+              className={cn(
+                "px-2.5 py-1 text-xs font-medium rounded-md flex items-center gap-1.5 transition-colors",
+                viewMode === "week"
+                  ? "bg-card text-foreground shadow-xs font-semibold"
+                  : "text-muted-foreground hover:text-foreground",
+              )}
+            >
+              <Grid3X3 className="h-3.5 w-3.5" />
+              <span>Week</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setViewMode("list")}
+              className={cn(
+                "px-2.5 py-1 text-xs font-medium rounded-md flex items-center gap-1.5 transition-colors",
+                viewMode === "list"
+                  ? "bg-card text-foreground shadow-xs font-semibold"
+                  : "text-muted-foreground hover:text-foreground",
+              )}
+            >
+              <ListIcon className="h-3.5 w-3.5" />
+              <span>List</span>
+            </button>
+          </div>
+
           <div className="ml-auto flex items-center gap-1">
             <button
               type="button"
@@ -251,7 +316,7 @@ export function CalendarView() {
       </div>
 
       {/* Summary stats */}
-      <div className="grid grid-cols-3 gap-3">
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         <SummaryTile
           label="Trading Days"
           value={String(summary.tradingDays)}
@@ -281,12 +346,18 @@ export function CalendarView() {
                 : "neutral"
           }
         />
+        <SummaryTile
+          label="Observations"
+          value={String(summary.totalObservations)}
+          sub="Market restraint days"
+          icon={EyeOff}
+        />
       </div>
 
-      {/* Calendar grid */}
+      {/* Calendar content based on view mode */}
       {isLoading ? (
         <Skeleton className="h-[480px] bg-border rounded-xl" />
-      ) : (
+      ) : viewMode === "month" ? (
         <Card className="bg-card border border-border rounded-xl shadow-sm overflow-hidden p-0">
           {/* Weekday header */}
           <div className="grid grid-cols-7 border-b border-border bg-muted/50">
@@ -336,11 +407,19 @@ export function CalendarView() {
                     >
                       {dayNum}
                     </span>
-                    {isToday && (
-                      <span className="text-[9px] uppercase tracking-wide font-semibold text-blue-600">
-                        Today
-                      </span>
-                    )}
+                    <div className="flex items-center gap-1">
+                      {cell.observations && cell.observations > 0 ? (
+                        <span className="inline-flex items-center gap-0.5 text-[9px] px-1 rounded bg-amber-500/10 text-amber-600 dark:text-amber-400 font-medium border border-amber-500/20">
+                          <EyeOff className="h-2.5 w-2.5" />
+                          {cell.observations}
+                        </span>
+                      ) : null}
+                      {isToday && (
+                        <span className="text-[9px] uppercase tracking-wide font-semibold text-blue-600">
+                          Today
+                        </span>
+                      )}
+                    </div>
                   </div>
 
                   {hasTrades ? (
@@ -370,6 +449,14 @@ export function CalendarView() {
                         </div>
                       )}
                     </div>
+                  ) : cell.observations && cell.observations > 0 ? (
+                    <div className="mt-auto space-y-0.5">
+                      <div className="text-[11px] font-semibold text-amber-600 dark:text-amber-400 flex items-center gap-1">
+                        <EyeOff className="h-3 w-3" />
+                        {cell.observations} obs
+                      </div>
+                      <div className="text-[10px] text-muted-foreground">Market restraint</div>
+                    </div>
                   ) : (
                     <div className="mt-auto">
                       <span className="text-[10px] text-muted-foreground/70 group-hover:text-foreground inline-flex items-center gap-0.5 transition-colors">
@@ -382,6 +469,152 @@ export function CalendarView() {
               );
             })}
           </div>
+        </Card>
+      ) : viewMode === "week" ? (
+        /* Week View */
+        <Card className="bg-card border border-border rounded-xl shadow-sm p-4 space-y-3">
+          <div className="flex items-center justify-between border-b border-border pb-2">
+            <h3 className="text-sm font-semibold text-foreground">Week Overview</h3>
+            <span className="text-xs text-muted-foreground">7 Days View</span>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-7 gap-2">
+            {currentWeekDays.map((cell, idx) => {
+              if (!cell) {
+                return (
+                  <div key={idx} className="p-3 rounded-lg border border-dashed border-border/50 text-center text-xs text-muted-foreground/50">
+                    {WEEKDAYS[idx]}
+                  </div>
+                );
+              }
+              const hasTrades = cell.trades > 0;
+              const pnl = formatSignedCents(cell.pnlCents);
+              const isToday = cell.date === todayStr;
+              return (
+                <div
+                  key={cell.date}
+                  onClick={() => onDayClick(cell)}
+                  className={cn(
+                    "p-3 rounded-lg border transition-all cursor-pointer flex flex-col justify-between min-h-[120px]",
+                    isToday ? "border-primary bg-primary/5 ring-1 ring-primary/20" : "border-border bg-card hover:bg-muted/30",
+                  )}
+                >
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="font-semibold text-muted-foreground">{WEEKDAYS[new Date(cell.date).getUTCDay()]}</span>
+                    <span className="font-mono font-bold text-foreground">{cell.date.slice(8, 10)}</span>
+                  </div>
+                  {hasTrades ? (
+                    <div className="space-y-1 my-2">
+                      <div className={cn("text-sm font-bold font-mono", pnl.sign > 0 ? "text-profit" : pnl.sign < 0 ? "text-loss" : "text-foreground")}>
+                        <PrivacyMask value={pnl.text} />
+                      </div>
+                      <div className="text-[11px] text-muted-foreground font-mono">
+                        {cell.trades} trade{cell.trades === 1 ? "" : "s"} · {cell.r ? formatR(String(cell.r)) : "—"}
+                      </div>
+                    </div>
+                  ) : cell.observations && cell.observations > 0 ? (
+                    <div className="my-2 space-y-0.5">
+                      <div className="text-xs font-semibold text-amber-600 flex items-center gap-1">
+                        <EyeOff className="h-3.5 w-3.5" /> {cell.observations} obs
+                      </div>
+                      <span className="text-[10px] text-muted-foreground">No trades executed</span>
+                    </div>
+                  ) : (
+                    <div className="my-2 text-[11px] text-muted-foreground/50">No trades</div>
+                  )}
+                  <div className="text-[10px] text-muted-foreground/70">
+                    {hasTrades ? "Click for trades" : "Click to log"}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </Card>
+      ) : (
+        /* List View */
+        <Card className="bg-card border border-border rounded-xl shadow-sm p-4 space-y-3">
+          <div className="flex items-center justify-between border-b border-border pb-2">
+            <h3 className="text-sm font-semibold text-foreground">Active Days Log ({activeDaysList.length})</h3>
+            <span className="text-xs text-muted-foreground">Chronological daily breakdown</span>
+          </div>
+          {activeDaysList.length === 0 ? (
+            <div className="p-8 text-center text-xs text-muted-foreground">
+              No trades or observations recorded for this month.
+            </div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-xs">
+                <thead>
+                  <tr className="border-b border-border text-left text-muted-foreground">
+                    <th className="py-2 px-2.5 font-medium">Date</th>
+                    <th className="py-2 px-2.5 font-medium">Executed Trades</th>
+                    <th className="py-2 px-2.5 font-medium">Net P&amp;L</th>
+                    <th className="py-2 px-2.5 font-medium">Return (R)</th>
+                    <th className="py-2 px-2.5 font-medium">Win Rate</th>
+                    <th className="py-2 px-2.5 font-medium">Observations</th>
+                    <th className="py-2 px-2.5 font-medium text-right">Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-border/60">
+                  {activeDaysList.map((day) => {
+                    const pnl = formatSignedCents(day.pnlCents);
+                    const isToday = day.date === todayStr;
+                    return (
+                      <tr key={day.date} className={cn("hover:bg-muted/30 transition-colors", isToday && "bg-blue-50/20")}>
+                        <td className="py-2 px-2.5 font-mono font-medium text-foreground flex items-center gap-1.5">
+                          {day.date}
+                          {isToday && <span className="text-[10px] text-blue-600 font-semibold px-1 rounded bg-blue-50">Today</span>}
+                        </td>
+                        <td className="py-2 px-2.5 font-mono">
+                          {day.trades > 0 ? `${day.trades} (${day.wins}W / ${day.losses}L)` : "0"}
+                        </td>
+                        <td className="py-2 px-2.5 font-mono font-bold">
+                          {day.trades > 0 ? (
+                            <span className={pnl.sign > 0 ? "text-profit" : pnl.sign < 0 ? "text-loss" : "text-foreground"}>
+                              <PrivacyMask value={pnl.text} />
+                            </span>
+                          ) : (
+                            <span className="text-muted-foreground">—</span>
+                          )}
+                        </td>
+                        <td className="py-2 px-2.5 font-mono">
+                          {day.r !== null ? (
+                            <span className={day.r > 0 ? "text-profit" : day.r < 0 ? "text-loss" : "text-foreground"}>
+                              {formatR(String(day.r))}
+                            </span>
+                          ) : (
+                            "—"
+                          )}
+                        </td>
+                        <td className="py-2 px-2.5 font-mono">
+                          {day.winRate !== null ? `${Math.round(day.winRate * 100)}%` : "—"}
+                        </td>
+                        <td className="py-2 px-2.5">
+                          {day.observations && day.observations > 0 ? (
+                            <span className="inline-flex items-center gap-1 text-amber-600 font-medium px-1.5 py-0.5 rounded bg-amber-500/10 border border-amber-500/20">
+                              <EyeOff className="h-3 w-3" /> {day.observations} obs
+                            </span>
+                          ) : (
+                            <span className="text-muted-foreground/60">—</span>
+                          )}
+                        </td>
+                        <td className="py-2 px-2.5 text-right">
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-7 text-xs gap-1"
+                            onClick={() => onDayClick(day)}
+                          >
+                            <span>Inspect</span>
+                            <ArrowUpRight className="h-3 w-3" />
+                          </Button>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
         </Card>
       )}
 
@@ -677,6 +910,7 @@ function emptyDay(date: string): CalendarDay {
     pnlCents: 0,
     r: null,
     trades: 0,
+    observations: 0,
     wins: 0,
     losses: 0,
     aplusCount: 0,

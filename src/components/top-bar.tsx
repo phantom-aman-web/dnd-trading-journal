@@ -242,8 +242,8 @@ export function TopBar({ onOpenMobileNav, onOpenShortcuts }: TopBarProps) {
                   className="flex items-center justify-between cursor-pointer py-1.5"
                 >
                   <div className="flex items-center gap-2">
-                    <span className="h-3 w-3 rounded-full bg-blue-600 border border-blue-700" />
-                    <span className="text-xs font-medium">Institutional Blue</span>
+                    <span className="h-3 w-3 rounded-full bg-slate-700 border border-slate-800" />
+                    <span className="text-xs font-medium">Slate Contrast</span>
                   </div>
                   {theme === "institutional" && <Check className="h-3.5 w-3.5 text-primary" />}
                 </DropdownMenuItem>

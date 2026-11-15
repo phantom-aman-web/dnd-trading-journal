@@ -76,6 +76,16 @@ export interface InstrumentDef {
    *   XAUUSD: $100/$1 → 10,000 cents
    */
   pointValueCents: number;
+  /** Minimum allowable quantity/lots. e.g. 0.01 for forex, 1 for futures. */
+  minQuantity?: number;
+  /** Maximum typical allowable position quantity. */
+  maxQuantity?: number;
+  /** Quantity step increment. e.g. 0.01, 0.1, 1. */
+  quantityStep?: number;
+  /** Quantity unit label. e.g. "lots", "contracts", "coins". */
+  quantityUnit?: string;
+  /** Quote currency ISO code. e.g. "USD", "JPY", "EUR", "GBP". */
+  quoteCurrency?: string;
 }
 
 /* ------------------------------------------------------------------ */
@@ -614,4 +624,122 @@ export function distanceInUnits(
   if (!Number.isFinite(ps) || ps <= 0) return 0;
   const units = d / ps;
   return Math.round(units * 10000) / 10000;
+}
+
+/**
+ * Resolves the quote currency of an instrument (the currency prices are expressed in).
+ */
+export function getInstrumentQuoteCurrency(instrument: InstrumentDef): string {
+  if (instrument.quoteCurrency) return instrument.quoteCurrency;
+  const sym = instrument.symbol.toUpperCase();
+  if (instrument.market === "forex") {
+    if (sym.length === 6) return sym.slice(3);
+  }
+  if (
+    sym.endsWith("USD") ||
+    sym.startsWith("NQ") ||
+    sym.startsWith("ES") ||
+    sym.startsWith("YM") ||
+    sym.startsWith("CL") ||
+    sym.startsWith("GC") ||
+    sym.startsWith("SI")
+  ) {
+    return "USD";
+  }
+  if (sym === "GER40") return "EUR";
+  if (sym === "UK100") return "GBP";
+  return "USD";
+}
+
+/**
+ * Benchmark exchange rates relative to USD (USD = 1.0).
+ * Source: Institutional Benchmark Reference (Static Model, updated Nov 2026).
+ * Note: These are static benchmark reference estimates for risk sizing planning, NOT live streaming broker quotes.
+ */
+export const BENCHMARK_FX_METADATA = {
+  source: "Institutional Benchmark Reference Model",
+  effectiveDate: "2026-11-15",
+  isLiveBrokerFeed: false,
+  description: "Static benchmark reference rates for position sizing planning. Users may override with broker rates.",
+};
+
+export const BENCHMARK_FX_RATES: Record<string, number> = {
+  USD: 1.0,
+  EUR: 1.085, // 1 EUR = 1.085 USD
+  GBP: 1.295, // 1 GBP = 1.295 USD
+  CAD: 0.720, // 1 CAD = 0.720 USD (USD/CAD ~ 1.39)
+  AUD: 0.655, // 1 AUD = 0.655 USD
+  JPY: 0.0065, // 1 JPY = 0.0065 USD (USD/JPY ~ 154)
+  CHF: 1.130, // 1 CHF = 1.130 USD (USD/CHF ~ 0.885)
+};
+
+/**
+ * Converts a monetary amount from one currency to another using benchmark or custom FX rates.
+ */
+export function convertCurrency(
+  amount: number,
+  fromCurrency: string,
+  toCurrency: string,
+  customRates?: Record<string, number>
+): { converted: number; rate: number; isConversionNeeded: boolean } {
+  const from = (fromCurrency || "USD").toUpperCase();
+  const to = (toCurrency || "USD").toUpperCase();
+  if (from === to) {
+    return { converted: amount, rate: 1.0, isConversionNeeded: false };
+  }
+  const rates = { ...BENCHMARK_FX_RATES, ...customRates };
+  const fromToUsd = rates[from] ?? 1.0;
+  const toToUsd = rates[to] ?? 1.0;
+  const rate = fromToUsd / toToUsd;
+  const converted = Math.round(amount * rate * 100) / 100;
+  return { converted, rate, isConversionNeeded: true };
+}
+
+/**
+ * Returns specific minimum quantity, lot step increment, and quantity unit for an instrument.
+ */
+export function getInstrumentSizingRules(instrument: InstrumentDef): {
+  minQuantity: number;
+  quantityStep: number;
+  quantityUnit: string;
+  decimals: number;
+} {
+  if (instrument.minQuantity != null && instrument.quantityStep != null) {
+    const decimals =
+      instrument.quantityStep < 0.01
+        ? 3
+        : instrument.quantityStep < 1
+        ? instrument.quantityStep === 0.1
+          ? 1
+          : 2
+        : 0;
+    return {
+      minQuantity: instrument.minQuantity,
+      quantityStep: instrument.quantityStep,
+      quantityUnit:
+        instrument.quantityUnit ??
+        (instrument.market === "futures" ? "contracts" : "lots"),
+      decimals,
+    };
+  }
+
+  if (instrument.market === "futures") {
+    return { minQuantity: 1, quantityStep: 1, quantityUnit: "contracts", decimals: 0 };
+  }
+  if (instrument.market === "indices") {
+    const isWhole = instrument.symbol === "US30";
+    return {
+      minQuantity: isWhole ? 1 : 0.1,
+      quantityStep: isWhole ? 1 : 0.1,
+      quantityUnit: "contracts",
+      decimals: isWhole ? 0 : 1,
+    };
+  }
+  if (instrument.market === "crypto") {
+    return { minQuantity: 0.001, quantityStep: 0.001, quantityUnit: "coins", decimals: 3 };
+  }
+  if (instrument.symbol === "XAGUSD") {
+    return { minQuantity: 0.01, quantityStep: 0.01, quantityUnit: "lots", decimals: 2 };
+  }
+  return { minQuantity: 0.01, quantityStep: 0.01, quantityUnit: "lots", decimals: 2 };
 }

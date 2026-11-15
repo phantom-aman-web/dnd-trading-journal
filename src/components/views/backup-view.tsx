@@ -3,27 +3,17 @@
 /**
  * Backup, Snapshot & Data Management — reference-aligned rebuild.
  *
- * Premium navy-blue + white-card aesthetic (matches
- * https://ae-tradingjournal.vercel.app/):
- *   - App background: bg-background
- *   - Cards: bg-card border border-border rounded-xl shadow-sm p-6
- *   - Section heading: text-sm font-semibold text-foreground uppercase tracking-wide
- *   - Description: text-sm text-muted-foreground
- *   - Export button: bg-primary text-primary-foreground hover:bg-primary/90
- *   - Import button: border-input (outline)
- *   - Demo button: bg-amber-50 text-warning border-amber-200
- *
- * Three cards stacked vertically:
+ * Cards:
  *   1. EXPORT BACKUP (.JSON)
- *   2. IMPORT BACKUP ARCHIVE
- *   3. DEMO DATA GENERATOR
+ *   2. IMPORT BACKUP ARCHIVE (with preview, duplicate detection & atomic rollback)
+ *   3. IMPORT BROKER TRADES (CSV) (with broker presets: MT4/MT5, cTrader, NinjaTrader, TradeLocker, IBKR)
+ *   4. DEMO DATA GENERATOR
  */
 
-import { useRef, useState } from "react";
-import { useQueryClient } from "@tanstack/react-query";
+import { useRef, useState, useMemo } from "react";
+import { useQueryClient, useQuery } from "@tanstack/react-query";
 import { useNavStore } from "@/lib/nav-store";
 import { Button } from "@/components/ui/button";
-import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
 import {
   Select,
@@ -42,8 +32,15 @@ import {
   Loader2,
   CheckCircle2,
   AlertTriangle,
+  ShieldCheck,
+  Sparkles,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import {
+  BROKER_PRESETS,
+  detectBrokerPreset,
+  getPresetMapping,
+} from "@/lib/broker-csv-presets";
 
 const DND_FIELDS = [
   { key: "instrumentSymbol", label: "Instrument / Symbol", required: true },
@@ -63,25 +60,89 @@ function autoMapHeaders(headers: string[]): Record<string, string> {
   const map: Record<string, string> = {};
   for (const h of headers) {
     const lower = h.toLowerCase().trim();
-    if (lower.includes("symbol") || lower.includes("pair") || lower.includes("ticker") || lower === "item") {
+    if (
+      lower.includes("symbol") ||
+      lower.includes("pair") ||
+      lower.includes("ticker") ||
+      lower.includes("instrument") ||
+      lower.includes("contract") ||
+      lower.includes("security") ||
+      lower === "item"
+    ) {
       map[h] = "instrumentSymbol";
-    } else if (lower.includes("direction") || lower.includes("type") || lower.includes("side") || lower === "cmd") {
+    } else if (
+      lower.includes("direction") ||
+      lower.includes("type") ||
+      lower.includes("side") ||
+      lower.includes("action") ||
+      lower === "cmd" ||
+      lower === "b/s"
+    ) {
       map[h] = "direction";
-    } else if (lower.includes("open price") || lower.includes("entry price") || lower === "open" || lower === "entry") {
+    } else if (
+      lower.includes("open price") ||
+      lower.includes("entry price") ||
+      lower.includes("fill price") ||
+      lower.includes("avg price") ||
+      lower === "open" ||
+      lower === "entry" ||
+      lower === "price"
+    ) {
       map[h] = "entryPrice";
-    } else if (lower.includes("close price") || lower.includes("exit price") || lower === "close" || lower === "exit") {
+    } else if (
+      lower.includes("close price") ||
+      lower.includes("exit price") ||
+      lower.includes("cover price") ||
+      lower === "close" ||
+      lower === "exit"
+    ) {
       map[h] = "exitPrice";
-    } else if (lower.includes("open time") || lower.includes("entry time") || lower === "date" || lower === "time") {
+    } else if (
+      lower.includes("open time") ||
+      lower.includes("entry time") ||
+      lower.includes("datetime") ||
+      lower.includes("filled at") ||
+      lower === "date" ||
+      lower === "time"
+    ) {
       map[h] = "entryTime";
-    } else if (lower.includes("close time") || lower.includes("exit time")) {
+    } else if (
+      lower.includes("close time") ||
+      lower.includes("exit time") ||
+      lower.includes("closed at")
+    ) {
       map[h] = "exitTime";
-    } else if (lower.includes("volume") || lower.includes("size") || lower.includes("lot") || lower.includes("qty")) {
+    } else if (
+      lower.includes("volume") ||
+      lower.includes("size") ||
+      lower.includes("lot") ||
+      lower.includes("qty") ||
+      lower.includes("contracts") ||
+      lower.includes("quantity")
+    ) {
       map[h] = "quantity";
-    } else if (lower.includes("stop") || lower === "sl") {
+    } else if (
+      lower.includes("stop") ||
+      lower === "sl" ||
+      lower === "s/l" ||
+      lower.includes("stop loss")
+    ) {
       map[h] = "stopPrice";
-    } else if (lower.includes("target") || lower === "tp") {
+    } else if (
+      lower.includes("target") ||
+      lower === "tp" ||
+      lower === "t/p" ||
+      lower.includes("take profit") ||
+      lower.includes("limit price")
+    ) {
       map[h] = "targetPrice";
-    } else if (lower.includes("fee") || lower.includes("commission") || lower.includes("swap")) {
+    } else if (
+      lower.includes("fee") ||
+      lower.includes("commission") ||
+      lower.includes("comm") ||
+      lower.includes("swap") ||
+      lower.includes("taxes")
+    ) {
       map[h] = "feesCents";
     }
   }
@@ -93,14 +154,28 @@ export function BackupView() {
   const setSelectedAccountId = useNavStore((s) => s.setSelectedAccountId);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const csvInputRef = useRef<HTMLInputElement>(null);
+
   const [exporting, setExporting] = useState(false);
-  const [importing, setImporting] = useState(false);
   const [demoLoading, setDemoLoading] = useState(false);
-  const [importedSummary, setImportedSummary] = useState<{
-    accounts: number;
-    strategies: number;
-    trades: number;
-  } | null>(null);
+
+  // Backup Import & Preview state
+  const [previewing, setPreviewing] = useState(false);
+  const [restoring, setRestoring] = useState(false);
+  const [backupPayload, setBackupPayload] = useState<any>(null);
+  const [backupPreview, setBackupPreview] = useState<any>(null);
+  const [restoreMode, setRestoreMode] = useState<"merge" | "replace">("merge");
+  const [restoreResult, setRestoreResult] = useState<any>(null);
+
+  // Fetch accounts for CSV import target
+  const { data: accountsData } = useQuery<{ items: any[] }>({
+    queryKey: ["accounts"],
+    queryFn: async () => {
+      const res = await fetch("/api/accounts");
+      return res.json();
+    },
+  });
+  const accounts = accountsData?.items || [];
+  const [selectedCsvAccountId, setSelectedCsvAccountId] = useState<string>("");
 
   // CSV Import state
   const [csvUploading, setCsvUploading] = useState(false);
@@ -113,6 +188,8 @@ export function BackupView() {
     headers: string[];
     sampleRows: Record<string, string>[];
   } | null>(null);
+  const [selectedBrokerPreset, setSelectedBrokerPreset] = useState<string>("auto");
+  const [selectedBrokerTimezoneOffset, setSelectedBrokerTimezoneOffset] = useState<number | undefined>(2);
   const [columnMapping, setColumnMapping] = useState<Record<string, string>>({});
   const [validationResult, setValidationResult] = useState<{
     valid: number;
@@ -126,26 +203,30 @@ export function BackupView() {
   async function handleExport() {
     setExporting(true);
     try {
-      const res = await fetch("/api/exports?format=json&type=all", {
-        cache: "no-store",
+      const res = await fetch("/api/backups", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
       });
       if (!res.ok) {
         toast.error("Export failed. Please try again.");
         return;
       }
-      const data = await res.json();
+      const backup = await res.json();
+      // Fetch full export data for direct download
+      const fullRes = await fetch("/api/exports?format=json&type=all");
+      const data = await fullRes.json();
       const blob = new Blob([JSON.stringify(data, null, 2)], {
         type: "application/json",
       });
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
-      a.download = `dnd-backup-${new Date().toISOString().slice(0, 10)}.json`;
+      a.download = backup.filename || `alphapips-backup-${new Date().toISOString().slice(0, 10)}.json`;
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
       URL.revokeObjectURL(url);
-      toast.success("Backup JSON exported.");
+      toast.success("Complete institutional backup archive exported successfully.");
     } catch (err) {
       console.error(err);
       toast.error("Export failed. Please try again.");
@@ -154,10 +235,12 @@ export function BackupView() {
     }
   }
 
-  // --- Import -------------------------------------------------------------
-  async function handleImportFile(file: File) {
-    setImporting(true);
-    setImportedSummary(null);
+  // --- Backup File Selection & Preview ------------------------------------
+  async function handleSelectBackupFile(file: File) {
+    setPreviewing(true);
+    setBackupPreview(null);
+    setRestoreResult(null);
+    setBackupPayload(null);
     try {
       const text = await file.text();
       let data: any;
@@ -168,165 +251,61 @@ export function BackupView() {
         return;
       }
 
-      // Restore by POSTing each entity through the existing APIs. This is a
-      // best-effort client-side restore: we create new records (with new IDs)
-      // for accounts, strategies, and trades. Instruments are skipped because
-      // they require an existing Instrument row to reference (the trade POST
-      // accepts an instrumentSymbol, so we don't need an Instrument record).
-      const accounts = Array.isArray(data?.accounts) ? data.accounts : [];
-      const strategies = Array.isArray(data?.strategies) ? data.strategies : [];
-      const trades = Array.isArray(data?.trades) ? data.trades : [];
+      setBackupPayload(data);
 
-      if (accounts.length === 0 && strategies.length === 0 && trades.length === 0) {
-        toast.error("Backup archive is empty or has an unrecognized format.");
+      // Call preview endpoint
+      const res = await fetch("/api/backups/preview", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ payload: data }),
+      });
+      const previewData = await res.json();
+      if (!res.ok) {
+        toast.error(previewData?.error || "Failed to analyze backup archive.");
         return;
       }
 
-      // 1) Restore accounts. Track the old-ID → new-ID mapping so trades
-      // can be re-linked to their original account.
-      const accountIdMap = new Map<string, string>();
-      let accountsCreated = 0;
-      for (const a of accounts) {
-        try {
-          const res = await fetch("/api/accounts", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              name: a.name ?? "Restored Account",
-              broker: a.broker ?? null,
-              accountType: a.accountType ?? "personal",
-              currency: a.currency ?? "USD",
-              startingBalanceCents: a.startingBalanceCents ?? 0,
-              isDefault: false,
-              consistencyRate: a.consistencyRate ?? null,
-              dailyLossLimitPct: a.dailyLossLimitPct ?? null,
-              maxDrawdownPct: a.maxDrawdownPct ?? null,
-            }),
-          });
-          if (res.ok) {
-            const created = await res.json();
-            accountIdMap.set(a.id, created.id);
-            accountsCreated++;
-          }
-        } catch {
-          // skip on error
-        }
-      }
+      setBackupPreview(previewData);
+      toast.info(`Backup analyzed: ${previewData.counts.trades} trades, ${previewData.counts.strategies} setups found.`);
+    } catch (err) {
+      console.error(err);
+      toast.error("Failed to read backup file.");
+    } finally {
+      setPreviewing(false);
+      if (fileInputRef.current) fileInputRef.current.value = "";
+    }
+  }
 
-      // 2) Restore strategies. Track old-ID → new-ID mapping for trades.
-      const strategyIdMap = new Map<string, string>();
-      let strategiesCreated = 0;
-      for (const s of strategies) {
-        try {
-          const res = await fetch("/api/strategies", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              name: s.name ?? "Restored Setup",
-              description: s.description ?? null,
-              purpose: s.purpose ?? null,
-              instruments: s.instruments ?? null,
-              market: s.market ?? null,
-              timeframe: s.timeframe ?? null,
-              session: s.session ?? null,
-              rules: null,
-            }),
-          });
-          if (res.ok) {
-            const created = await res.json();
-            strategyIdMap.set(s.id, created.id);
-            strategiesCreated++;
-          }
-        } catch {
-          // skip on error
-        }
-      }
-
-      // 3) Restore trades. We need a valid accountId — fall back to the
-      // first restored account if the trade's original account isn't in the
-      // backup (or wasn't restored). The trade POST runs server-side P&L
-      // calculation, so we send a minimal payload (entry/exit/stop/qty).
-      const fallbackAccountId = accountIdMap.values().next().value;
-      let tradesCreated = 0;
-      for (const t of trades) {
-        const accountId =
-          (t.accountId && accountIdMap.get(t.accountId)) || fallbackAccountId;
-        if (!accountId) continue;
-
-        // Build executions from the trade's stored entry/exit price/qty, or
-        // skip if essential fields are missing.
-        const executions: any[] = [];
-        if (t.entryPriceAvg && t.positionSize) {
-          executions.push({
-            kind: "entry",
-            price: String(t.entryPriceAvg),
-            quantity: String(t.positionSize),
-            ...(t.entryTime ? { timestamp: new Date(t.entryTime).toISOString() } : {}),
-          });
-        }
-        if (t.exitPriceAvg && t.positionSize) {
-          executions.push({
-            kind: "exit",
-            price: String(t.exitPriceAvg),
-            quantity: String(t.positionSize),
-            ...(t.exitTime ? { timestamp: new Date(t.exitTime).toISOString() } : {}),
-          });
-        }
-
-        try {
-          const res = await fetch("/api/trades", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              accountId,
-              instrumentSymbol: t.instrumentSymbol ?? "UNKNOWN",
-              market: t.market ?? null,
-              direction: t.direction ?? "long",
-              session: t.session ?? null,
-              strategyId:
-                (t.strategyId && strategyIdMap.get(t.strategyId)) || null,
-              setupGrade: t.setupGrade ?? null,
-              tags: Array.isArray(t.tagsJson) ? t.tagsJson : [],
-              plannedEntryPrice: t.plannedEntryPrice ?? null,
-              plannedStopPrice: t.plannedStopPrice ?? null,
-              plannedTargetPrice: t.plannedTargetPrice ?? null,
-              executions,
-              feesCents: t.feesCents ?? 0,
-              commissionCents: t.commissionCents ?? 0,
-              swapCents: t.swapCents ?? 0,
-              entryTime: t.entryTime ? new Date(t.entryTime).toISOString() : null,
-              exitTime: t.exitTime ? new Date(t.exitTime).toISOString() : null,
-              tradingTimezone: "UTC",
-              notes: t.notes ?? null,
-              lessons: t.lessons ?? null,
-              behaviorFlags: Array.isArray(t.behaviorFlagsJson)
-                ? t.behaviorFlagsJson
-                : [],
-              status: t.status ?? "open",
-            }),
-          });
-          if (res.ok) tradesCreated++;
-        } catch {
-          // skip on error
-        }
-      }
-
-      setImportedSummary({
-        accounts: accountsCreated,
-        strategies: strategiesCreated,
-        trades: tradesCreated,
+  // --- Execute Transactional Restore --------------------------------------
+  async function handleExecuteRestore() {
+    if (!backupPayload) return;
+    setRestoring(true);
+    try {
+      const res = await fetch("/api/backups", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          payload: backupPayload,
+          mode: restoreMode,
+          duplicateAction: "skip",
+        }),
       });
+      const data = await res.json();
+      if (!res.ok) {
+        toast.error(data?.error || "Restore failed. Changes were rolled back safely.");
+        return;
+      }
+
+      setRestoreResult(data);
       toast.success(
-        `Imported ${accountsCreated} account(s), ${strategiesCreated} setup(s), ${tradesCreated} trade(s).`,
+        `Restore completed! Restored ${data.restoredTrades} trades, ${data.restoredStrategies} setups (${data.skippedDuplicates} duplicate trades skipped).`
       );
-      // Invalidate everything we might have touched.
       qc.invalidateQueries();
     } catch (err) {
       console.error(err);
-      toast.error("Import failed. Please try again.");
+      toast.error("Network error during restore. Changes were safely rolled back.");
     } finally {
-      setImporting(false);
-      if (fileInputRef.current) fileInputRef.current.value = "";
+      setRestoring(false);
     }
   }
 
@@ -362,13 +341,44 @@ export function BackupView() {
         headers,
         sampleRows,
       });
-      setColumnMapping(autoMapHeaders(headers));
-      toast.success(`Uploaded ${file.name} (${data.rowCount} rows detected).`);
+
+      // Auto-detect broker preset
+      const detected = detectBrokerPreset(headers);
+      if (detected) {
+        setSelectedBrokerPreset(detected.id);
+        const presetMapping = getPresetMapping(detected.id, headers);
+        setColumnMapping({ ...autoMapHeaders(headers), ...presetMapping });
+        if (detected.id === "mt4_mt5") setSelectedBrokerTimezoneOffset(2);
+        else if (detected.id === "ninjatrader") setSelectedBrokerTimezoneOffset(-6);
+        else if (detected.id === "ibkr") setSelectedBrokerTimezoneOffset(-5);
+        else if (detected.id === "ctrader") setSelectedBrokerTimezoneOffset(0);
+        toast.success(`Detected ${detected.name} format! Pre-filled column mappings.`);
+      } else {
+        setSelectedBrokerPreset("custom");
+        setColumnMapping(autoMapHeaders(headers));
+        toast.success(`Uploaded ${file.name} (${data.rowCount} rows detected).`);
+      }
     } catch {
       toast.error("Network error uploading CSV.");
     } finally {
       setCsvUploading(false);
     }
+  }
+
+  function handleBrokerPresetChange(presetId: string) {
+    if (!activeImport) return;
+    setSelectedBrokerPreset(presetId);
+    if (presetId === "custom") {
+      setColumnMapping(autoMapHeaders(activeImport.headers));
+    } else {
+      const mapping = getPresetMapping(presetId, activeImport.headers);
+      setColumnMapping({ ...autoMapHeaders(activeImport.headers), ...mapping });
+      if (presetId === "mt4_mt5") setSelectedBrokerTimezoneOffset(2);
+      else if (presetId === "ninjatrader") setSelectedBrokerTimezoneOffset(-6);
+      else if (presetId === "ibkr") setSelectedBrokerTimezoneOffset(-5);
+      else if (presetId === "ctrader") setSelectedBrokerTimezoneOffset(0);
+    }
+    setValidationResult(null);
   }
 
   async function handleValidateMapping() {
@@ -378,7 +388,12 @@ export function BackupView() {
       const res = await fetch(`/api/imports/${activeImport.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "map", mapping: columnMapping }),
+        body: JSON.stringify({
+          action: "map",
+          mapping: columnMapping,
+          accountId: selectedCsvAccountId || undefined,
+          brokerUtcOffset: selectedBrokerTimezoneOffset,
+        }),
       });
       const data = await res.json();
       if (!res.ok) {
@@ -401,7 +416,11 @@ export function BackupView() {
       const res = await fetch(`/api/imports/${activeImport.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "confirm" }),
+        body: JSON.stringify({
+          action: "confirm",
+          accountId: selectedCsvAccountId || undefined,
+          brokerUtcOffset: selectedBrokerTimezoneOffset,
+        }),
       });
       const data = await res.json();
       if (!res.ok) {
@@ -409,7 +428,7 @@ export function BackupView() {
         return;
       }
       setCsvImportResult(data);
-      toast.success(`Successfully imported ${data.imported} trades!`);
+      toast.success(`Successfully imported ${data.imported} trades into your trading journal!`);
       qc.invalidateQueries({ queryKey: ["trades"] });
       qc.invalidateQueries({ queryKey: ["dashboard"] });
       qc.invalidateQueries({ queryKey: ["accounts"] });
@@ -442,12 +461,6 @@ export function BackupView() {
       toast.success(
         `Demo data loaded: 1 account, ${data.summary?.strategies ?? 4} trading models, and ${data.summary?.trades ?? 18} realistic trades!`,
       );
-      await qc.invalidateQueries({ queryKey: ["accounts"] });
-      await qc.invalidateQueries({ queryKey: ["trades"] });
-      await qc.invalidateQueries({ queryKey: ["dashboard"] });
-      await qc.invalidateQueries({ queryKey: ["analytics"] });
-      await qc.invalidateQueries({ queryKey: ["calendar"] });
-      await qc.invalidateQueries({ queryKey: ["strategies"] });
       await qc.invalidateQueries();
     } catch (err) {
       console.error(err);
@@ -466,8 +479,7 @@ export function BackupView() {
             Backup, Snapshot &amp; Data Management
           </h1>
           <p className="text-sm text-muted-foreground mt-1">
-            Export portable JSON snapshots of your records or restore previous
-            backups.
+            Export complete institutional JSON archives, inspect and preview restore archives with transactional safety, or import CSV histories from your brokers.
           </p>
         </div>
 
@@ -478,10 +490,9 @@ export function BackupView() {
               <FileJson className="h-5 w-5 text-primary-foreground" />
             </div>
             <div className="min-w-0 flex-1">
-              <SectionHeading>Export Backup (.JSON)</SectionHeading>
+              <SectionHeading>Export Complete Archive (.JSON)</SectionHeading>
               <p className="text-sm text-muted-foreground mt-1">
-                Generates a JSON snapshot containing accounts, setups, trades,
-                journal entries, and trading days for offline archiving.
+                Generates a schema 2.0 institutional snapshot containing all accounts, instruments, versioned strategies, checklists, trades, executions, targets, no-trade observations, prop challenges, tasks, and dictionary entries.
               </p>
               <div className="mt-4">
                 <Button
@@ -490,9 +501,9 @@ export function BackupView() {
                   className="bg-primary text-primary-foreground hover:bg-primary/90 rounded-lg shadow-sm"
                 >
                   {exporting ? (
-                    <Loader2 className="h-4 w-4 animate-spin" />
+                    <Loader2 className="h-4 w-4 animate-spin mr-2" />
                   ) : (
-                    <Download className="h-4 w-4" />
+                    <Download className="h-4 w-4 mr-2" />
                   )}
                   Export Backup JSON
                 </Button>
@@ -507,18 +518,15 @@ export function BackupView() {
             <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg bg-background border border-border">
               <Upload className="h-5 w-5 text-muted-foreground" />
             </div>
-            <div className="min-w-0 flex-1">
-              <SectionHeading>Import Backup Archive</SectionHeading>
-              <p className="text-sm text-muted-foreground mt-1">
-                Restore your trading journal records from a previous{" "}
-                <span className="font-mono text-xs bg-background px-1 py-0.5 rounded">
-                  .json
-                </span>{" "}
-                backup file. This will create new records (with new IDs) for
-                accounts, setups, and trades.
-              </p>
+            <div className="min-w-0 flex-1 space-y-4">
+              <div>
+                <SectionHeading>Import Backup Archive (Preview &amp; Atomic Restore)</SectionHeading>
+                <p className="text-sm text-muted-foreground mt-1">
+                  Upload an AlphaPips backup archive. The system performs pre-import validation and confidence-based duplicate detection. All mutations run inside an atomic database transaction.
+                </p>
+              </div>
 
-              {/* Hidden file input — the visible button triggers it */}
+              {/* Hidden file input */}
               <input
                 ref={fileInputRef}
                 type="file"
@@ -526,45 +534,163 @@ export function BackupView() {
                 className="sr-only"
                 onChange={(e) => {
                   const f = e.target.files?.[0];
-                  if (f) handleImportFile(f);
+                  if (f) handleSelectBackupFile(f);
                 }}
               />
 
-              <div className="mt-4 flex flex-wrap items-center gap-3">
-                <Button
-                  variant="outline"
-                  onClick={() => fileInputRef.current?.click()}
-                  disabled={importing}
-                  className="border-input text-foreground hover:bg-muted/50 rounded-lg"
-                >
-                  {importing ? (
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                  ) : (
-                    <Upload className="h-4 w-4" />
-                  )}
-                  Select Backup JSON
-                </Button>
-                {importing && (
-                  <span className="text-xs text-muted-foreground">
-                    Restoring records…
-                  </span>
-                )}
-              </div>
+              {!backupPreview ? (
+                <div>
+                  <Button
+                    variant="outline"
+                    onClick={() => fileInputRef.current?.click()}
+                    disabled={previewing}
+                    className="border-input text-foreground hover:bg-muted/50 rounded-lg flex items-center gap-2"
+                  >
+                    {previewing ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <Upload className="h-4 w-4" />
+                    )}
+                    Select Backup JSON File
+                  </Button>
+                </div>
+              ) : (
+                <div className="space-y-4 pt-3 border-t border-border">
+                  {/* Archive Summary Counts */}
+                  <div className="rounded-xl border border-border bg-muted/20 p-4 space-y-3">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <ShieldCheck className="h-4 w-4 text-primary" />
+                        <span className="font-semibold text-xs text-foreground">Archive Contents (Schema {backupPreview.schemaVersion})</span>
+                      </div>
+                      <Badge variant="outline" className="text-[10px] font-mono">
+                        {backupPreview.appName}
+                      </Badge>
+                    </div>
 
-              {/* Imported summary */}
-              {importedSummary && !importing && (
-                <div className="mt-4 rounded-lg border border-emerald-200 bg-emerald-50 p-3">
-                  <div className="flex items-start gap-2">
-                    <CheckCircle2 className="h-4 w-4 text-profit mt-0.5 shrink-0" />
-                    <div className="text-xs text-emerald-800">
-                      <div className="font-semibold mb-1">Restore complete</div>
-                      <ul className="space-y-0.5 tabular-nums">
-                        <li>· {importedSummary.accounts} account(s) created</li>
-                        <li>· {importedSummary.strategies} setup(s) created</li>
-                        <li>· {importedSummary.trades} trade(s) created</li>
-                      </ul>
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
+                      <div className="p-2 rounded bg-background border border-border">
+                        <span className="text-muted-foreground block text-[10px]">Trades</span>
+                        <span className="font-mono font-bold text-foreground text-sm">{backupPreview.counts.trades}</span>
+                      </div>
+                      <div className="p-2 rounded bg-background border border-border">
+                        <span className="text-muted-foreground block text-[10px]">Setups / Strategies</span>
+                        <span className="font-mono font-bold text-foreground text-sm">{backupPreview.counts.strategies}</span>
+                      </div>
+                      <div className="p-2 rounded bg-background border border-border">
+                        <span className="text-muted-foreground block text-[10px]">Observations</span>
+                        <span className="font-mono font-bold text-foreground text-sm">{backupPreview.counts.noTrades}</span>
+                      </div>
+                      <div className="p-2 rounded bg-background border border-border">
+                        <span className="text-muted-foreground block text-[10px]">Prop Trackers</span>
+                        <span className="font-mono font-bold text-foreground text-sm">{backupPreview.counts.propChallenges}</span>
+                      </div>
+                    </div>
+
+                    {/* Duplicate Detection Analysis */}
+                    <div className="pt-2 border-t border-border space-y-1.5">
+                      <div className="flex items-center justify-between text-xs">
+                        <span className="font-medium text-foreground">Duplicate Analysis</span>
+                        <span className="text-muted-foreground font-mono">
+                          {backupPreview.duplicateAnalysis.cleanTradesCount} New / {backupPreview.duplicateAnalysis.exactDuplicatesCount} Exact Duplicates
+                        </span>
+                      </div>
+                      {backupPreview.duplicateAnalysis.exactDuplicatesCount > 0 && (
+                        <p className="text-[11px] text-amber-600 dark:text-amber-400">
+                          ℹ️ {backupPreview.duplicateAnalysis.exactDuplicatesCount} trades are 100% exact duplicates of existing records and will be safely skipped in Merge mode.
+                        </p>
+                      )}
+                    </div>
+
+                    {/* Mode Selection */}
+                    <div className="pt-2 border-t border-border space-y-2">
+                      <span className="text-xs font-medium text-foreground block">Restore Execution Mode</span>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
+                        <button
+                          type="button"
+                          onClick={() => setRestoreMode("merge")}
+                          className={cn(
+                            "p-3 rounded-lg border text-left transition-colors",
+                            restoreMode === "merge"
+                              ? "border-primary bg-primary/10 text-foreground"
+                              : "border-border bg-background hover:bg-muted text-muted-foreground"
+                          )}
+                        >
+                          <div className="font-semibold text-xs">Merge (Recommended)</div>
+                          <p className="text-[11px] text-muted-foreground mt-0.5">
+                            Appends new records and safely skips exact duplicates without altering current data.
+                          </p>
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => setRestoreMode("replace")}
+                          className={cn(
+                            "p-3 rounded-lg border text-left transition-colors",
+                            restoreMode === "replace"
+                              ? "border-destructive bg-destructive/10 text-foreground"
+                              : "border-border bg-background hover:bg-muted text-muted-foreground"
+                          )}
+                        >
+                          <div className="font-semibold text-xs text-destructive">Replace (Full Overwrite)</div>
+                          <p className="text-[11px] text-muted-foreground mt-0.5">
+                            Takes an automatic pre-restore safety snapshot, then replaces all records with this archive.
+                          </p>
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Transaction Safety Guarantee */}
+                    <div className="p-2.5 rounded-lg bg-background border border-border text-[11px] text-muted-foreground flex items-center gap-2">
+                      <ShieldCheck className="h-4 w-4 text-emerald-500 shrink-0" />
+                      <span>{backupPreview.safetySummary.atomicityNotice}</span>
+                    </div>
+
+                    {/* Actions */}
+                    <div className="flex items-center gap-3 pt-2">
+                      <Button
+                        size="sm"
+                        onClick={handleExecuteRestore}
+                        disabled={restoring}
+                        className={cn(
+                          "text-xs font-semibold",
+                          restoreMode === "replace"
+                            ? "bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                            : "bg-primary text-primary-foreground hover:bg-primary/90"
+                        )}
+                      >
+                        {restoring ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1.5" /> : null}
+                        Confirm &amp; Execute {restoreMode === "replace" ? "Replace" : "Merge"}
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => {
+                          setBackupPreview(null);
+                          setBackupPayload(null);
+                        }}
+                        className="text-xs text-muted-foreground hover:text-foreground"
+                      >
+                        Cancel
+                      </Button>
                     </div>
                   </div>
+
+                  {/* Restore Result Card */}
+                  {restoreResult && (
+                    <div className="rounded-lg border border-emerald-200 bg-emerald-50 dark:bg-emerald-950/30 dark:border-emerald-800 p-3.5 space-y-1.5">
+                      <div className="flex items-center gap-2 text-emerald-800 dark:text-emerald-300 font-semibold text-xs">
+                        <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-600" />
+                        <span>Restore successfully committed ({restoreResult.mode} mode)</span>
+                      </div>
+                      <div className="text-[11px] text-emerald-700 dark:text-emerald-400 grid grid-cols-2 sm:grid-cols-4 gap-1.5 pt-1">
+                        <div>Trades: {restoreResult.restoredTrades}</div>
+                        <div>Setups: {restoreResult.restoredStrategies}</div>
+                        <div>Observations: {restoreResult.restoredNoTrades}</div>
+                        <div>Duplicates Skipped: {restoreResult.skippedDuplicates}</div>
+                      </div>
+                    </div>
+                  )}
                 </div>
               )}
             </div>
@@ -581,7 +707,7 @@ export function BackupView() {
               <div>
                 <SectionHeading>Import Broker Trades (CSV)</SectionHeading>
                 <p className="text-sm text-muted-foreground mt-1">
-                  Upload CSV trade histories from MetaTrader (MT4/MT5), TradingView, cTrader, or custom brokers. Map columns visually and inspect duplicate detection before importing.
+                  Upload CSV trade histories from MetaTrader (MT4/MT5), cTrader, NinjaTrader, TradeLocker, or Interactive Brokers. Pre-fills standard column mappings and prevents duplicate entries.
                 </p>
               </div>
 
@@ -619,6 +745,69 @@ export function BackupView() {
                   <div className="flex items-center justify-between text-xs font-mono">
                     <span className="font-semibold text-foreground">{activeImport.filename}</span>
                     <span className="text-muted-foreground">{activeImport.rowCount} rows detected</span>
+                  </div>
+
+                  {/* Broker Preset, Server Timezone & Target Account Selectors */}
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
+                    <div className="space-y-1">
+                      <label className="font-medium text-foreground">Broker Preset</label>
+                      <Select
+                        value={selectedBrokerPreset}
+                        onValueChange={handleBrokerPresetChange}
+                      >
+                        <SelectTrigger className="h-8 text-xs bg-background">
+                          <SelectValue placeholder="Select broker format..." />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="custom">Custom / Manual Mapping</SelectItem>
+                          {BROKER_PRESETS.map((p) => (
+                            <SelectItem key={p.id} value={p.id} className="text-xs">
+                              {p.name}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+
+                    <div className="space-y-1">
+                      <label className="font-medium text-foreground">Broker Timezone</label>
+                      <Select
+                        value={selectedBrokerTimezoneOffset != null ? String(selectedBrokerTimezoneOffset) : "none"}
+                        onValueChange={(val) => setSelectedBrokerTimezoneOffset(val === "none" ? undefined : parseFloat(val))}
+                      >
+                        <SelectTrigger className="h-8 text-xs bg-background">
+                          <SelectValue placeholder="Select timezone offset..." />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="2" className="text-xs">UTC+2 (EET - Standard MT4/MT5)</SelectItem>
+                          <SelectItem value="3" className="text-xs">UTC+3 (EEST - Summer MT4/MT5)</SelectItem>
+                          <SelectItem value="0" className="text-xs">UTC+0 (GMT / London / cTrader)</SelectItem>
+                          <SelectItem value="-5" className="text-xs">UTC-5 (EST / US Eastern / IBKR)</SelectItem>
+                          <SelectItem value="-6" className="text-xs">UTC-6 (CST / NinjaTrader)</SelectItem>
+                          <SelectItem value="none" className="text-xs">Unspecified (Parse as Local / ISO)</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+
+                    <div className="space-y-1">
+                      <label className="font-medium text-foreground">Target Account</label>
+                      <Select
+                        value={selectedCsvAccountId}
+                        onValueChange={setSelectedCsvAccountId}
+                      >
+                        <SelectTrigger className="h-8 text-xs bg-background">
+                          <SelectValue placeholder="Default Trading Account" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="">Default Account</SelectItem>
+                          {accounts.map((a) => (
+                            <SelectItem key={a.id} value={a.id} className="text-xs">
+                              {a.name} ({a.currency})
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
                   </div>
 
                   {/* Column Mapper */}

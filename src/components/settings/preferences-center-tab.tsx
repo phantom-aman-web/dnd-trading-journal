@@ -55,9 +55,9 @@ const THEME_OPTIONS = [
   },
   {
     key: "institutional" as DndTheme,
-    label: "Institutional Blue",
-    desc: "Deep navy and slate for professional trading environments",
-    swatches: ["#0A1128", "#1C2541", "#3B82F6"],
+    label: "Slate Contrast",
+    desc: "Dark sidebar and high-contrast slate workspace for professional analysis",
+    swatches: ["#0F172A", "#1E293B", "#38BDF8"],
   },
 ];
 

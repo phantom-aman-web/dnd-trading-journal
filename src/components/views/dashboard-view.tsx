@@ -221,6 +221,22 @@ export function DashboardView() {
     queryFn: () => fetchDashboard(preset, accountId),
   });
 
+  const { data: accountsData } = useQuery({
+    queryKey: ["accounts"],
+    queryFn: async () => {
+      const res = await fetch("/api/accounts", { cache: "no-store" });
+      if (!res.ok) return [];
+      const json = await res.json();
+      return Array.isArray(json) ? json : json.items ?? [];
+    },
+  });
+
+  const accountName = useMemo(() => {
+    if (!accountId || accountId === "all") return "All Accounts";
+    const list = Array.isArray(accountsData) ? accountsData : [];
+    return list.find((a: any) => a.id === accountId)?.name ?? "Account";
+  }, [accountId, accountsData]);
+
   const { data: tradesData, isLoading: tradesLoading } = useQuery({
     queryKey: ["dashboard-recent-trades", accountId],
     queryFn: () => fetchRecentTrades(accountId),
@@ -637,6 +653,8 @@ export function DashboardView() {
         setPreset={setPreset}
         comparison={dash?.comparison}
         onOpenCustomize={() => setCustomizeOpen(true)}
+        accountName={accountName}
+        onInspectTrades={() => navigate("tradesLog", accountId ? { accountId } : undefined)}
       />
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
@@ -674,69 +692,97 @@ function DashboardHeader({
   setPreset,
   comparison,
   onOpenCustomize,
+  accountName = "All Accounts",
+  onInspectTrades,
 }: {
   preset: string;
   setPreset: (p: string) => void;
   comparison?: PeriodComparison | null;
   onOpenCustomize?: () => void;
+  accountName?: string;
+  onInspectTrades?: () => void;
 }) {
+  const currentPresetLabel = PRESETS.find((p) => p.key === preset)?.label ?? "This Month";
+
   return (
-    <div className="flex flex-col sm:flex-row sm:items-center gap-3">
-      <div>
-        <div className="flex items-center gap-2.5 flex-wrap">
-          <h1 className="text-2xl font-semibold tracking-tight text-foreground">Dashboard</h1>
-          {comparison && (
-            <Badge
-              variant="outline"
-              className={cn(
-                "text-xs font-mono font-medium tracking-tight",
-                comparison.pnlChangeCents > 0
-                  ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/30"
-                  : comparison.pnlChangeCents < 0
-                    ? "bg-rose-500/10 text-rose-600 dark:text-rose-400 border-rose-500/30"
-                    : "bg-muted text-muted-foreground border-border",
-              )}
-            >
-              vs prev: {formatSignedCents(comparison.pnlChangeCents).text}
-              {comparison.winRateDelta ? ` (${comparison.winRateDelta.startsWith("-") ? "" : "+"}${comparison.winRateDelta} WR)` : ""}
-            </Badge>
-          )}
-        </div>
-        <p className="text-sm text-muted-foreground">Track your adherence, edge, and market performance.</p>
-      </div>
-      <div className="sm:ml-auto flex flex-wrap items-center gap-2">
-        {onOpenCustomize && (
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            onClick={onOpenCustomize}
-            className="h-8 gap-1.5 text-xs bg-card border-border text-foreground hover:bg-muted/50"
-          >
-            <SlidersHorizontal className="h-3.5 w-3.5" />
-            <span>Customize</span>
-          </Button>
-        )}
-        <div className="flex flex-wrap gap-1.5">
-          {PRESETS.map((p) => {
-            const active = preset === p.key;
-            return (
-              <button
-                key={p.key}
-                type="button"
-                onClick={() => setPreset(p.key)}
+    <div className="space-y-3">
+      <div className="flex flex-col sm:flex-row sm:items-center gap-3">
+        <div>
+          <div className="flex items-center gap-2.5 flex-wrap">
+            <h1 className="text-2xl font-semibold tracking-tight text-foreground">Dashboard</h1>
+            {comparison && (
+              <Badge
+                variant="outline"
                 className={cn(
-                  "h-8 px-3 rounded-md text-xs font-medium border transition-colors",
-                  active
-                    ? "bg-slate-900 text-primary-foreground border-primary"
-                    : "bg-card text-muted-foreground border-border hover:bg-muted/50 hover:text-foreground",
+                  "text-xs font-mono font-medium tracking-tight",
+                  comparison.pnlChangeCents > 0
+                    ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/30"
+                    : comparison.pnlChangeCents < 0
+                      ? "bg-rose-500/10 text-rose-600 dark:text-rose-400 border-rose-500/30"
+                      : "bg-muted text-muted-foreground border-border",
                 )}
               >
-                {p.label}
-              </button>
-            );
-          })}
+                vs prev: {formatSignedCents(comparison.pnlChangeCents).text}
+                {comparison.winRateDelta ? ` (${comparison.winRateDelta.startsWith("-") ? "" : "+"}${comparison.winRateDelta} WR)` : ""}
+              </Badge>
+            )}
+          </div>
+          <p className="text-sm text-muted-foreground">Track your adherence, edge, and market performance.</p>
         </div>
+        <div className="sm:ml-auto flex flex-wrap items-center gap-2">
+          {onOpenCustomize && (
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={onOpenCustomize}
+              className="h-8 gap-1.5 text-xs bg-card border-border text-foreground hover:bg-muted/50"
+            >
+              <SlidersHorizontal className="h-3.5 w-3.5" />
+              <span>Customize</span>
+            </Button>
+          )}
+          <div className="flex flex-wrap gap-1.5">
+            {PRESETS.map((p) => {
+              const active = preset === p.key;
+              return (
+                <button
+                  key={p.key}
+                  type="button"
+                  onClick={() => setPreset(p.key)}
+                  className={cn(
+                    "h-8 px-3 rounded-md text-xs font-medium border transition-colors cursor-pointer",
+                    active
+                      ? "bg-slate-900 text-primary-foreground border-primary"
+                      : "bg-card text-muted-foreground border-border hover:bg-muted/50 hover:text-foreground",
+                  )}
+                >
+                  {p.label}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      </div>
+
+      {/* Explicit Scope Banner */}
+      <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-2 rounded-lg border border-border/80 bg-muted/30 text-xs">
+        <div className="flex items-center gap-2 text-muted-foreground">
+          <span className="font-semibold text-foreground">Active Scope:</span>
+          <span className="font-medium text-foreground">{accountName}</span>
+          <span>·</span>
+          <span>{currentPresetLabel}</span>
+          <span>·</span>
+          <span className="text-foreground font-medium">Closed Realized Trades</span>
+        </div>
+        {onInspectTrades && (
+          <button
+            onClick={onInspectTrades}
+            className="text-primary hover:underline font-medium inline-flex items-center gap-1 transition-colors cursor-pointer"
+          >
+            View contributing trades in Journal →
+          </button>
+        )}
       </div>
     </div>
   );

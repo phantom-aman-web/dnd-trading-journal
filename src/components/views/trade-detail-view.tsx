@@ -144,7 +144,7 @@ export function TradeDetailView({ tradeId, onBack }: { tradeId?: string; onBack?
     : "-";
 
   return (
-    <div className="p-4 md:p-6 space-y-4 max-w-5xl">
+    <div className="p-4 md:p-6 space-y-4 max-w-6xl">
       {/* Header */}
       <div className="flex items-center gap-3">
         <Button variant="ghost" size="icon" onClick={() => onBack ? onBack() : navigate("tradesLog")}>
@@ -677,7 +677,20 @@ export function TradeDetailView({ tradeId, onBack }: { tradeId?: string; onBack?
               </div>
               <div>
                 <div className="text-xs text-muted-foreground">Risk %</div>
-                <div className="font-medium tnum">{trade.plannedRiskPct ? `${(dToNumber(trade.plannedRiskPct) * 100).toFixed(2)}%` : "-"}</div>
+                <div className="font-medium tnum">
+                  {trade.plannedRiskPct
+                    ? (() => {
+                        if (trade.riskAmountCents && trade.accountBalanceCents && trade.accountBalanceCents > 0) {
+                          const calc = (trade.riskAmountCents / trade.accountBalanceCents) * 100;
+                          return `${calc.toFixed(2)}%`;
+                        }
+                        const val = dToNumber(trade.plannedRiskPct);
+                        if (!Number.isFinite(val) || val <= 0) return "-";
+                        const pct = val <= 0.20 ? val * 100 : val;
+                        return `${pct.toFixed(2)}%`;
+                      })()
+                    : "-"}
+                </div>
               </div>
             </div>
 

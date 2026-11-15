@@ -114,7 +114,7 @@ export function GettingStartedCard() {
             <h2 className="text-sm font-semibold tracking-tight">Getting Started</h2>
           </div>
           <p className="mt-1 text-xs text-muted-foreground">
-            Complete these steps to get the most out of DnD.
+            Complete these steps to get the most out of AlphaPips.
           </p>
         </div>
         <div className="text-right shrink-0">

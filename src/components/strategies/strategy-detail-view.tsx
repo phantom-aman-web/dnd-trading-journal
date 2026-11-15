@@ -295,7 +295,7 @@ export function StrategyDetailView({ strategyId, onBack }: StrategyDetailViewPro
                   <GitCompare className="h-4 w-4 text-primary" /> Version Management
                 </h3>
                 <p className="text-muted-foreground leading-relaxed">
-                  DnD uses immutable strategy versioning. Editing rules never alters past trades or historical version snapshots.
+                  AlphaPips uses immutable strategy versioning. Editing rules never alters past trades or historical version snapshots.
                 </p>
                 <div className="p-2.5 rounded-lg bg-muted/40 border border-border space-y-1">
                   <div>Active: <strong>v{latestVersion?.versionLabel ?? "1.0"}</strong></div>

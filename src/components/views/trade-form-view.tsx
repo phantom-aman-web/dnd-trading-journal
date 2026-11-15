@@ -109,7 +109,13 @@ import {
 /* Constants                                                           */
 /* ------------------------------------------------------------------ */
 
-const DRAFT_KEY = "dnd-trade-draft-5step";
+const DRAFT_KEY_PREFIX = "alphapips-trade-draft";
+function getDraftKey(uid?: string, tradeId?: string | null) {
+  if (tradeId) {
+    return `${DRAFT_KEY_PREFIX}-${uid || "local"}-edit-${tradeId}`;
+  }
+  return `${DRAFT_KEY_PREFIX}-${uid || "local"}-new`;
+}
 
 const SESSIONS = [
   { value: "asian_range", label: "Asian Range" },
@@ -306,7 +312,7 @@ export function TradeFormView() {
     plannedStopPrice: "",
     plannedTargetPrice: "",
     lotSize: "1",
-    riskPct: "0.005",
+    riskPct: "0.5",
     // Exit price for P&L calculation. When the user follows the plan,
     // this is auto-set to the planned target. When they deviate, they
     // enter the actual exit price in the Plan Adherence section.
@@ -348,7 +354,7 @@ export function TradeFormView() {
   const [activeStep, setActiveStep] = useState<StepKey>("trade-info");
   const [saving, setSaving] = useState(false);
   const [advancedOpen, setAdvancedOpen] = useState(false);
-  const [autosaveState, setAutosaveState] = useState<"idle" | "saving" | "saved">("idle");
+  const [autosaveState, setAutosaveState] = useState<"idle" | "saving" | "saved" | "error">("idle");
   const [lastSavedAt, setLastSavedAt] = useState<Date | null>(null);
   const [restoredDraftInfo, setRestoredDraftInfo] = useState<{ timestamp?: string } | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -431,8 +437,8 @@ export function TradeFormView() {
   );
 
   const strategyCustomFields: StrategyCustomField[] = useMemo(
-    () => extractCustomFields(selectedStrategyVersion?.rulesJson),
-    [selectedStrategyVersion?.rulesJson],
+    () => extractCustomFields(selectedStrategyVersion?.rulesJson, !!form.strategyId),
+    [selectedStrategyVersion?.rulesJson, form.strategyId],
   );
 
   const checklistThresholds: GradingThresholds | null = useMemo(() => {
@@ -568,7 +574,20 @@ export function TradeFormView() {
       lotSize: existing.positionSize ?? "1",
       // Restore actual exit price from existing trade data.
       actualExitPrice: existing.exitPriceAvg ?? "",
-      riskPct: existing.plannedRiskPct ?? "0.005",
+      riskPct: existing.plannedRiskPct
+        ? (() => {
+            if (existing.riskAmountCents && existing.accountBalanceCents && existing.accountBalanceCents > 0) {
+              const calc = (existing.riskAmountCents / existing.accountBalanceCents) * 100;
+              return calc.toFixed(4).replace(/\.?0+$/, "");
+            }
+            const n = Number(existing.plannedRiskPct);
+            if (!Number.isFinite(n) || n <= 0) return "0.5";
+            if (n <= 0.20) {
+              return (n * 100).toFixed(4).replace(/\.?0+$/, "");
+            }
+            return n.toFixed(4).replace(/\.?0+$/, "");
+          })()
+        : "0.5",
       partialExits: (() => {
         // Prefer the TradeTarget rows returned by the server (Fix #3 —
         // persisted partial exits). Map them back into the form's
@@ -651,19 +670,71 @@ export function TradeFormView() {
     }
   }, [existing]);
 
-  // Deep-link pre-fills: ?date=YYYY-MM-DD (from calendar)
+  // Deep-link pre-fills: ?date=YYYY-MM-DD (from calendar), or sizing parameters from Risk Calculator
   useEffect(() => {
     if (editingId) return;
-    if (!params.date) return;
+    const hasParams =
+      params.date ||
+      params.symbol ||
+      params.direction ||
+      params.entry ||
+      params.stop ||
+      params.target ||
+      params.size ||
+      params.accountId ||
+      params.plannedRiskCents ||
+      params.plannedRiskPct;
+    if (!hasParams) return;
+
     setForm((f: any) => {
       const next = { ...f };
       if (params.date) {
         next.tradeDate = params.date;
         if (!next.tradeTime) next.tradeTime = "09:00";
       }
+      if (params.symbol) {
+        next.instrumentSymbol = params.symbol.toUpperCase();
+      }
+      if (params.direction === "long" || params.direction === "short") {
+        next.direction = params.direction;
+      }
+      if (params.entry) {
+        next.plannedEntryPrice = params.entry;
+      }
+      if (params.stop) {
+        next.plannedStopPrice = params.stop;
+      }
+      if (params.target) {
+        next.plannedTargetPrice = params.target;
+      }
+      if (params.size) {
+        next.lotSize = params.size;
+      }
+      if (params.accountId) {
+        next.accountId = params.accountId;
+      }
+      if (params.plannedRiskCents) {
+        const val = parseInt(params.plannedRiskCents, 10);
+        if (!isNaN(val) && val > 0) next.plannedRiskAmountCents = val;
+      }
+      if (params.plannedRiskPct) {
+        next.plannedRiskPercent = params.plannedRiskPct;
+      }
       return next;
     });
-  }, [params.date, editingId]);
+  }, [
+    params.date,
+    params.symbol,
+    params.direction,
+    params.entry,
+    params.stop,
+    params.target,
+    params.size,
+    params.accountId,
+    params.plannedRiskCents,
+    params.plannedRiskPct,
+    editingId,
+  ]);
 
   // Autosave draft (new trades only).
   useEffect(() => {
@@ -675,34 +746,49 @@ export function TradeFormView() {
     setAutosaveState("saving");
     const t = setTimeout(() => {
       try {
-        const payload = { ...form, _savedAt: new Date().toISOString() };
-        localStorage.setItem(DRAFT_KEY, JSON.stringify(payload));
+        const payload = {
+          ...form,
+          entryMode,
+          activeStep,
+          _savedAt: new Date().toISOString(),
+        };
+        const key = getDraftKey(meta?.user?.id, editingId);
+        localStorage.setItem(key, JSON.stringify(payload));
         setAutosaveState("saved");
         setLastSavedAt(new Date());
       } catch {
-        setAutosaveState("idle");
+        setAutosaveState("error");
       }
     }, 600);
     return () => clearTimeout(t);
-  }, [form, editingId]);
+  }, [form, entryMode, activeStep, editingId, meta?.user?.id]);
 
   // Restore draft on mount (new trades only).
   useEffect(() => {
     if (editingId) return;
-    const saved = localStorage.getItem(DRAFT_KEY);
+    const key = getDraftKey(meta?.user?.id, editingId);
+    let saved = localStorage.getItem(key);
+    if (!saved) {
+      // Backward compatibility with legacy draft keys
+      const legacyUserKey = `${DRAFT_KEY_PREFIX}-${meta?.user?.id || "local"}`;
+      saved = localStorage.getItem(legacyUserKey) || localStorage.getItem("dnd-trade-draft-5step");
+    }
     if (!saved) return;
     try {
       const parsed = JSON.parse(saved);
       // Any media that was mid-upload when the page closed can't be resumed
-      // (the XHR is gone and File objects aren't serializable) — mark them
-      // as failed so the user can retry or remove them, rather than leaving
-      // them stuck at 0% forever.
       if (Array.isArray(parsed.uploadedMedia)) {
         parsed.uploadedMedia = parsed.uploadedMedia.map((m: any) =>
           m?.status === "uploading" ? { ...m, status: "failed" } : m,
         );
       }
       setForm((f: any) => ({ ...f, ...parsed }));
+      if (parsed.entryMode === "quick" || parsed.entryMode === "advanced") {
+        setEntryMode(parsed.entryMode);
+      }
+      if (parsed.activeStep) {
+        setActiveStep(parsed.activeStep);
+      }
       const timeStr = parsed._savedAt
         ? new Date(parsed._savedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
         : undefined;
@@ -714,11 +800,15 @@ export function TradeFormView() {
     } catch {
       // ignore
     }
-  }, [editingId]);
+  }, [editingId, meta?.user?.id]);
 
   function discardDraft() {
     try {
-      localStorage.removeItem(DRAFT_KEY);
+      const key = getDraftKey(meta?.user?.id, editingId);
+      localStorage.removeItem(key);
+      const legacyUserKey = `${DRAFT_KEY_PREFIX}-${meta?.user?.id || "local"}`;
+      localStorage.removeItem(legacyUserKey);
+      localStorage.removeItem("dnd-trade-draft-5step");
     } catch {}
     setRestoredDraftInfo(null);
     setLastSavedAt(null);
@@ -742,7 +832,7 @@ export function TradeFormView() {
       plannedStopPrice: "",
       plannedTargetPrice: "",
       lotSize: "1",
-      riskPct: "0.005",
+      riskPct: "0.5",
       actualExitPrice: "",
       followedPlan: true,
       actualEntryPrice: "",
@@ -1121,10 +1211,10 @@ export function TradeFormView() {
       ? rewardPerUnit / riskPerUnit
       : null;
 
-  // Risk amount ($) = balance * riskPct.
+  // Risk amount ($) = balance * (riskPct / 100).
   const riskAmountDollars =
     Number.isFinite(riskPctNum) && balanceCents > 0
-      ? (balanceCents / 100) * riskPctNum
+      ? (balanceCents / 100) * (riskPctNum / 100)
       : null;
 
   // Planned profit ($) = riskAmount * RR (if RR is known).
@@ -1240,7 +1330,9 @@ export function TradeFormView() {
       plannedEntryPrice: form.plannedEntryPrice,
       plannedStopPrice: form.plannedStopPrice,
       plannedTargetPrice: form.plannedTargetPrice,
-      plannedRiskPct: form.riskPct,
+      plannedRiskPct: Number.isFinite(riskPctNum) && riskPctNum > 0
+        ? (riskPctNum / 100).toFixed(8).replace(/\.?0+$/, "")
+        : null,
       entryPriceAvg: actEntry,
       exitPriceAvg: actExit,
       actualR,
@@ -1375,7 +1467,9 @@ export function TradeFormView() {
         plannedEntryPrice: form.plannedEntryPrice || null,
         plannedStopPrice: form.plannedStopPrice || null,
         plannedTargetPrice: form.plannedTargetPrice || null,
-        plannedRiskPct: form.riskPct || null,
+        plannedRiskPct: Number.isFinite(riskPctNum) && riskPctNum > 0
+          ? (riskPctNum / 100).toFixed(8).replace(/\.?0+$/, "")
+          : null,
         positionSize: form.followedPlan ? form.lotSize : (form.actualLotSize || form.lotSize),
         // For planned trades, don't send executions — the trade is not executed yet.
         // The server will keep P&L as 0 and status as "planned".
@@ -1569,7 +1663,13 @@ export function TradeFormView() {
 
       setDeletedMediaIds([]);
       toast.success(asDraft ? "Draft saved." : "Trade saved.");
-      try { localStorage.removeItem(DRAFT_KEY); } catch {}
+      try {
+        const key = getDraftKey(meta?.user?.id, editingId);
+        localStorage.removeItem(key);
+        const legacyUserKey = `${DRAFT_KEY_PREFIX}-${meta?.user?.id || "local"}`;
+        localStorage.removeItem(legacyUserKey);
+        localStorage.removeItem("dnd-trade-draft-5step");
+      } catch {}
       const targetId = editingId || data?.id;
       await Promise.all([
         qc.invalidateQueries({ queryKey: ["trade", targetId] }),
@@ -1641,6 +1741,12 @@ export function TradeFormView() {
                       Saved {lastSavedAt.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
                     </span>
                   )}
+                  {autosaveState === "error" && (
+                    <span className="flex items-center gap-1 text-destructive font-semibold">
+                      <AlertTriangle className="h-3 w-3" />
+                      Save failed
+                    </span>
+                  )}
                 </div>
               )}
             </div>
@@ -1700,9 +1806,23 @@ export function TradeFormView() {
               variant="outline"
               size="sm"
               className="h-7 text-xs bg-background hover:bg-muted"
-              onClick={discardDraft}
+              onClick={() => {
+                if (window.confirm("Are you sure you want to discard this unsaved draft and start fresh? All draft progress will be cleared.")) {
+                  discardDraft();
+                }
+              }}
             >
-              Discard & Start Fresh
+              Discard &amp; Start Fresh
+            </Button>
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              className="h-7 text-xs px-2"
+              onClick={() => setRestoredDraftInfo(null)}
+              title="Keep restored draft and dismiss notice"
+            >
+              Resume Draft
             </Button>
             <Button
               type="button"
@@ -1887,6 +2007,32 @@ export function TradeFormView() {
               />
             </div>
 
+            {/* Stop-Loss */}
+            <div className="space-y-1.5">
+              <Label className="text-xs font-medium">Stop-Loss (SL)</Label>
+              <Input
+                type="number"
+                step="any"
+                value={form.plannedStopPrice}
+                onChange={(e) => setField("plannedStopPrice", e.target.value)}
+                placeholder="e.g. 2390.00"
+                className="h-9 font-mono"
+              />
+            </div>
+
+            {/* Take-Profit / Target */}
+            <div className="space-y-1.5">
+              <Label className="text-xs font-medium">Take-Profit (TP)</Label>
+              <Input
+                type="number"
+                step="any"
+                value={form.plannedTargetPrice}
+                onChange={(e) => setField("plannedTargetPrice", e.target.value)}
+                placeholder="e.g. 2420.00"
+                className="h-9 font-mono"
+              />
+            </div>
+
             {/* If Closed: Exit Price */}
             {form.status === "closed" && (
               <div className="space-y-1.5">
@@ -1940,15 +2086,31 @@ export function TradeFormView() {
 
           {/* Footer Actions */}
           <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pt-2">
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={() => setEntryMode("advanced")}
-              className="text-xs"
-            >
-              Switch to Advanced Wizard →
-            </Button>
+            <div className="flex items-center gap-2">
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                onClick={() => {
+                  if (autosaveState === "saving" || form.instrumentSymbol || form.plannedEntryPrice) {
+                    if (!window.confirm("Discard current trade entry and return to Trades Log?")) return;
+                  }
+                  navigate("tradesLog");
+                }}
+                className="text-xs text-muted-foreground hover:text-foreground"
+              >
+                Cancel
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => setEntryMode("advanced")}
+                className="text-xs"
+              >
+                Continue in Advanced Mode →
+              </Button>
+            </div>
             <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
               <Button
                 type="button"
@@ -1967,7 +2129,7 @@ export function TradeFormView() {
                 className="gap-1.5"
               >
                 {saving && <Loader2 className="h-4 w-4 animate-spin" />}
-                Log Trade
+                Save Trade
               </Button>
             </div>
           </div>
@@ -1977,12 +2139,12 @@ export function TradeFormView() {
           <Tabs value={activeStep} onValueChange={(v) => setActiveStep(v as StepKey)} className="w-full">
             <TabsList className="w-full justify-start overflow-x-auto no-scrollbar h-auto">
               <TabsTrigger value="trade-info" className="text-xs sm:text-sm px-2.5 py-1.5 whitespace-nowrap">
-                <span className="sm:hidden">1. Info</span>
-                <span className="hidden sm:inline">1. Trade Info</span>
+                <span className="sm:hidden">1. Details</span>
+                <span className="hidden sm:inline">1. Trade Details</span>
               </TabsTrigger>
               <TabsTrigger value="checklist" className="text-xs sm:text-sm px-2.5 py-1.5 whitespace-nowrap">
-                <span className="sm:hidden">2. Checklist</span>
-                <span className="hidden sm:inline">2. Setup Checklist</span>
+                <span className="sm:hidden">2. Strategy</span>
+                <span className="hidden sm:inline">2. Strategy &amp; Checklist</span>
               </TabsTrigger>
               <TabsTrigger value="risk" className="text-xs sm:text-sm px-2.5 py-1.5 whitespace-nowrap">
                 <span className="sm:hidden">3. Sizing</span>
@@ -1993,18 +2155,18 @@ export function TradeFormView() {
                 <span className="hidden sm:inline">4. Partial Exits</span>
               </TabsTrigger>
               <TabsTrigger value="review" className="text-xs sm:text-sm px-2.5 py-1.5 whitespace-nowrap">
-                <span className="sm:hidden">5. Review</span>
+                <span className="sm:hidden">5. Confirm</span>
                 <span className="hidden sm:inline">5. Confirm &amp; Save</span>
               </TabsTrigger>
             </TabsList>
 
         {/* ─────────────────────────────────────────────────────────── */}
-        {/* STEP 1 — Trade Info                                          */}
+        {/* STEP 1 — Trade Details                                       */}
         {/* ─────────────────────────────────────────────────────────── */}
         <TabsContent value="trade-info" className="space-y-4 mt-3">
           <Card className="p-4 md:p-6 space-y-4 bg-background">
             <div>
-              <h2 className="text-lg font-medium">Trade Basics</h2>
+              <h2 className="text-lg font-medium">Trade Details</h2>
               <p className="text-sm text-muted-foreground">
                 The who/what/when of the trade. Required fields are marked{" "}
                 <span className="text-loss">*</span>.
@@ -2895,20 +3057,19 @@ export function TradeFormView() {
         </TabsContent>
 
         {/* ─────────────────────────────────────────────────────────── */}
-        {/* STEP 2 — Setup Checklist                                      */}
+        {/* ─────────────────────────────────────────────────────────── */}
+        {/* STEP 2 — Strategy & Checklist                                 */}
         {/* ─────────────────────────────────────────────────────────── */}
         <TabsContent value="checklist" className="space-y-4 mt-3">
           <Card className="p-4 md:p-6 space-y-4 bg-background">
             <div className="flex items-start justify-between gap-3 flex-wrap">
               <div>
                 <h2 className="text-lg font-medium flex items-center gap-2">
-                  Setup Checklist
+                  Strategy &amp; Checklist
                   <Sparkles className="h-4 w-4 text-primary" />
                 </h2>
                 <p className="text-sm text-muted-foreground">
-                  {form.strategyId && selectedStrategyVersion
-                    ? `${strategyDetail?.name ?? "Strategy"} · v${selectedStrategyVersion.versionLabel}`
-                    : "Select a strategy in Step 1 to load its checklist."}
+                  Select your strategy ruleset, configure setup parameters, and evaluate execution checklist criteria.
                 </p>
               </div>
               {checklistItems.length > 0 && (
@@ -2931,6 +3092,112 @@ export function TradeFormView() {
                 </div>
               )}
             </div>
+
+            {/* Strategy & Version Selectors */}
+            <div className="grid sm:grid-cols-2 gap-4 pb-2 border-b border-border">
+              <div className="space-y-2">
+                <FieldLabel hint="The trading strategy or setup this trade executes.">Selected Strategy</FieldLabel>
+                <Select
+                  value={form.strategyId || "__none"}
+                  onValueChange={(v) => {
+                    const sid = v === "__none" ? "" : v;
+                    setField("strategyId", sid);
+                    setField("strategyVersionId", "");
+                  }}
+                >
+                  <SelectTrigger><SelectValue placeholder="No strategy selected" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="__none">No strategy (Discretionary)</SelectItem>
+                    {strategies.map((s: any) => (
+                      <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-2">
+                <FieldLabel hint="Select the specific strategy version and ruleset for this trade.">Strategy Version</FieldLabel>
+                <Select
+                  value={form.strategyVersionId || (selectedStrategyVersion?.id ?? "__none")}
+                  onValueChange={(v) => setField("strategyVersionId", v === "__none" ? "" : v)}
+                  disabled={!form.strategyId || (strategyDetail?.versions?.length ?? 0) === 0}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder={!form.strategyId ? "Select a strategy first" : "Default Version"} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {(strategyDetail?.versions ?? []).map((v: any) => (
+                      <SelectItem key={v.id} value={v.id}>
+                        v{v.versionLabel} {v.isCurrent ? "(Current Active)" : "(Historical)"}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+
+            {/* Strategy-Specific Custom Setup Parameters */}
+            {form.strategyId && strategyCustomFields.length > 0 && (
+              <div className="rounded-md border border-border p-4 space-y-3 bg-muted/20">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-sm font-medium">
+                    {selectedStrategyVersion?.versionLabel
+                      ? `v${selectedStrategyVersion.versionLabel} Setup Parameters`
+                      : "Setup Parameters"}
+                  </h3>
+                  <span className="text-[10px] text-muted-foreground uppercase tracking-wider font-mono">
+                    {strategyCustomFields.length} {strategyCustomFields.length === 1 ? "field" : "fields"}
+                  </span>
+                </div>
+
+                <div className="grid sm:grid-cols-2 gap-3">
+                  {strategyCustomFields.map((field) => {
+                    const val = form.setup?.customFields?.[field.id] ?? "";
+                    const updateVal = (newVal: any) => {
+                      setForm((f: any) => {
+                        const currentCustom = f.setup?.customFields ?? {};
+                        const nextCustom = { ...currentCustom, [field.id]: newVal };
+                        const nextSetup = { ...f.setup, customFields: nextCustom };
+                        return { ...f, setup: nextSetup };
+                      });
+                    };
+
+                    if (field.type === "select") {
+                      const opts = field.options && field.options.length > 0
+                        ? field.options
+                        : ["Bullish", "Bearish", "Neutral"];
+                      return (
+                        <div key={field.id} className="space-y-2">
+                          <Label className="text-xs">{field.name}</Label>
+                          <Select value={val || "__none"} onValueChange={(v) => updateVal(v === "__none" ? "" : v)}>
+                            <SelectTrigger className="h-9 text-xs"><SelectValue placeholder={`Select ${field.name}`} /></SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="__none">—</SelectItem>
+                              {opts.map((opt: string) => (
+                                <SelectItem key={opt} value={opt}>{opt}</SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                      );
+                    }
+
+                    return (
+                      <div key={field.id} className="space-y-2">
+                        <Label className="text-xs">{field.name}</Label>
+                        <Input
+                          type={field.type === "number" ? "number" : "text"}
+                          value={val}
+                          onChange={(e) => updateVal(e.target.value)}
+                          placeholder={field.description || `Enter ${field.name}`}
+                          className="h-9 text-xs"
+                        />
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
 
             {/* Immutable snapshot banner */}
             <div className="flex items-start gap-2 rounded-md border border-border bg-muted/40 p-3">
@@ -3125,11 +3392,21 @@ export function TradeFormView() {
                           instrument: selectedInstrument as any,
                           accountBalanceCents: balanceCents,
                           accountCurrency,
-                          riskPct: form.riskPct,
+                          riskPct: (riskPctNum / 100).toString(),
                           entryPrice: form.plannedEntryPrice,
                           stopPrice: form.plannedStopPrice
                         });
-                        if (sizeRes && sizeRes.roundedQuantity) setField("lotSize", sizeRes.roundedQuantity);
+                        if (sizeRes) {
+                          if (sizeRes.minimumTradableExceedsBudget) {
+                            toast.warning(
+                              "Minimum tradable volume exceeds your risk budget. Increase budget or select a micro instrument."
+                            );
+                            setField("lotSize", "0");
+                          } else if (sizeRes.roundedQuantity && sizeRes.roundedQuantity !== "0") {
+                            setField("lotSize", sizeRes.roundedQuantity);
+                            toast.success(`Position size auto-calculated: ${sizeRes.roundedQuantity} ${(selectedInstrument as any).quantityUnit || unitWord || "units"}`);
+                          }
+                        }
                       }
                     }}
                     title="Calculate size based on risk amount"
@@ -3139,14 +3416,35 @@ export function TradeFormView() {
                 </div>
               </div>
               <div className="space-y-2">
-                <FieldLabel hint="Risk as a decimal (0.005 = 0.5% of account balance).">Risk %</FieldLabel>
-                <Input
-                  type="number"
-                  step="any"
-                  inputMode="decimal"
-                  value={form.riskPct}
-                  onChange={(e) => setField("riskPct", e.target.value)}
-                />
+                <FieldLabel hint="Risk percentage of account balance (e.g. 0.5 for 0.5%, 1.0 for 1.0%).">Risk % of Account</FieldLabel>
+                <div className="space-y-1.5">
+                  <Input
+                    type="number"
+                    step="0.05"
+                    min="0.01"
+                    max="100"
+                    inputMode="decimal"
+                    value={form.riskPct}
+                    onChange={(e) => setField("riskPct", e.target.value)}
+                  />
+                  <div className="flex items-center gap-1.5">
+                    {["0.25", "0.5", "1.0", "2.0"].map((r) => (
+                      <button
+                        key={r}
+                        type="button"
+                        onClick={() => setField("riskPct", r)}
+                        className={cn(
+                          "px-2 py-0.5 rounded text-[11px] border transition-colors cursor-pointer",
+                          form.riskPct === r
+                            ? "bg-primary text-primary-foreground border-primary"
+                            : "border-border hover:bg-muted text-muted-foreground",
+                        )}
+                      >
+                        {r}%
+                      </button>
+                    ))}
+                  </div>
+                </div>
               </div>
             </div>
 
@@ -3621,35 +3919,55 @@ export function TradeFormView() {
                   </dd>
                 </div>
                 <div className="flex justify-between">
-                  <dt className="text-muted-foreground">Lot Size</dt>
-                  <dd className="font-medium tnum">{form.lotSize}</dd>
-                </div>
-                <div className="flex justify-between">
-                  <dt className="text-muted-foreground">Risk %</dt>
+                  <dt className="text-muted-foreground">Account Balance</dt>
                   <dd className="font-medium tnum">
-                    {Number(form.riskPct).toFixed(3)}%
+                    {balanceCents > 0 ? fmtMoney(balanceCents / 100, accountCurrency) : "—"}
                   </dd>
                 </div>
                 <div className="flex justify-between">
-                  <dt className="text-muted-foreground">Risk Amount</dt>
+                  <dt className="text-muted-foreground">Planned Risk %</dt>
+                  <dd className="font-medium tnum">
+                    {Number(form.riskPct || 0).toFixed(2)}%
+                  </dd>
+                </div>
+                <div className="flex justify-between">
+                  <dt className="text-muted-foreground">Risk Budget</dt>
+                  <dd className="font-medium tnum text-loss">
+                    {riskAmountDollars != null ? fmtMoney(riskAmountDollars, accountCurrency) : "—"}
+                  </dd>
+                </div>
+                <div className="flex justify-between">
+                  <dt className="text-muted-foreground">Position Size</dt>
+                  <dd className="font-medium tnum">{form.lotSize} {selectedInstrument.market === "indices" || selectedInstrument.market === "futures" ? "contracts" : "lots"}</dd>
+                </div>
+                <div className="flex justify-between">
+                  <dt className="text-muted-foreground">Expected Loss at Stop</dt>
                   <dd className="font-medium tnum text-loss">
                     {instrumentRiskCents > 0
-                      ? fmtMoney(instrumentRiskDollars, accountCurrency)
+                      ? `-${fmtMoney(instrumentRiskDollars, accountCurrency)}`
                       : riskAmountDollars != null
-                        ? fmtMoney(riskAmountDollars, accountCurrency)
+                        ? `-${fmtMoney(riskAmountDollars, accountCurrency)}`
                         : "—"}
                   </dd>
                 </div>
                 <div className="flex justify-between">
-                  <dt className="text-muted-foreground">Planned Profit</dt>
+                  <dt className="text-muted-foreground">Potential Profit at Target</dt>
                   <dd className="font-medium tnum text-profit">
                     {plannedProfitCents > 0
-                      ? fmtMoney(plannedProfitDollarsPreview, accountCurrency)
+                      ? `+${fmtMoney(plannedProfitDollarsPreview, accountCurrency)}`
                       : plannedProfitDollars != null
-                        ? fmtMoney(plannedProfitDollars, accountCurrency)
+                        ? `+${fmtMoney(plannedProfitDollars, accountCurrency)}`
                         : "—"}
                   </dd>
                 </div>
+                {plannedRR != null && (
+                  <div className="flex justify-between">
+                    <dt className="text-muted-foreground">Reward-to-Risk (R:R)</dt>
+                    <dd className="font-medium tnum font-mono">
+                      {plannedRR.toFixed(2)}R (1 : {plannedRR.toFixed(2)})
+                    </dd>
+                  </div>
+                )}
                 <div className="flex justify-between">
                   <dt className="text-muted-foreground">Partial Exits</dt>
                   <dd className="font-medium tnum">
@@ -3674,6 +3992,14 @@ export function TradeFormView() {
               </dl>
             </div>
 
+            {/* Inconsistent calculation safety warning */}
+            {(stopDistance !== null && stopDistance <= 0) && (
+              <div className="rounded-md border border-rose-500/30 bg-rose-500/10 p-3 flex items-center gap-2 text-xs text-rose-600 dark:text-rose-400">
+                <AlertTriangle className="h-4 w-4 shrink-0" />
+                <span>Invalid financial parameters: Stop loss must be different from entry price. Trade cannot be confirmed.</span>
+              </div>
+            )}
+
             {/* Thesis preview */}
             {form.thesisWhy && (
               <div className="rounded-md border border-border p-4 space-y-1">
@@ -3684,33 +4010,15 @@ export function TradeFormView() {
               </div>
             )}
 
-            {/* Save actions */}
-            <div className="flex flex-col sm:flex-row gap-2 justify-end pt-2 border-t border-border">
-              <Button
-                variant="outline"
-                onClick={() => submit(true)}
-                disabled={saving}
-                className="order-2 sm:order-1"
-              >
-                {saving ? (
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                ) : (
-                  <Save className="h-4 w-4" />
-                )}
-                Save as Draft
-              </Button>
-              <Button
-                onClick={() => submit(false)}
-                disabled={saving}
-                className="order-1 sm:order-2"
-              >
-                {saving ? (
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                ) : (
-                  <Sparkles className="h-4 w-4" />
-                )}
-                Save Trade
-              </Button>
+            {/* Confirmation verification status */}
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pt-3 border-t border-border text-xs text-muted-foreground">
+              <span className="flex items-center gap-1.5">
+                <CheckCircle2 className="h-4 w-4 text-profit" />
+                All trade parameters, checklist evaluations, and risk metrics verified.
+              </span>
+              <span className="font-medium text-foreground">
+                Confirm below to finalize your trade record.
+              </span>
             </div>
           </Card>
         </TabsContent>
@@ -3735,9 +4043,13 @@ export function TradeFormView() {
               {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
               Save as Draft
             </Button>
-            <Button onClick={() => submit(false)} disabled={saving}>
+            <Button
+              onClick={() => submit(false)}
+              disabled={saving || (stopDistance !== null && stopDistance <= 0)}
+              className="bg-primary text-primary-foreground font-semibold"
+            >
               {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
-              Save Trade
+              Confirm &amp; Save Trade
             </Button>
           </div>
         )}
