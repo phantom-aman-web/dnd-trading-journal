@@ -17,6 +17,13 @@ import {
   type ChecklistAnswer,
 } from "@/lib/checklist-evaluation";
 import { audit } from "@/lib/audit";
+import {
+  computeTradePayloadHash,
+  claimIdempotencyKey,
+  finalizeIdempotencyKey,
+  releaseIdempotencyKey,
+  waitForInFlightTrade,
+} from "@/lib/trade-idempotency";
 
 const ExecutionSchema = z.object({
   kind: z.enum(["entry", "exit"]),
@@ -289,11 +296,87 @@ export async function POST(req: NextRequest) {
   const normalizedSymbol = (data.instrumentSymbol || "").trim().toUpperCase();
   data.instrumentSymbol = normalizedSymbol;
 
+  const idempotencyKey =
+    req.headers.get("x-idempotency-key") ||
+    (body as any)?._idempotencyKey ||
+    (body as any)?.idempotencyKey ||
+    null;
+
   // Authorization: verify account belongs to user (spec section 101)
   const account = await db.tradingAccount.findFirst({
     where: { id: data.accountId, userId: user.id },
   });
   if (!account) return bad("Account not found or not owned by user");
+
+  // ── IDEMPOTENCY & OFFLINE RETRY DUPLICATE PREVENTION ────────────
+  let claimedIdempotencyKey: string | null = null;
+  if (idempotencyKey) {
+    const payloadHash = computeTradePayloadHash(data);
+    const claim = await claimIdempotencyKey(user.id, idempotencyKey, payloadHash);
+
+    if (claim.status === "conflict") {
+      return new Response(JSON.stringify({ error: claim.message }), {
+        status: 409,
+        headers: { "Content-Type": "application/json" },
+      });
+    }
+
+    if (claim.status === "completed") {
+      const existing = await db.trade.findFirst({
+        where: { id: claim.tradeId, userId: user.id },
+        include: {
+          executions: { orderBy: { seq: "asc" } },
+          targets: { orderBy: { createdAt: "asc" } },
+          strategy: { select: { id: true, name: true } },
+          account: { select: { id: true, name: true } },
+        },
+      });
+      if (existing) return ok(existing);
+    }
+
+    if (claim.status === "in_flight") {
+      const inFlightId = await waitForInFlightTrade(user.id, idempotencyKey);
+      if (inFlightId) {
+        const existing = await db.trade.findFirst({
+          where: { id: inFlightId, userId: user.id },
+          include: {
+            executions: { orderBy: { seq: "asc" } },
+            targets: { orderBy: { createdAt: "asc" } },
+            strategy: { select: { id: true, name: true } },
+            account: { select: { id: true, name: true } },
+          },
+        });
+        if (existing) return ok(existing);
+      }
+      return new Response(
+        JSON.stringify({ error: "Concurrent trade creation request already in progress." }),
+        { status: 409, headers: { "Content-Type": "application/json" } },
+      );
+    }
+
+    if (claim.status === "claimed") {
+      claimedIdempotencyKey = idempotencyKey;
+    }
+  } else if (data.entryTime) {
+    const recentDuplicate = await db.trade.findFirst({
+      where: {
+        userId: user.id,
+        accountId: data.accountId,
+        instrumentSymbol: normalizedSymbol,
+        direction: data.direction,
+        entryTime: new Date(data.entryTime),
+        createdAt: { gte: new Date(Date.now() - 30_000) },
+      },
+      include: {
+        executions: { orderBy: { seq: "asc" } },
+        strategy: { select: { id: true, name: true } },
+        account: { select: { id: true, name: true } },
+      },
+    });
+    if (recentDuplicate && data.executions.length === recentDuplicate.executions.length) {
+      return ok(recentDuplicate);
+    }
+  }
 
   // ── INSTRUMENT RESOLUTION (Fix #2) ──────────────────────────────
   // The server is the authoritative source for instrument metadata.
@@ -500,7 +583,7 @@ export async function POST(req: NextRequest) {
         entryTime: data.entryTime ?? (data.executions.find((e) => e.kind === "entry")?.timestamp ?? null),
         exitTime: data.exitTime ?? (data.executions.find((e) => e.kind === "exit")?.timestamp ?? null),
         tradingTimezone: data.tradingTimezone,
-        setupJson: data.setup ? JSON.stringify(data.setup) : null,
+        setupJson: (data.setup || idempotencyKey) ? JSON.stringify({ ...(data.setup || {}), ...(idempotencyKey ? { _idempotencyKey: idempotencyKey } : {}) }) : null,
         thesisJson: data.thesis ? JSON.stringify(data.thesis) : null,
         notes: data.notes,
         lessons: data.lessons,
@@ -540,10 +623,17 @@ export async function POST(req: NextRequest) {
       },
     });
   } catch (err: any) {
+    if (claimedIdempotencyKey) {
+      await releaseIdempotencyKey(user.id, claimedIdempotencyKey);
+    }
     if (err?.code === "P2003") {
       return bad("Invalid reference: one of the provided IDs (strategy, instrument, etc.) does not exist.");
     }
     return bad("Failed to create trade.");
+  }
+
+  if (claimedIdempotencyKey) {
+    await finalizeIdempotencyKey(user.id, claimedIdempotencyKey, trade.id);
   }
 
   await audit("trade.created", "trade", trade.id, { symbol: trade.instrumentSymbol });

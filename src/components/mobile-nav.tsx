@@ -64,8 +64,8 @@ export function MobileNav() {
     (view === "tradeDetail" && moreKeys.has("tradesLog"));
 
   const themeOptions = [
-    { key: "nordic", label: "Nordic Clean" },
-    { key: "terminal", label: "Sleek Terminal" },
+    { key: "nordic", label: "Nordic" },
+    { key: "terminal", label: "Terminal" },
     { key: "institutional", label: "Slate Contrast" },
   ] as const;
 

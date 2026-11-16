@@ -1,0 +1,48 @@
+{
+  "timestamp": "2026-11-15T18:42:53.440Z",
+  "fonts": [
+    {
+      "fontKey": "jetbrains",
+      "fontName": "JetBrains Mono",
+      "fontChecked": true,
+      "computedFont": "\"JetBrains Mono\", monospace",
+      "measuredWidth": 388.7998352050781
+    },
+    {
+      "fontKey": "jakarta",
+      "fontName": "Plus Jakarta Sans",
+      "fontChecked": true,
+      "computedFont": "\"Plus Jakarta Sans\", system-ui, -apple-system, sans-serif",
+      "measuredWidth": 358.41583251953125
+    },
+    {
+      "fontKey": "playfair",
+      "fontName": "Playfair Display",
+      "fontChecked": true,
+      "computedFont": "\"Playfair Display\", Georgia, serif",
+      "measuredWidth": 337.6750183105469
+    },
+    {
+      "fontKey": "cinzel",
+      "fontName": "Cinzel",
+      "fontChecked": true,
+      "computedFont": "Cinzel, serif",
+      "measuredWidth": 363.1929931640625
+    },
+    {
+      "fontKey": "inter",
+      "fontName": "Inter",
+      "fontChecked": true,
+      "computedFont": "Inter, system-ui, -apple-system, sans-serif",
+      "measuredWidth": 367.25390625
+    },
+    {
+      "fontKey": "system",
+      "fontName": "System Sans",
+      "fontChecked": true,
+      "computedFont": "system-ui, -apple-system, BlinkMacSystemFont, \"Segoe UI\", Roboto, sans-serif",
+      "measuredWidth": 357.43359375
+    }
+  ],
+  "uniqueMetricsCount": 6
+}

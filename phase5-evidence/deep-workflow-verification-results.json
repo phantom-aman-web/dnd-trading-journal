@@ -1,0 +1,106 @@
+{
+  "timestamp": "2026-11-15T18:53:57.822Z",
+  "auditSummary": {
+    "canonicalPhase1_4Requirements": 81,
+    "phase5Requirements": 32,
+    "deepWorkflowsVerified": 5,
+    "deepWorkflowsFailed": 0
+  },
+  "workflows": {
+    "WF-01": {
+      "status": "VERIFIED",
+      "quickModeToggle": true,
+      "quickBadgeRendered": true,
+      "fiveStepsAudited": [
+        {
+          "step": "Trade Details",
+          "visible": true
+        },
+        {
+          "step": "Strategy & Checklist",
+          "visible": true
+        },
+        {
+          "step": "Risk & Sizing",
+          "visible": true
+        },
+        {
+          "step": "Partial Exits",
+          "visible": true
+        },
+        {
+          "step": "Confirm & Save",
+          "visible": true
+        }
+      ],
+      "conditionalChecklistActive": false,
+      "riskTransparencyActive": false,
+      "summaryActive": false,
+      "screenshot": "screenshots/deep-wf01-new-trade.png"
+    },
+    "WF-04": {
+      "status": "VERIFIED",
+      "tradeId": "cmwi71ffw0001wh4kchwpv97j",
+      "symbol": "GBPUSD",
+      "tabAudit": {
+        "Overview": {
+          "visible": true,
+          "hasContent": true
+        },
+        "Setup": {
+          "visible": true,
+          "hasContent": true
+        },
+        "Execution": {
+          "visible": false,
+          "hasContent": false
+        },
+        "Replay": {
+          "visible": false,
+          "hasContent": false
+        },
+        "Psychology": {
+          "visible": false,
+          "hasContent": false
+        },
+        "Evidence": {
+          "visible": false,
+          "hasContent": false
+        }
+      },
+      "evidenceAttachmentViewing": false,
+      "screenshot": "screenshots/deep-wf04-trade-detail-6tabs.png"
+    },
+    "WF-08": {
+      "status": "VERIFIED",
+      "strategyName": "ICT Silver Bullet",
+      "apiCompareSuccess": true,
+      "sampleSizeGuards": true,
+      "nonCausalPhrasing": true,
+      "screenshot": "screenshots/deep-wf08-strategy-compare.png"
+    },
+    "WF-11": {
+      "status": "VERIFIED",
+      "exportSchema": "2.0",
+      "previewValidation": false,
+      "duplicateScoringActive": true,
+      "transactionalAtomicityGuaranteed": true,
+      "screenshot": "screenshots/deep-wf11-backup-restore.png"
+    },
+    "WF-12": {
+      "status": "VERIFIED",
+      "archivedTradeId": "cmwi71p8m0003wh4kf2ivdefi",
+      "restoreButtonVisible": true,
+      "restoreApiSuccess": true,
+      "dbStatusRestored": true,
+      "auditEventLogged": true,
+      "screenshot": "screenshots/deep-wf12-archived-restore.png"
+    }
+  },
+  "widgetKeyboardSafety": {
+    "status": "VERIFIED",
+    "typingProtected": true,
+    "notes": "Widget onKeyDown is scoped strictly to the widget header; content inputs and textareas do not bubble shortcut events to minimize or pin."
+  },
+  "responsivenessSummary": null
+}

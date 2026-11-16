@@ -147,15 +147,50 @@ function FloatingWidgetContainer({ config }: { config: FloatingWidgetConfig }) {
       const curX = "touches" in ev ? ev.touches[0].clientX : ev.clientX;
       const curY = "touches" in ev ? ev.touches[0].clientY : ev.clientY;
 
-      const nextX = Math.max(10, Math.min(curX - dragStart.current.x, window.innerWidth - 120));
-      const nextY = Math.max(50, Math.min(curY - dragStart.current.y, window.innerHeight - 80));
+      let rawX = curX - dragStart.current.x;
+      let rawY = curY - dragStart.current.y;
+
+      const snapMargin = 16;
+      const snapThreshold = 24;
+      const widgetW = config.minimized ? 180 : size.width;
+      const widgetH = config.minimized ? 32 : size.height;
+
+      // Snap to left or right viewport edge
+      if (rawX < snapThreshold) {
+        rawX = snapMargin;
+      } else if (rawX + widgetW > window.innerWidth - snapThreshold) {
+        rawX = window.innerWidth - widgetW - snapMargin;
+      }
+
+      // Snap to top (below top bar) or bottom edge
+      if (rawY < 48 + snapThreshold) {
+        rawY = 48 + snapMargin;
+      } else if (rawY + widgetH > window.innerHeight - snapThreshold) {
+        rawY = window.innerHeight - widgetH - snapMargin;
+      }
+
+      const nextX = Math.max(snapMargin, Math.min(rawX, window.innerWidth - 60));
+      const nextY = Math.max(48, Math.min(rawY, window.innerHeight - 36));
       setPos({ x: nextX, y: nextY });
     }
 
     function handleDragEnd() {
       if (isDragging.current) {
         isDragging.current = false;
-        setPosition(config.id, pos.x, pos.y);
+        // Collision mitigation: nudge if exactly overlapping another active widget header
+        const allWidgets = useFloatingWidgetsStore.getState().widgets;
+        let finalX = pos.x;
+        let finalY = pos.y;
+        for (const other of allWidgets) {
+          if (other.id !== config.id && other.visible) {
+            if (Math.abs(other.x - finalX) < 18 && Math.abs(other.y - finalY) < 18) {
+              finalY = Math.min(window.innerHeight - 80, finalY + 32);
+              setPos({ x: finalX, y: finalY });
+              break;
+            }
+          }
+        }
+        setPosition(config.id, finalX, finalY);
       }
       window.removeEventListener("mousemove", handleDragMove);
       window.removeEventListener("mouseup", handleDragEnd);
@@ -252,12 +287,38 @@ function FloatingWidgetContainer({ config }: { config: FloatingWidgetConfig }) {
           config.isPinned && "ring-1 ring-primary/40"
         )}
       >
-        {/* Widget Header with Drag Handle */}
+        {/* Widget Header with Drag Handle & Keyboard Movement */}
         <div
+          tabIndex={0}
+          onFocus={() => bringToFront(config.id)}
+          onKeyDown={(e) => {
+            if (config.isPinned) return;
+            const step = 16;
+            let newX = pos.x;
+            let newY = pos.y;
+            if (e.key === "ArrowLeft") { newX -= step; e.preventDefault(); }
+            else if (e.key === "ArrowRight") { newX += step; e.preventDefault(); }
+            else if (e.key === "ArrowUp") { newY -= step; e.preventDefault(); }
+            else if (e.key === "ArrowDown") { newY += step; e.preventDefault(); }
+            else if (e.key === "m" || e.key === "M") { toggleMinimize(config.id); e.preventDefault(); }
+            else if (e.key === "p" || e.key === "P") { togglePin(config.id); e.preventDefault(); }
+            else if (e.key === "Escape") { (e.target as HTMLElement)?.blur(); }
+
+            if (newX !== pos.x || newY !== pos.y) {
+              const widgetW = config.minimized ? 180 : size.width;
+              const widgetH = config.minimized ? 32 : size.height;
+              const clampedX = Math.max(16, Math.min(newX, window.innerWidth - widgetW - 16));
+              const clampedY = Math.max(48, Math.min(newY, window.innerHeight - widgetH - 16));
+              setPos({ x: clampedX, y: clampedY });
+              setPosition(config.id, clampedX, clampedY);
+            }
+          }}
           onMouseDown={handleDragStart}
           onTouchStart={handleDragStart}
+          role="region"
+          aria-label={`${config.title} widget header`}
           className={cn(
-            "h-8 px-2.5 bg-muted/60 border-b border-border flex items-center justify-between text-xs font-semibold text-foreground group flex-none select-none",
+            "h-8 px-2.5 bg-muted/60 border-b border-border flex items-center justify-between text-xs font-semibold text-foreground group flex-none select-none focus:outline-none focus:ring-1 focus:ring-primary/60",
             config.isPinned ? "cursor-default" : "cursor-move"
           )}
         >
@@ -274,12 +335,13 @@ function FloatingWidgetContainer({ config }: { config: FloatingWidgetConfig }) {
           <div className="flex items-center gap-1 shrink-0">
             <button
               type="button"
+              aria-label={config.isPinned ? `Unpin ${config.title} position` : `Pin ${config.title} position`}
               onClick={(e) => {
                 e.stopPropagation();
                 togglePin(config.id);
               }}
               className={cn(
-                "p-0.5 rounded transition-colors",
+                "p-0.5 rounded transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary",
                 config.isPinned ? "text-primary" : "text-muted-foreground hover:text-foreground"
               )}
               title={config.isPinned ? "Unpin widget position" : "Pin widget position"}
@@ -289,11 +351,12 @@ function FloatingWidgetContainer({ config }: { config: FloatingWidgetConfig }) {
 
             <button
               type="button"
+              aria-label={config.minimized ? `Restore ${config.title}` : `Minimize ${config.title}`}
               onClick={(e) => {
                 e.stopPropagation();
                 toggleMinimize(config.id);
               }}
-              className="p-0.5 rounded text-muted-foreground hover:text-foreground transition-colors"
+              className="p-0.5 rounded text-muted-foreground hover:text-foreground transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary"
               title={config.minimized ? "Restore" : "Minimize"}
             >
               {config.minimized ? <Maximize2 className="h-2.5 w-2.5" /> : <Minus className="h-2.5 w-2.5" />}
@@ -301,11 +364,12 @@ function FloatingWidgetContainer({ config }: { config: FloatingWidgetConfig }) {
 
             <button
               type="button"
+              aria-label={`Close ${config.title} widget`}
               onClick={(e) => {
                 e.stopPropagation();
                 setWidgetVisible(config.id, false);
               }}
-              className="p-0.5 rounded text-muted-foreground hover:text-rose-500 transition-colors"
+              className="p-0.5 rounded text-muted-foreground hover:text-rose-500 transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary"
               title="Close widget"
             >
               <X className="h-2.5 w-2.5" />

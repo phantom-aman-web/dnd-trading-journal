@@ -30,7 +30,7 @@ import { cn } from "@/lib/utils";
 import { TradesLogView } from "@/components/views/trades-log-view";
 import { TradeDetailView } from "@/components/views/trade-detail-view";
 import { AnalyticsView } from "@/components/views/analytics-view";
-import { NoTradesView } from "@/components/views/no-trades-view";
+import { RiskCalculatorView } from "@/components/views/risk-calculator-view";
 import { PlaybooksView } from "@/components/views/playbooks-view";
 import { CalendarView } from "@/components/views/calendar-view";
 import { AccountsView } from "@/components/views/accounts-view";
@@ -213,7 +213,7 @@ export function MultiPanelWorkspace() {
               className={cn(
                 "h-full min-h-0 w-full",
                 layout === "2-col" && "grid grid-cols-2 divide-x divide-border min-w-[760px] lg:min-w-full",
-                layout === "3-col" && "grid grid-cols-3 divide-x divide-border min-w-[1080px] xl:min-w-full",
+                layout === "3-col" && "grid grid-cols-3 divide-x divide-border min-w-[1140px] xl:min-w-full",
                 layout === "2-row" && "grid grid-rows-2 divide-y divide-border min-w-full",
                 layout === "4-grid" && "grid grid-cols-2 grid-rows-2 divide-x divide-y divide-border min-w-[760px] lg:min-w-full"
               )}
@@ -354,8 +354,8 @@ function PanelContentRenderer({ panel }: { panel: WorkspacePanel }) {
       return <TradeDetailView tradeId={tradeId} onBack={() => {}} />;
     case "analytics":
       return <AnalyticsView />;
-    case "noTrades":
-      return <NoTradesView />;
+    case "riskCalculator":
+      return <RiskCalculatorView />;
     case "setups":
       return <PlaybooksView />;
     case "calendar":

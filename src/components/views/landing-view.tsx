@@ -327,7 +327,7 @@ function HeroSection({
         {/* Illustrative data note */}
         <div className="mt-8 text-center lg:text-right">
           <p className="text-[11px] text-slate-400 italic">
-            * Illustrative sample data demonstrating AlphaPips performance analytics engine.
+            * Illustrative Sample Data — Not Real Customer Trading Results. Demonstrates AlphaPips performance analytics engine.
           </p>
         </div>
       </div>
@@ -750,7 +750,7 @@ function TradingJournalSection({ onAction }: { onAction: () => void }) {
 
               {/* Sample Data Notice */}
               <div className="mt-4 pt-3 border-t border-slate-200/80 flex items-center justify-between text-[11px] text-slate-400">
-                <span>Illustrative sample trade log data</span>
+                <span>Illustrative Sample Data — Not Real Customer Trading Results</span>
                 <span className="font-mono text-purple-600 font-medium">Export CSV / JSON / PDF ready</span>
               </div>
             </div>
@@ -866,7 +866,7 @@ function PerformanceAnalyticsSection() {
                     <h4 className="text-sm font-bold text-slate-900">R-Multiple Outcome Distribution</h4>
                     <p className="text-xs text-slate-500">Distribution of executed trades across risk-reward multiples</p>
                   </div>
-                  <span className="text-xs font-mono text-purple-600 font-semibold">56 Sample Trades</span>
+                  <span className="text-xs font-mono text-purple-600 font-semibold">56 Sample Trades (Illustrative)</span>
                 </div>
 
                 <div className="grid grid-cols-6 gap-2 text-center text-xs">

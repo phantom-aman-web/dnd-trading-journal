@@ -303,60 +303,101 @@ export function DashboardView() {
 
         return (
           <section className="space-y-3">
-            <SectionTitle
-              icon={TrendingUp}
-              title="PERFORMANCE OVERVIEW"
-              subtitle="Aggregate performance and key metrics for this period."
-            />
-            <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-4 gap-3">
+            <div className="flex items-center justify-between">
+              <SectionTitle
+                icon={TrendingUp}
+                title="PERFORMANCE OVERVIEW"
+                subtitle="Primary KPI hierarchy and secondary performance metrics for this period."
+              />
+              <button
+                type="button"
+                onClick={() =>
+                  navigate("analytics", {
+                    preset,
+                    ...(accountId ? { accountId } : {}),
+                  })
+                }
+                className="text-xs text-primary hover:underline font-medium inline-flex items-center gap-1 cursor-pointer"
+              >
+                Detailed Analytics
+                <ArrowUpRight className="h-3.5 w-3.5" />
+              </button>
+            </div>
+
+            {/* Primary 5-Metric KPI Strip (Net P&L, Win Rate, Profit Factor, Trade Count, Avg R) */}
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
               <MetricCard
                 label="Net P&L"
                 value={formatSignedCents(pnl).text}
                 tone={pnl > 0 ? "profit" : pnl < 0 ? "loss" : "neutral"}
                 icon={Activity}
+                sub={
+                  dash.comparison
+                    ? `vs prev: ${formatSignedCents(dash.comparison.pnlChangeCents).text}`
+                    : `${dash.aggregate.wins}W · ${dash.aggregate.losses}L`
+                }
+                className="col-span-2 sm:col-span-1 border-primary/20 bg-card shadow-xs"
               />
               <MetricCard
                 label="Win Rate"
                 value={dash.aggregate.winRate ? formatPct(dash.aggregate.winRate) : "N/A"}
                 tone="neutral"
                 icon={Target}
-              />
-              <MetricCard
-                label="Avg R"
-                value={formatR(dash.aggregate.avgR)}
-                tone={dash.aggregate.avgR && Number(dash.aggregate.avgR) > 0 ? "profit" : dash.aggregate.avgR && Number(dash.aggregate.avgR) < 0 ? "loss" : "neutral"}
-                icon={TrendingUp}
-              />
-              <MetricCard
-                label="Trade Count"
-                value={String(dash.aggregate.totalTrades ?? 0)}
-                tone="neutral"
-                icon={ClipboardList}
+                sub={`${dash.aggregate.wins} wins / ${dash.aggregate.closedTrades} closed`}
               />
               <MetricCard
                 label="Profit Factor"
                 value={pf != null ? pf.toFixed(2) : "N/A"}
                 tone={pf != null && pf >= 1 ? "profit" : pf != null ? "loss" : "neutral"}
                 icon={Activity}
+                sub="Gross Win / Loss Ratio"
               />
               <MetricCard
-                label="Expectancy"
-                value={formatR(dash.aggregate.expectancyR)}
-                tone={expectancy != null && expectancy > 0 ? "profit" : expectancy != null && expectancy < 0 ? "loss" : "neutral"}
+                label="Trade Count"
+                value={String(dash.aggregate.totalTrades ?? 0)}
+                tone="neutral"
+                icon={ClipboardList}
+                sub={`${dash.aggregate.closedTrades} closed trades`}
+              />
+              <MetricCard
+                label="Avg R"
+                value={formatR(dash.aggregate.avgR)}
+                tone={dash.aggregate.avgR && Number(dash.aggregate.avgR) > 0 ? "profit" : dash.aggregate.avgR && Number(dash.aggregate.avgR) < 0 ? "loss" : "neutral"}
                 icon={TrendingUp}
+                sub="Per Closed Execution"
               />
-              <MetricCard
-                label="Avg Win"
-                value={dash.aggregate.avgWinCents != null ? formatSignedCents(dash.aggregate.avgWinCents).text : "N/A"}
-                tone="profit"
-                icon={TrendingUp}
-              />
-              <MetricCard
-                label="Avg Loss"
-                value={dash.aggregate.avgLossCents != null ? formatSignedCents(dash.aggregate.avgLossCents).text : "N/A"}
-                tone="loss"
-                icon={AlertTriangle}
-              />
+            </div>
+
+            {/* Compact Secondary Metrics Strip */}
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 p-3 rounded-xl border border-border/70 bg-muted/20">
+              <div className="flex flex-col gap-0.5 px-2">
+                <span className="text-[11px] font-medium text-muted-foreground">Expectancy</span>
+                <span className="text-sm font-semibold tnum text-foreground">
+                  {formatR(dash.aggregate.expectancyR)}
+                </span>
+                <span className="text-[10px] text-muted-foreground/70">Expected R / trade</span>
+              </div>
+              <div className="flex flex-col gap-0.5 px-2 border-l border-border/50">
+                <span className="text-[11px] font-medium text-muted-foreground">Avg Win</span>
+                <span className="text-sm font-semibold tnum text-profit">
+                  {dash.aggregate.avgWinCents != null ? formatSignedCents(dash.aggregate.avgWinCents).text : "N/A"}
+                </span>
+                <span className="text-[10px] text-muted-foreground/70">Winning executions</span>
+              </div>
+              <div className="flex flex-col gap-0.5 px-2 border-l border-border/50">
+                <span className="text-[11px] font-medium text-muted-foreground">Avg Loss</span>
+                <span className="text-sm font-semibold tnum text-loss">
+                  {dash.aggregate.avgLossCents != null ? formatSignedCents(dash.aggregate.avgLossCents).text : "N/A"}
+                </span>
+                <span className="text-[10px] text-muted-foreground/70">Losing executions</span>
+              </div>
+              <div className="flex flex-col gap-0.5 px-2 border-l border-border/50">
+                <span className="text-[11px] font-medium text-muted-foreground">Breakevens</span>
+                <span className="text-sm font-semibold tnum text-foreground">
+                  {dash.aggregate.breakevens ?? 0}
+                </span>
+                <span className="text-[10px] text-muted-foreground/70">0R executions</span>
+              </div>
             </div>
           </section>
         );
@@ -372,7 +413,19 @@ export function DashboardView() {
                   <TrendingUp className="h-4 w-4 text-muted-foreground/70" />
                   <h3 className="text-sm font-semibold text-foreground">Equity Curve</h3>
                 </div>
-                <span className="text-[10px] text-muted-foreground font-mono">Net Return Progression</span>
+                <button
+                  type="button"
+                  onClick={() =>
+                    navigate("analytics", {
+                      tab: "growth",
+                      preset,
+                      ...(accountId ? { accountId } : {}),
+                    })
+                  }
+                  className="text-[11px] text-primary hover:underline font-medium inline-flex items-center gap-0.5 cursor-pointer"
+                >
+                  Analytics <ArrowUpRight className="h-3 w-3" />
+                </button>
               </div>
               {data.length === 0 ? (
                 <div className="py-12 text-center text-xs text-muted-foreground">No equity curve data for this period</div>
@@ -394,7 +447,19 @@ export function DashboardView() {
                   <Activity className="h-4 w-4 text-muted-foreground/70" />
                   <h3 className="text-sm font-semibold text-foreground">Daily P&L</h3>
                 </div>
-                <span className="text-[10px] text-muted-foreground font-mono">Realized by Day</span>
+                <button
+                  type="button"
+                  onClick={() =>
+                    navigate("analytics", {
+                      tab: "performance",
+                      preset,
+                      ...(accountId ? { accountId } : {}),
+                    })
+                  }
+                  className="text-[11px] text-primary hover:underline font-medium inline-flex items-center gap-0.5 cursor-pointer"
+                >
+                  Analytics <ArrowUpRight className="h-3 w-3" />
+                </button>
               </div>
               {data.length === 0 ? (
                 <div className="py-12 text-center text-xs text-muted-foreground">No daily P&L data for this period</div>
@@ -416,7 +481,19 @@ export function DashboardView() {
                   <Target className="h-4 w-4 text-muted-foreground/70" />
                   <h3 className="text-sm font-semibold text-foreground">R Distribution</h3>
                 </div>
-                <span className="text-[10px] text-muted-foreground font-mono">R-Multiple Outliers</span>
+                <button
+                  type="button"
+                  onClick={() =>
+                    navigate("analytics", {
+                      tab: "risk",
+                      preset,
+                      ...(accountId ? { accountId } : {}),
+                    })
+                  }
+                  className="text-[11px] text-primary hover:underline font-medium inline-flex items-center gap-0.5 cursor-pointer"
+                >
+                  Analytics <ArrowUpRight className="h-3 w-3" />
+                </button>
               </div>
               {data.length === 0 ? (
                 <div className="py-12 text-center text-xs text-muted-foreground">No R distribution data for this period</div>
@@ -655,6 +732,7 @@ export function DashboardView() {
         onOpenCustomize={() => setCustomizeOpen(true)}
         accountName={accountName}
         onInspectTrades={() => navigate("tradesLog", accountId ? { accountId } : undefined)}
+        onOpenAnalytics={() => navigate("analytics", { preset, ...(accountId ? { accountId } : {}) })}
       />
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
@@ -694,6 +772,7 @@ function DashboardHeader({
   onOpenCustomize,
   accountName = "All Accounts",
   onInspectTrades,
+  onOpenAnalytics,
 }: {
   preset: string;
   setPreset: (p: string) => void;
@@ -701,6 +780,7 @@ function DashboardHeader({
   onOpenCustomize?: () => void;
   accountName?: string;
   onInspectTrades?: () => void;
+  onOpenAnalytics?: () => void;
 }) {
   const currentPresetLabel = PRESETS.find((p) => p.key === preset)?.label ?? "This Month";
 
@@ -766,23 +846,39 @@ function DashboardHeader({
       </div>
 
       {/* Explicit Scope Banner */}
-      <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-2 rounded-lg border border-border/80 bg-muted/30 text-xs">
-        <div className="flex items-center gap-2 text-muted-foreground">
-          <span className="font-semibold text-foreground">Active Scope:</span>
-          <span className="font-medium text-foreground">{accountName}</span>
-          <span>·</span>
-          <span>{currentPresetLabel}</span>
-          <span>·</span>
-          <span className="text-foreground font-medium">Closed Realized Trades</span>
+      <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-2.5 rounded-xl border border-border/80 bg-muted/30 text-xs">
+        <div className="flex items-center gap-2 flex-wrap">
+          <span className="font-semibold text-foreground text-[11px] uppercase tracking-wider">Active Scope:</span>
+          <Badge variant="outline" className="font-medium bg-card text-foreground border-border text-[11px] py-0.5">
+            {accountName}
+          </Badge>
+          <Badge variant="outline" className="font-medium bg-card text-foreground border-border text-[11px] py-0.5">
+            {currentPresetLabel}
+          </Badge>
+          <Badge variant="secondary" className="font-mono text-[10px] bg-primary/10 text-primary border-primary/20 py-0.5">
+            Closed Realized Trades
+          </Badge>
         </div>
-        {onInspectTrades && (
-          <button
-            onClick={onInspectTrades}
-            className="text-primary hover:underline font-medium inline-flex items-center gap-1 transition-colors cursor-pointer"
-          >
-            View contributing trades in Journal →
-          </button>
-        )}
+        <div className="flex items-center gap-3">
+          {onOpenAnalytics && (
+            <button
+              type="button"
+              onClick={onOpenAnalytics}
+              className="text-primary hover:underline font-medium inline-flex items-center gap-1 transition-colors cursor-pointer text-xs"
+            >
+              Full Analytics <ArrowUpRight className="h-3.5 w-3.5" />
+            </button>
+          )}
+          {onInspectTrades && (
+            <button
+              type="button"
+              onClick={onInspectTrades}
+              className="text-muted-foreground hover:text-foreground font-medium inline-flex items-center gap-1 transition-colors cursor-pointer text-xs"
+            >
+              Trades Log <ArrowUpRight className="h-3.5 w-3.5" />
+            </button>
+          )}
+        </div>
       </div>
     </div>
   );

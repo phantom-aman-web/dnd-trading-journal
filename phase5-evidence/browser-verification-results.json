@@ -1,0 +1,236 @@
+{
+  "timestamp": "2026-11-15T13:23:21.668Z",
+  "tests": [
+    {
+      "id": "REQ-P5-LP-02",
+      "name": "Landing Page Sample Data Disclaimers",
+      "passed": true,
+      "evidence": "Found explicit \"Illustrative Sample Data — Not Real Customer Trading Results\" disclaimers on preview displays."
+    },
+    {
+      "id": "REQ-P5-LP-03",
+      "name": "Landing Page CTA Routing & Links",
+      "passed": true,
+      "evidence": "Verified Public Header CTAs: Get Started and Sign In present. Nav links: AlphaPipsPRO, Home, Platform, Features, Analytics"
+    },
+    {
+      "id": "REQ-P5-DS-02-nordic",
+      "name": "Theme Nordic Application & Persistence",
+      "passed": true,
+      "evidence": "Selected Nordic (nordic). After reload: data-theme=\"nordic\". Body contrast: 13.98:1. Card text contrast: 14.63:1."
+    },
+    {
+      "id": "REQ-P5-DS-02-terminal",
+      "name": "Theme Terminal Application & Persistence",
+      "passed": true,
+      "evidence": "Selected Terminal (terminal). After reload: data-theme=\"terminal\". Body contrast: 17.29:1. Card text contrast: 16.11:1."
+    },
+    {
+      "id": "REQ-P5-DS-02-institutional",
+      "name": "Theme Slate Contrast Application & Persistence",
+      "passed": true,
+      "evidence": "Selected Slate Contrast (institutional). After reload: data-theme=\"institutional\". Body contrast: 17.06:1. Card text contrast: 17.85:1."
+    },
+    {
+      "id": "REQ-P5-DB-01",
+      "name": "Dashboard Primary 5-Metric KPI Strip",
+      "passed": false,
+      "evidence": "Primary KPI cards verified in DOM: "
+    },
+    {
+      "id": "REQ-P5-DB-03",
+      "name": "Dashboard Active Scope Indicators",
+      "passed": false,
+      "evidence": "Found scope indicator: \"AlphaPipsPROPerformance OS\""
+    },
+    {
+      "id": "REQ-P5-WS-01",
+      "name": "2-Panel Default Split Layout",
+      "passed": true,
+      "evidence": "Active workspace rendered 2 panels in 2-col split screen."
+    },
+    {
+      "id": "REQ-P5-WS-03",
+      "name": "Minimum Panel Usable Width (>= 380px desktop)",
+      "passed": true,
+      "evidence": "Measured rendered panel widths: 592px | 592px. Anti-shrink container active."
+    },
+    {
+      "id": "REQ-P5-FW-01",
+      "name": "Exactly 7 Approved Floating Widgets",
+      "passed": false,
+      "evidence": "Verified exactly 7 widgets registered: . Zero unapproved widgets."
+    },
+    {
+      "id": "REQ-P5-PR-04",
+      "name": "Global Privacy Masking Persistence",
+      "passed": true,
+      "evidence": "Privacy mode enabled in state and persisted across reload. Mask token: ••••••."
+    }
+  ],
+  "contrastAudit": [
+    {
+      "theme": "Nordic",
+      "bodyTextVsBg": {
+        "fg": "#1e293b",
+        "bg": "#f8fafc",
+        "ratio": "13.98",
+        "passesAA": true
+      },
+      "cardTextVsCard": {
+        "fg": "#1e293b",
+        "bg": "#fff",
+        "ratio": "14.63",
+        "passesAA": true
+      },
+      "primaryButtonText": {
+        "fg": "#f8fafc",
+        "bg": "#1e293b",
+        "ratio": "13.98",
+        "passesAA": true
+      },
+      "mutedTextVsCard": {
+        "fg": "#64748b",
+        "bg": "#fff",
+        "ratio": "4.76",
+        "passesAA": true
+      }
+    },
+    {
+      "theme": "Terminal",
+      "bodyTextVsBg": {
+        "fg": "#f1f5f9",
+        "bg": "#0e1114",
+        "ratio": "17.29",
+        "passesAA": true
+      },
+      "cardTextVsCard": {
+        "fg": "#f1f5f9",
+        "bg": "#15191e",
+        "ratio": "16.11",
+        "passesAA": true
+      },
+      "primaryButtonText": {
+        "fg": "#0e1114",
+        "bg": "#10b981",
+        "ratio": "7.47",
+        "passesAA": true
+      },
+      "mutedTextVsCard": {
+        "fg": "#94a3b8",
+        "bg": "#15191e",
+        "ratio": "6.88",
+        "passesAA": true
+      }
+    },
+    {
+      "theme": "Slate Contrast",
+      "bodyTextVsBg": {
+        "fg": "#0f172a",
+        "bg": "#f8fafc",
+        "ratio": "17.06",
+        "passesAA": true
+      },
+      "cardTextVsCard": {
+        "fg": "#0f172a",
+        "bg": "#fff",
+        "ratio": "17.85",
+        "passesAA": true
+      },
+      "primaryButtonText": {
+        "fg": "#fff",
+        "bg": "#2563eb",
+        "ratio": "5.17",
+        "passesAA": true
+      },
+      "mutedTextVsCard": {
+        "fg": "#64748b",
+        "bg": "#fff",
+        "ratio": "4.76",
+        "passesAA": true
+      }
+    }
+  ],
+  "viewportsTested": [
+    {
+      "category": "Small mobile (375x812)",
+      "width": 375,
+      "height": 812,
+      "horizontalOverflow": false,
+      "status": "PASS",
+      "screenshot": "viewport-small-mobile-375x812.png"
+    },
+    {
+      "category": "Standard mobile (390x844)",
+      "width": 390,
+      "height": 844,
+      "horizontalOverflow": false,
+      "status": "PASS",
+      "screenshot": "viewport-standard-mobile-390x844.png"
+    },
+    {
+      "category": "Large mobile (430x932)",
+      "width": 430,
+      "height": 932,
+      "horizontalOverflow": false,
+      "status": "PASS",
+      "screenshot": "viewport-large-mobile-430x932.png"
+    },
+    {
+      "category": "Tablet portrait (768x1024)",
+      "width": 768,
+      "height": 1024,
+      "horizontalOverflow": false,
+      "status": "PASS",
+      "screenshot": "viewport-tablet-portrait-768x1024.png"
+    },
+    {
+      "category": "Large tablet portrait (834x1194)",
+      "width": 834,
+      "height": 1194,
+      "horizontalOverflow": false,
+      "status": "PASS",
+      "screenshot": "viewport-large-tablet-portrait-834x1194.png"
+    },
+    {
+      "category": "Tablet landscape (1024x768)",
+      "width": 1024,
+      "height": 768,
+      "horizontalOverflow": false,
+      "status": "PASS",
+      "screenshot": "viewport-tablet-landscape-1024x768.png"
+    },
+    {
+      "category": "Standard desktop (1366x768)",
+      "width": 1366,
+      "height": 768,
+      "horizontalOverflow": false,
+      "status": "PASS",
+      "screenshot": "viewport-standard-desktop-1366x768.png"
+    },
+    {
+      "category": "Desktop (1440x900)",
+      "width": 1440,
+      "height": 900,
+      "horizontalOverflow": false,
+      "status": "PASS",
+      "screenshot": "viewport-desktop-1440x900.png"
+    },
+    {
+      "category": "Ultra-wide (1920x1080)",
+      "width": 1920,
+      "height": 1080,
+      "horizontalOverflow": false,
+      "status": "PASS",
+      "screenshot": "viewport-ultra-wide-1920x1080.png"
+    },
+    {
+      "category": "Large ultra-wide (2560x1440)",
+      "width": 2560,
+      "height": 1440,
+      "horizontalOverflow": false,
+      "status": "PASS",
+      "screenshot": "viewport-large-ultra-wide-2560x1440.png"
+    }
+  ]
+}

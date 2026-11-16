@@ -18,16 +18,15 @@ export const SUPPORTED_PANEL_VIEWS: { key: ViewKey; label: string }[] = [
   { key: "tradesLog", label: "Trades Log" },
   { key: "tradeDetail", label: "Trade Detail" },
   { key: "analytics", label: "Analytics" },
-  { key: "noTrades" as ViewKey, label: "No-Trade Journal" },
+  { key: "riskCalculator", label: "Risk Calculator" },
   { key: "setups", label: "Setups & Playbooks" },
   { key: "calendar", label: "Calendar" },
   { key: "accounts", label: "Accounts" },
 ];
 
 export const DEFAULT_PANELS: WorkspacePanel[] = [
-  { id: "panel-1", view: "tradesLog", title: "Trades Log", sizePct: 35 },
-  { id: "panel-2", view: "tradeDetail", title: "Trade Detail", sizePct: 35 },
-  { id: "panel-3", view: "analytics", title: "Analytics", sizePct: 30 },
+  { id: "panel-1", view: "tradesLog", title: "Trades Log", sizePct: 50 },
+  { id: "panel-2", view: "tradeDetail", title: "Trade Detail", sizePct: 50 },
 ];
 
 interface WorkspaceState {
@@ -52,7 +51,7 @@ export const useWorkspaceStore = create<WorkspaceState>()(
   persist(
     (set, get) => ({
       isActive: false,
-      layout: "3-col",
+      layout: "2-col",
       panels: DEFAULT_PANELS,
       linkedTradeId: null,
       linkedNoTradeId: null,
@@ -63,14 +62,14 @@ export const useWorkspaceStore = create<WorkspaceState>()(
 
       setLayout: (layout) => {
         const panels = get().panels;
-        let targetCount = 3;
+        let targetCount = 2;
         if (layout === "2-col" || layout === "2-row") targetCount = 2;
         if (layout === "3-col") targetCount = 3;
         if (layout === "4-grid") targetCount = 4;
 
         let updated = [...panels];
         while (updated.length < targetCount) {
-          const id = `panel-${Date.now()}-${updated.length + 1}`;
+          const id = `panel-${Date.now()}-${Math.random().toString(36).slice(2, 7)}-${updated.length + 1}`;
           const nextView = SUPPORTED_PANEL_VIEWS[updated.length % SUPPORTED_PANEL_VIEWS.length];
           updated.push({
             id,
@@ -121,7 +120,7 @@ export const useWorkspaceStore = create<WorkspaceState>()(
         if (panels.length >= 4) return;
         const label = SUPPORTED_PANEL_VIEWS.find((v) => v.key === view)?.label || view;
         const newPanel: WorkspacePanel = {
-          id: `panel-${Date.now()}`,
+          id: `panel-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
           view,
           title: label,
           sizePct: Math.round(100 / (panels.length + 1)),
@@ -153,7 +152,7 @@ export const useWorkspaceStore = create<WorkspaceState>()(
 
       resetWorkspace: () => {
         set({
-          layout: "3-col",
+          layout: "2-col",
           panels: DEFAULT_PANELS,
           linkedTradeId: null,
           linkedNoTradeId: null,

@@ -223,7 +223,7 @@ export function TopBar({ onOpenMobileNav, onOpenShortcuts }: TopBarProps) {
                 >
                   <div className="flex items-center gap-2">
                     <span className="h-3 w-3 rounded-full bg-slate-200 border border-slate-300" />
-                    <span className="text-xs font-medium">Nordic Clean</span>
+                    <span className="text-xs font-medium">Nordic</span>
                   </div>
                   {theme === "nordic" && <Check className="h-3.5 w-3.5 text-primary" />}
                 </DropdownMenuItem>
@@ -233,7 +233,7 @@ export function TopBar({ onOpenMobileNav, onOpenShortcuts }: TopBarProps) {
                 >
                   <div className="flex items-center gap-2">
                     <span className="h-3 w-3 rounded-full bg-emerald-500 border border-emerald-600" />
-                    <span className="text-xs font-medium">Sleek Terminal</span>
+                    <span className="text-xs font-medium">Terminal</span>
                   </div>
                   {theme === "terminal" && <Check className="h-3.5 w-3.5 text-primary" />}
                 </DropdownMenuItem>

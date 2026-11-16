@@ -23,7 +23,7 @@ describe("Security & Multi-User Isolation Engine", () => {
     } catch (e) {
       console.warn("Cleanup warning:", e);
     }
-  });
+  }, 30000);
 
   it("should enforce strict application-level multi-user data isolation between User A and User B", async () => {
     // 1. Create two isolated test users

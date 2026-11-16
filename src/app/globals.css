@@ -1,9 +1,10 @@
-/* DnD — Design System. Three appearance presets per spec section 11.
-   Theme A: Nordic Clean (default, light)
-   Theme B: Sleek Terminal (dark)
-   Theme C: Institutional Blue (dark)
+/* DnD — Design System. Three appearance presets per spec.
+   Theme A: Nordic (default, light)
+   Theme B: Terminal (dark)
+   Theme C: Slate Contrast (dark sidebar / light workspace)
 */
 
+@import url("https://fonts.googleapis.com/css2?family=Cinzel:wght@500;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&family=Playfair+Display:ital,wght@0,500;0,600;1,400&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap");
 @import "tailwindcss";
 @import "tw-animate-css";
 
@@ -52,7 +53,7 @@
   --radius-xl: calc(var(--radius) + 4px);
 }
 
-/* THEME A: NORDIC CLEAN (default, light) */
+/* THEME A: NORDIC (default, light) */
 :root,
 [data-theme="nordic"] {
   --radius: 0.5rem;
@@ -75,8 +76,8 @@
   --border: #E2E8F0;
   --input: #E2E8F0;
   --ring: #94A3B8;
-  --profit: #34D399;
-  --loss: #FB7185;
+  --profit: #047857;
+  --loss: #DC2626;
   --warning: #F59E0B;
   --sidebar: #FFFFFF;
   --sidebar-foreground: #1E293B;
@@ -93,7 +94,7 @@
   --chart-5: #64748B;
 }
 
-/* THEME B: SLEEK TERMINAL (dark) */
+/* THEME B: TERMINAL (dark) */
 [data-theme="terminal"] {
   --radius: 0.4rem;
   --background: #0E1114;
@@ -157,8 +158,8 @@
   --border: #E2E8F0;
   --input: #E2E8F0;
   --ring: #2563EB;
-  --profit: #10B981;
-  --loss: #EF4444;
+  --profit: #047857;
+  --loss: #DC2626;
   --warning: #F59E0B;
   /* Header & Navigation surfaces (deep slate dark with high-contrast bright text) */
   --header: #0F172A;
@@ -262,7 +263,7 @@
 
 /* Universal High-Contrast Rules: Make texts lighter whenever the background is darker */
 
-/* 1. Sleek Terminal (dark theme everywhere) */
+/* 1. Terminal (dark theme everywhere) */
 [data-theme="terminal"] .text-slate-900,
 [data-theme="terminal"] .text-slate-800,
 [data-theme="terminal"] .text-slate-700,
@@ -565,6 +566,11 @@ body {
 [data-font="cinzel"],
 [data-font="cinzel"] body {
   font-family: 'Cinzel', serif !important;
+}
+
+[data-font="system"],
+[data-font="system"] body {
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif !important;
 }
 
 /* Focus ring */
