@@ -73,15 +73,8 @@ export function MultiPanelWorkspace() {
     return () => window.removeEventListener("resize", handleResize);
   }, []);
 
-  useEffect(() => {
-    if (panels.length > 0 && !panels.some((p) => p.id === activeMobileTab)) {
-      setActiveMobileTab(panels[0]?.id || "panel-1");
-    }
-  }, [panels, activeMobileTab]);
-
   if (!isActive) return null;
 
-  const isMobile = viewportWidth < 768;
   const maximizedPanel = panels.find((p) => p.id === maximizedPanelId);
   const isWidthCrampedFor3Col = layout === "3-col" && viewportWidth < 1300;
 
@@ -105,7 +98,7 @@ export function MultiPanelWorkspace() {
             </Badge>
           )}
           {isWidthCrampedFor3Col && (
-            <div className="hidden xl:flex items-center gap-1.5 px-2 py-0.5 rounded-md bg-amber-500/10 border border-amber-500/20 text-amber-600 dark:text-amber-400 text-[11px]">
+            <div className="hidden sm:flex items-center gap-1.5 px-2 py-0.5 rounded-md bg-amber-500/10 border border-amber-500/20 text-amber-600 dark:text-amber-400 text-[11px]">
               <AlertTriangle className="h-3 w-3 shrink-0" />
               <span>Width &lt; 1300px: 2 Panels Recommended</span>
               <button
@@ -121,7 +114,7 @@ export function MultiPanelWorkspace() {
 
         {/* Layout Presets */}
         <div className="flex items-center gap-1.5">
-          <div className="hidden md:flex items-center rounded-lg border border-border bg-muted/40 p-0.5 text-xs">
+          <div className="hidden sm:flex items-center rounded-lg border border-border bg-muted/40 p-0.5 text-xs">
             <button
               type="button"
               onClick={() => {
@@ -218,29 +211,27 @@ export function MultiPanelWorkspace() {
       </div>
 
       {/* Mobile Tab Switcher (< 768px) */}
-      {isMobile && (
-        <div className="flex items-center gap-1.5 px-3 py-1.5 bg-muted/40 border-b border-border overflow-x-auto shrink-0">
-          {panels.map((p, idx) => (
-            <button
-              key={p.id}
-              type="button"
-              onClick={() => setActiveMobileTab(p.id)}
-              className={cn(
-                "px-3 py-1 rounded-md text-xs font-medium whitespace-nowrap transition-colors cursor-pointer",
-                activeMobileTab === p.id
-                  ? "bg-card text-foreground font-semibold shadow-xs border border-border"
-                  : "text-muted-foreground hover:text-foreground"
-              )}
-            >
-              Panel {idx + 1}: {p.title}
-            </button>
-          ))}
-        </div>
-      )}
+      <div className="md:hidden flex items-center gap-1.5 px-3 py-1.5 bg-muted/40 border-b border-border overflow-x-auto">
+        {panels.map((p, idx) => (
+          <button
+            key={p.id}
+            type="button"
+            onClick={() => setActiveMobileTab(p.id)}
+            className={cn(
+              "px-3 py-1 rounded-md text-xs font-medium whitespace-nowrap transition-colors cursor-pointer",
+              activeMobileTab === p.id
+                ? "bg-card text-foreground font-semibold shadow-xs border border-border"
+                : "text-muted-foreground hover:text-foreground"
+            )}
+          >
+            Panel {idx + 1}: {p.title}
+          </button>
+        ))}
+      </div>
 
       {/* Maximized Panel View (Single full-size view when maximized) */}
       {maximizedPanel ? (
-        <div className="flex-1 overflow-hidden h-full min-w-0 min-h-0">
+        <div className="flex-1 overflow-hidden h-full">
           <SinglePanelContainer
             panel={maximizedPanel}
             canClose={false}
@@ -249,55 +240,78 @@ export function MultiPanelWorkspace() {
             onChangeView={(view) => setPanelView(maximizedPanel.id, view)}
           />
         </div>
-      ) : isMobile ? (
-        /* Mobile View: Render only active tab at full width & height */
-        <div className="flex-1 overflow-hidden h-full min-w-0 min-h-0">
-          {panels
-            .filter((p) => p.id === activeMobileTab)
-            .map((panel) => (
-              <SinglePanelContainer
-                key={panel.id}
-                panel={panel}
-                canClose={false}
-                isMaximized={false}
-                onToggleMaximize={() => {}}
-                onChangeView={(view) => setPanelView(panel.id, view)}
-              />
-            ))}
-        </div>
       ) : (
-        /* Desktop & Tablet Resizable Layouts (>= 768px) */
-        <div className="flex-1 overflow-hidden h-full w-full min-w-0 min-h-0">
-          {layout === "2-col" && (
-            <ResizablePanelGroup direction="horizontal" className="h-full w-full">
-              {panels.slice(0, 2).map((panel, idx) => (
-                <React.Fragment key={panel.id}>
-                  {idx > 0 && <ResizableHandle withHandle />}
-                  <ResizablePanel defaultSize={panel.sizePct || 50} minSize={15} className="min-w-0 min-h-0">
-                    <SinglePanelContainer
-                      panel={panel}
-                      canClose={panels.length > 1}
-                      isMaximized={false}
-                      onToggleMaximize={() => setMaximizedPanelId(panel.id)}
-                      onClose={() => removePanel(panel.id)}
-                      onChangeView={(view) => setPanelView(panel.id, view)}
-                    />
-                  </ResizablePanel>
-                </React.Fragment>
-              ))}
-            </ResizablePanelGroup>
-          )}
+        <>
+          {/* Main Desktop & Tablet Resizable Layout (>= 768px) */}
+          <div className="hidden md:block flex-1 overflow-hidden h-full w-full">
+            {layout === "2-col" && (
+              <ResizablePanelGroup direction="horizontal" className="h-full w-full">
+                {panels.slice(0, 2).map((panel, idx) => (
+                  <React.Fragment key={panel.id}>
+                    {idx > 0 && <ResizableHandle withHandle />}
+                    <ResizablePanel defaultSize={panel.sizePct || 50} minSize={20} className="min-w-[260px]">
+                      <SinglePanelContainer
+                        panel={panel}
+                        canClose={panels.length > 1}
+                        isMaximized={false}
+                        onToggleMaximize={() => setMaximizedPanelId(panel.id)}
+                        onClose={() => removePanel(panel.id)}
+                        onChangeView={(view) => setPanelView(panel.id, view)}
+                      />
+                    </ResizablePanel>
+                  </React.Fragment>
+                ))}
+              </ResizablePanelGroup>
+            )}
 
-          {layout === "3-col" && (
-            viewportWidth < 1100 ? (
-              /* Tablet Adaptive 3-Panel: 2 panels on top, 1 panel on bottom */
+            {layout === "3-col" && (
+              <ResizablePanelGroup direction="horizontal" className="h-full w-full">
+                {panels.slice(0, 3).map((panel, idx) => (
+                  <React.Fragment key={panel.id}>
+                    {idx > 0 && <ResizableHandle withHandle />}
+                    <ResizablePanel defaultSize={panel.sizePct || 33} minSize={15} className="min-w-[220px]">
+                      <SinglePanelContainer
+                        panel={panel}
+                        canClose={panels.length > 1}
+                        isMaximized={false}
+                        onToggleMaximize={() => setMaximizedPanelId(panel.id)}
+                        onClose={() => removePanel(panel.id)}
+                        onChangeView={(view) => setPanelView(panel.id, view)}
+                      />
+                    </ResizablePanel>
+                  </React.Fragment>
+                ))}
+              </ResizablePanelGroup>
+            )}
+
+            {layout === "2-row" && (
               <ResizablePanelGroup direction="vertical" className="h-full w-full">
-                <ResizablePanel defaultSize={55} minSize={20} className="min-w-0 min-h-0">
+                {panels.slice(0, 2).map((panel, idx) => (
+                  <React.Fragment key={panel.id}>
+                    {idx > 0 && <ResizableHandle withHandle />}
+                    <ResizablePanel defaultSize={panel.sizePct || 50} minSize={15} className="min-h-[160px]">
+                      <SinglePanelContainer
+                        panel={panel}
+                        canClose={panels.length > 1}
+                        isMaximized={false}
+                        onToggleMaximize={() => setMaximizedPanelId(panel.id)}
+                        onClose={() => removePanel(panel.id)}
+                        onChangeView={(view) => setPanelView(panel.id, view)}
+                      />
+                    </ResizablePanel>
+                  </React.Fragment>
+                ))}
+              </ResizablePanelGroup>
+            )}
+
+            {layout === "4-grid" && (
+              <ResizablePanelGroup direction="vertical" className="h-full w-full">
+                <ResizablePanel defaultSize={50} minSize={20}>
                   <ResizablePanelGroup direction="horizontal" className="h-full w-full">
                     {panels.slice(0, 2).map((panel, idx) => (
                       <React.Fragment key={panel.id}>
                         {idx > 0 && <ResizableHandle withHandle />}
-                        <ResizablePanel defaultSize={panel.sizePct || 50} minSize={15} className="min-w-0 min-h-0">
+                        <ResizablePanel defaultSize={50} minSize={20} className="min-w-[220px]">
                           <SinglePanelContainer
                             panel={panel}
                             canClose={panels.length > 1}
@@ -312,105 +326,45 @@ export function MultiPanelWorkspace() {
                   </ResizablePanelGroup>
                 </ResizablePanel>
                 <ResizableHandle withHandle />
-                {panels[2] && (
-                  <ResizablePanel defaultSize={45} minSize={20} className="min-w-0 min-h-0">
-                    <SinglePanelContainer
-                      panel={panels[2]}
-                      canClose={panels.length > 1}
-                      isMaximized={false}
-                      onToggleMaximize={() => setMaximizedPanelId(panels[2].id)}
-                      onClose={() => removePanel(panels[2].id)}
-                      onChangeView={(view) => setPanelView(panels[2].id, view)}
-                    />
-                  </ResizablePanel>
-                )}
+                <ResizablePanel defaultSize={50} minSize={20}>
+                  <ResizablePanelGroup direction="horizontal" className="h-full w-full">
+                    {panels.slice(2, 4).map((panel, idx) => (
+                      <React.Fragment key={panel.id}>
+                        {idx > 0 && <ResizableHandle withHandle />}
+                        <ResizablePanel defaultSize={50} minSize={20} className="min-w-[220px]">
+                          <SinglePanelContainer
+                            panel={panel}
+                            canClose={panels.length > 1}
+                            isMaximized={false}
+                            onToggleMaximize={() => setMaximizedPanelId(panel.id)}
+                            onClose={() => removePanel(panel.id)}
+                            onChangeView={(view) => setPanelView(panel.id, view)}
+                          />
+                        </ResizablePanel>
+                      </React.Fragment>
+                    ))}
+                  </ResizablePanelGroup>
+                </ResizablePanel>
               </ResizablePanelGroup>
-            ) : (
-              /* Desktop 3-Column: 3 side-by-side resizable columns */
-              <ResizablePanelGroup direction="horizontal" className="h-full w-full">
-                {panels.slice(0, 3).map((panel, idx) => (
-                  <React.Fragment key={panel.id}>
-                    {idx > 0 && <ResizableHandle withHandle />}
-                    <ResizablePanel defaultSize={panel.sizePct || 33} minSize={15} className="min-w-0 min-h-0">
-                      <SinglePanelContainer
-                        panel={panel}
-                        canClose={panels.length > 1}
-                        isMaximized={false}
-                        onToggleMaximize={() => setMaximizedPanelId(panel.id)}
-                        onClose={() => removePanel(panel.id)}
-                        onChangeView={(view) => setPanelView(panel.id, view)}
-                      />
-                    </ResizablePanel>
-                  </React.Fragment>
-                ))}
-              </ResizablePanelGroup>
-            )
-          )}
+            )}
+          </div>
 
-          {layout === "2-row" && (
-            <ResizablePanelGroup direction="vertical" className="h-full w-full">
-              {panels.slice(0, 2).map((panel, idx) => (
-                <React.Fragment key={panel.id}>
-                  {idx > 0 && <ResizableHandle withHandle />}
-                  <ResizablePanel defaultSize={panel.sizePct || 50} minSize={15} className="min-w-0 min-h-0">
-                    <SinglePanelContainer
-                      panel={panel}
-                      canClose={panels.length > 1}
-                      isMaximized={false}
-                      onToggleMaximize={() => setMaximizedPanelId(panel.id)}
-                      onClose={() => removePanel(panel.id)}
-                      onChangeView={(view) => setPanelView(panel.id, view)}
-                    />
-                  </ResizablePanel>
-                </React.Fragment>
+          {/* Mobile View (< 768px): Render only active tab */}
+          <div className="md:hidden flex-1 overflow-hidden h-full">
+            {panels
+              .filter((p) => p.id === activeMobileTab)
+              .map((panel) => (
+                <SinglePanelContainer
+                  key={panel.id}
+                  panel={panel}
+                  canClose={false}
+                  isMaximized={false}
+                  onToggleMaximize={() => {}}
+                  onChangeView={(view) => setPanelView(panel.id, view)}
+                />
               ))}
-            </ResizablePanelGroup>
-          )}
-
-          {layout === "4-grid" && (
-            <ResizablePanelGroup direction="vertical" className="h-full w-full">
-              <ResizablePanel defaultSize={50} minSize={15} className="min-w-0 min-h-0">
-                <ResizablePanelGroup direction="horizontal" className="h-full w-full">
-                  {panels.slice(0, 2).map((panel, idx) => (
-                    <React.Fragment key={panel.id}>
-                      {idx > 0 && <ResizableHandle withHandle />}
-                      <ResizablePanel defaultSize={50} minSize={15} className="min-w-0 min-h-0">
-                        <SinglePanelContainer
-                          panel={panel}
-                          canClose={panels.length > 1}
-                          isMaximized={false}
-                          onToggleMaximize={() => setMaximizedPanelId(panel.id)}
-                          onClose={() => removePanel(panel.id)}
-                          onChangeView={(view) => setPanelView(panel.id, view)}
-                        />
-                      </ResizablePanel>
-                    </React.Fragment>
-                  ))}
-                </ResizablePanelGroup>
-              </ResizablePanel>
-              <ResizableHandle withHandle />
-              <ResizablePanel defaultSize={50} minSize={15} className="min-w-0 min-h-0">
-                <ResizablePanelGroup direction="horizontal" className="h-full w-full">
-                  {panels.slice(2, 4).map((panel, idx) => (
-                    <React.Fragment key={panel.id}>
-                      {idx > 0 && <ResizableHandle withHandle />}
-                      <ResizablePanel defaultSize={50} minSize={15} className="min-w-0 min-h-0">
-                        <SinglePanelContainer
-                          panel={panel}
-                          canClose={panels.length > 1}
-                          isMaximized={false}
-                          onToggleMaximize={() => setMaximizedPanelId(panel.id)}
-                          onClose={() => removePanel(panel.id)}
-                          onChangeView={(view) => setPanelView(panel.id, view)}
-                        />
-                      </ResizablePanel>
-                    </React.Fragment>
-                  ))}
-                </ResizablePanelGroup>
-              </ResizablePanel>
-            </ResizablePanelGroup>
-          )}
-        </div>
+          </div>
+        </>
       )}
     </div>
   );
@@ -434,14 +388,14 @@ function SinglePanelContainer({
   const linkedTradeId = useWorkspaceStore((s) => s.linkedTradeId);
 
   return (
-    <div className="flex flex-col h-full w-full bg-background overflow-hidden min-w-0 min-h-0">
+    <div className="workspace-panel-container @container/panel flex flex-col h-full w-full bg-background overflow-hidden min-w-0">
       {/* Panel Local Header */}
-      <div className="h-9 px-2.5 sm:px-3 border-b border-border bg-card/60 flex items-center justify-between gap-1.5 shrink-0 min-w-0">
-        <div className="flex items-center gap-1.5 min-w-0 flex-1">
+      <div className="h-9 px-3 border-b border-border bg-card/60 flex items-center justify-between gap-2 shrink-0">
+        <div className="flex items-center gap-1.5 min-w-0">
           <select
             value={panel.view}
             onChange={(e) => onChangeView(e.target.value as ViewKey)}
-            className="h-6 px-1.5 rounded bg-transparent hover:bg-muted/50 border-0 text-xs font-semibold text-foreground cursor-pointer focus:outline-hidden max-w-[130px] sm:max-w-[190px] truncate shrink"
+            className="h-6 px-1.5 rounded bg-transparent hover:bg-muted/50 border-0 text-xs font-semibold text-foreground cursor-pointer focus:outline-hidden"
           >
             {SUPPORTED_PANEL_VIEWS.map((v) => (
               <option key={v.key} value={v.key} className="bg-card text-foreground">
@@ -451,14 +405,14 @@ function SinglePanelContainer({
           </select>
 
           {panel.view === "tradeDetail" && linkedTradeId && (
-            <Badge variant="outline" className="text-[9px] font-mono border-primary/30 text-primary gap-1 py-0 truncate shrink">
+            <Badge variant="outline" className="text-[9px] font-mono border-primary/30 text-primary gap-1 py-0 truncate">
               <Link2 className="h-2.5 w-2.5 shrink-0" />
               Linked trade
             </Badge>
           )}
         </div>
 
-        <div className="flex items-center gap-0.5 sm:gap-1 shrink-0">
+        <div className="flex items-center gap-1">
           {onToggleMaximize && (
             <button
               type="button"
@@ -488,7 +442,7 @@ function SinglePanelContainer({
       </div>
 
       {/* Panel Scrollable Content with Container Query Scope */}
-      <div className="flex-1 overflow-y-auto overflow-x-auto min-w-0 min-h-0 @container">
+      <div className="workspace-panel-scroll flex-1 overflow-y-auto overflow-x-auto min-w-0 @container">
         <PanelContentRenderer panel={panel} />
       </div>
     </div>

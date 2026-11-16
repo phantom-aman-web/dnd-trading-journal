@@ -479,9 +479,9 @@ export function RiskCalculatorView() {
         </div>
       )}
 
-      <div className="grid grid-cols-1 @[900px]:grid-cols-12 gap-6">
+      <div className="grid grid-cols-1 xl:grid-cols-12 gap-6">
         {/* Inputs Form */}
-        <div className="col-span-1 @[900px]:col-span-7 space-y-5">
+        <div className="xl:col-span-7 space-y-5">
           {/* Account & Capital Selection */}
           <div className="bg-card rounded-xl border border-border p-4 md:p-5 space-y-4 shadow-sm">
             <h2 className="text-sm font-semibold text-foreground flex items-center gap-2">
@@ -489,7 +489,7 @@ export function RiskCalculatorView() {
               1. Account &amp; Capital
             </h2>
 
-            <div className="grid grid-cols-1 @[450px]:grid-cols-2 gap-4">
+            <div className="grid sm:grid-cols-2 gap-4">
               <div className="space-y-1.5">
                 <Label className="text-xs">Trading Account</Label>
                 <Select
@@ -573,7 +573,7 @@ export function RiskCalculatorView() {
                 </div>
               </div>
 
-              <div className="grid grid-cols-1 @[450px]:grid-cols-2 gap-4 items-center">
+              <div className="grid sm:grid-cols-2 gap-4 items-center">
                 {riskMode === "pct" ? (
                   <div className="space-y-1.5">
                     <Label className="text-xs">Risk Percentage (%)</Label>
@@ -694,7 +694,7 @@ export function RiskCalculatorView() {
               </div>
             </div>
 
-            <div className="grid grid-cols-1 @[450px]:grid-cols-2 gap-4">
+            <div className="grid sm:grid-cols-2 gap-4">
               <div className="space-y-1.5">
                 <Label className="text-xs">Symbol / Ticker</Label>
                 <Input
@@ -757,7 +757,7 @@ export function RiskCalculatorView() {
             </div>
 
             {/* Price Levels: Entry, Stop, Take Profit */}
-            <div className="grid grid-cols-1 @[500px]:grid-cols-3 gap-3 pt-2">
+            <div className="grid sm:grid-cols-3 gap-3 pt-2">
               <div className="space-y-1.5">
                 <Label className="text-xs">Entry Price</Label>
                 <Input
@@ -814,7 +814,7 @@ export function RiskCalculatorView() {
                 <span>Execution Costs &amp; Friction (Optional)</span>
                 <span className="text-[10px] text-muted-foreground">Factored into net monetary risk</span>
               </div>
-              <div className="grid grid-cols-1 @[450px]:grid-cols-2 gap-3">
+              <div className="grid sm:grid-cols-2 gap-3">
                 <div className="space-y-1">
                   <Label className="text-[11px] text-muted-foreground">Spread ({unitsName})</Label>
                   <Input
@@ -853,7 +853,7 @@ export function RiskCalculatorView() {
         </div>
 
         {/* Output & Sizing Summary */}
-        <div className="col-span-1 @[900px]:col-span-5 space-y-5">
+        <div className="xl:col-span-5 space-y-5">
           <div className="bg-card rounded-xl border border-border p-5 space-y-5 shadow-sm sticky top-4">
             <div className="flex items-center justify-between pb-3 border-b border-border">
               <h3 className="font-semibold text-foreground text-sm flex items-center gap-1.5">

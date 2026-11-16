@@ -325,7 +325,7 @@ export function DashboardView() {
             </div>
 
             {/* Primary 5-Metric KPI Strip (Net P&L, Win Rate, Profit Factor, Trade Count, Avg R) */}
-            <div className="grid grid-cols-1 @[380px]:grid-cols-2 @[560px]:grid-cols-3 @[850px]:grid-cols-5 gap-3">
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
               <MetricCard
                 label="Net P&L"
                 value={formatSignedCents(pnl).text}
@@ -336,7 +336,7 @@ export function DashboardView() {
                     ? `vs prev: ${formatSignedCents(dash.comparison.pnlChangeCents).text}`
                     : `${dash.aggregate.wins}W · ${dash.aggregate.losses}L`
                 }
-                className="col-span-1 @[380px]:col-span-2 @[560px]:col-span-1 border-primary/20 bg-card shadow-xs"
+                className="col-span-2 sm:col-span-1 border-primary/20 bg-card shadow-xs"
               />
               <MetricCard
                 label="Win Rate"
@@ -369,7 +369,7 @@ export function DashboardView() {
             </div>
 
             {/* Compact Secondary Metrics Strip */}
-            <div className="grid grid-cols-2 @[600px]:grid-cols-4 gap-2.5 p-3 rounded-xl border border-border/70 bg-muted/20">
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 p-3 rounded-xl border border-border/70 bg-muted/20">
               <div className="flex flex-col gap-0.5 px-2">
                 <span className="text-[11px] font-medium text-muted-foreground">Expectancy</span>
                 <span className="text-sm font-semibold tnum text-foreground">
@@ -513,7 +513,7 @@ export function DashboardView() {
               title="PROCESS & ADHERENCE BREAKDOWN"
               subtitle="How well are you following your trading checklist?"
             />
-            <div className="grid grid-cols-1 @[380px]:grid-cols-2 @[750px]:grid-cols-4 gap-3">
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
               <MetricTile
                 label="Total Trades"
                 value={String(breakdown.totalTrades)}
@@ -685,7 +685,7 @@ export function DashboardView() {
               ) : (
                 <>
                   {/* Desktop / tablet table */}
-                  <div className="hidden @[550px]:block overflow-x-auto min-w-0">
+                  <div className="hidden sm:block">
                     <table className="w-full text-sm">
                       <thead>
                         <tr className="bg-muted/50 border-b border-border">
@@ -706,7 +706,7 @@ export function DashboardView() {
                   </div>
 
                   {/* Mobile card list */}
-                  <ul className="@[550px]:hidden divide-y divide-border">
+                  <ul className="sm:hidden divide-y divide-border">
                     {recentTrades.map((t) => (
                       <TradeRowMobile key={t.id} trade={t} onOpen={() => navigate("tradeDetail", { id: t.id })} />
                     ))}
@@ -735,7 +735,7 @@ export function DashboardView() {
         onOpenAnalytics={() => navigate("analytics", { preset, ...(accountId ? { accountId } : {}) })}
       />
 
-      <div className="grid grid-cols-1 @[750px]:grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         {sortedWidgets
           .filter((w) => w.visible)
           .map((widget) => {
@@ -747,7 +747,7 @@ export function DashboardView() {
                 key={widget.id}
                 className={cn(
                   "transition-all duration-200",
-                  isFull ? "@[750px]:col-span-2" : "@[750px]:col-span-1"
+                  isFull ? "lg:col-span-2" : "lg:col-span-1"
                 )}
               >
                 {content}
@@ -1140,7 +1140,7 @@ function PerformanceOverview({
         subtitle="Aggregate performance and key metrics for this period."
       />
 
-      <div className="grid grid-cols-2 @[600px]:grid-cols-4 gap-3">
+      <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-4 gap-3">
         <MetricCard
           label="Net P&L"
           value={formatSignedCents(pnl).text}
@@ -1191,7 +1191,7 @@ function PerformanceOverview({
         />
       </div>
 
-      <div className="grid grid-cols-1 @[700px]:grid-cols-3 gap-3">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-3">
         {hasEquity && (
           <Card className="bg-card border border-border rounded-xl shadow-sm p-4">
             <h3 className="text-sm font-semibold text-foreground mb-3">Equity Curve</h3>
@@ -1255,7 +1255,7 @@ function StrategicBreakdown({
       />
 
       {/* Row 1: Instrument Rankings & Strategy Rankings */}
-      <div className="grid grid-cols-1 @[700px]:grid-cols-2 gap-3">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
         {/* Instrument Rankings */}
         <Card className="bg-card border border-border rounded-xl shadow-sm p-4 flex flex-col justify-between">
           <div>

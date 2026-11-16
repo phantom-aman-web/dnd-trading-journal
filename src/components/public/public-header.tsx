@@ -62,7 +62,7 @@ export function PublicHeader({ className }: PublicHeaderProps) {
           className="flex items-center gap-2.5 shrink-0 group focus:outline-none"
           aria-label="AlphaPips Home"
         >
-          <div className="h-9 w-9 rounded-xl bg-gradient-to-br from-blue-600 via-sky-500 to-blue-700 p-0.5 shadow-lg shadow-sky-950/40 ring-1 ring-white/20 transition-transform duration-200 group-hover:scale-105">
+          <div className="h-9 w-9 rounded-xl bg-gradient-to-br from-blue-600 via-cyan-500 to-blue-700 p-0.5 shadow-lg shadow-blue-900/30 ring-1 ring-white/20 transition-transform duration-200 group-hover:scale-105">
             <div className="w-full h-full bg-[#0B1021] rounded-[10px] flex items-center justify-center">
               <svg
                 xmlns="http://www.w3.org/2000/svg"
@@ -72,7 +72,7 @@ export function PublicHeader({ className }: PublicHeaderProps) {
                 strokeWidth="2.3"
                 strokeLinecap="round"
                 strokeLinejoin="round"
-                className="h-5 w-5 text-sky-300"
+                className="h-5 w-5 text-cyan-300"
               >
                 <path d="M12 3 L20 20 L15.5 20 L12 11 L8.5 20 L4 20 Z" fill="currentColor" fillOpacity="0.25" />
                 <circle cx="12" cy="8" r="1.6" fill="#10B981" stroke="#10B981" />
@@ -83,7 +83,7 @@ export function PublicHeader({ className }: PublicHeaderProps) {
             <span className="font-bold text-lg tracking-tight text-white font-[family-name:var(--font-jakarta)]">
               AlphaPips
             </span>
-            <span className="text-[10px] font-mono font-semibold uppercase px-1.5 py-0.5 rounded-full bg-sky-500/15 text-sky-300 border border-sky-500/30">
+            <span className="text-[10px] font-mono font-semibold uppercase px-1.5 py-0.5 rounded-full bg-cyan-500/15 text-cyan-300 border border-cyan-500/30">
               PRO
             </span>
           </div>
@@ -119,7 +119,7 @@ export function PublicHeader({ className }: PublicHeaderProps) {
           <Button
             size="sm"
             onClick={() => navigate("signup")}
-            className="relative group overflow-hidden bg-gradient-to-r from-blue-600 to-sky-600 hover:from-blue-500 hover:to-sky-500 text-white font-medium text-xs px-4 py-2 rounded-lg shadow-lg shadow-blue-600/25 border border-sky-400/30 transition-all duration-200"
+            className="relative group overflow-hidden bg-gradient-to-r from-blue-600 to-cyan-600 hover:from-blue-500 hover:to-cyan-500 text-white font-medium text-xs px-4 py-2 rounded-lg shadow-lg shadow-blue-600/25 border border-cyan-400/30 transition-all duration-200"
           >
             <span className="relative z-10 flex items-center gap-1.5">
               <span>Get Started</span>
@@ -195,7 +195,7 @@ export function PublicHeader({ className }: PublicHeaderProps) {
                     setMobileOpen(false);
                     navigate("signup");
                   }}
-                  className="mt-2 flex items-center justify-center gap-2 px-3.5 py-2.5 text-sm font-semibold text-white bg-gradient-to-r from-blue-600 to-sky-600 rounded-lg shadow-lg shadow-blue-600/30"
+                  className="mt-2 flex items-center justify-center gap-2 px-3.5 py-2.5 text-sm font-semibold text-white bg-gradient-to-r from-blue-600 to-cyan-600 rounded-lg shadow-lg shadow-blue-600/30"
                 >
                   <span>Get Started with AlphaPips</span>
                   <ArrowRight className="h-4 w-4" />

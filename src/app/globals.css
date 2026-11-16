@@ -652,7 +652,147 @@ h1, h2, h3, .font-display, [data-typography="display"] {
 .bg-grid-blue {
   background-size: 32px 32px;
   background-image: 
-    linear-gradient(to right, rgba(37, 99, 235, 0.05) 1px, transparent 1px),
-    linear-gradient(to bottom, rgba(37, 99, 235, 0.05) 1px, transparent 1px);
+    linear-gradient(to right, rgba(37, 99, 235, 0.06) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(37, 99, 235, 0.06) 1px, transparent 1px);
+}
+
+/* ========================================================================== */
+/* WORKSPACE PANEL ISOLATED RESPONSIVE SYSTEM                                 */
+/* Strictly scoped to .workspace-panel-container to prevent desktop leakage   */
+/* ========================================================================== */
+
+.workspace-panel-container {
+  container-type: inline-size;
+  container-name: panel;
+  min-width: 0;
+  max-width: 100%;
+}
+
+/* Ensure all scrollable panels have smooth internal scrolling */
+.workspace-panel-container .workspace-panel-scroll {
+  scrollbar-width: thin;
+  overscroll-behavior: contain;
+}
+
+/* Table containment: tables within workspace panels scroll locally and never blow out panel width */
+.workspace-panel-container table {
+  min-width: 540px;
+}
+
+.workspace-panel-container .overflow-x-auto {
+  max-width: 100%;
+  overscroll-behavior-x: contain;
+  scrollbar-width: thin;
+}
+
+/* Filter bars and action strips within workspace panels wrap gracefully */
+.workspace-panel-container .space-y-3 > .flex,
+.workspace-panel-container .bg-card .flex-wrap,
+.workspace-panel-container .saved-presets-container {
+  flex-wrap: wrap !important;
+  gap: 0.5rem !important;
+}
+
+/* --- Responsive Container Query Reflows when Panel Width <= 768px --- */
+@container panel (max-width: 768px) {
+  /* Reduce excessive padding in compact panels */
+  .workspace-panel-container .p-6,
+  .workspace-panel-container .p-5,
+  .workspace-panel-container .md\:p-6,
+  .workspace-panel-container .sm\:p-6 {
+    padding: 0.875rem !important;
+  }
+
+  .workspace-panel-container .space-y-6 > * + * {
+    margin-top: 0.875rem !important;
+  }
+
+  /* Multi-column grids reflow to max 2 columns */
+  .workspace-panel-container .grid-cols-3,
+  .workspace-panel-container .grid-cols-4,
+  .workspace-panel-container .grid-cols-5,
+  .workspace-panel-container .md\:grid-cols-3,
+  .workspace-panel-container .md\:grid-cols-4,
+  .workspace-panel-container .lg\:grid-cols-3,
+  .workspace-panel-container .lg\:grid-cols-4,
+  .workspace-panel-container .lg\:grid-cols-5,
+  .workspace-panel-container .xl\:grid-cols-12 {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  }
+
+  /* Side-by-side forms (like Risk Calculator inputs vs card) stack vertically */
+  .workspace-panel-container .xl\:col-span-7,
+  .workspace-panel-container .xl\:col-span-5 {
+    grid-column: span 2 / span 2 !important;
+  }
+
+  /* Grouped Analytics navigation switches to compact selector */
+  .workspace-panel-container .block.md\:hidden {
+    display: block !important;
+  }
+  .workspace-panel-container .hidden.md\:flex {
+    display: none !important;
+  }
+
+  /* Calendar in narrow panel: ensure horizontal scroll so cells remain readable */
+  .workspace-panel-container .grid-cols-7 {
+    min-width: 460px;
+  }
+}
+
+/* --- Extra Compact Container Query Reflows when Panel Width <= 500px --- */
+@container panel (max-width: 500px) {
+  .workspace-panel-container .p-6,
+  .workspace-panel-container .p-5,
+  .workspace-panel-container .p-4,
+  .workspace-panel-container .md\:p-6,
+  .workspace-panel-container .sm\:p-6 {
+    padding: 0.625rem !important;
+  }
+
+  /* Grids collapse to single column */
+  .workspace-panel-container .grid-cols-2,
+  .workspace-panel-container .grid-cols-3,
+  .workspace-panel-container .grid-cols-4,
+  .workspace-panel-container .grid-cols-5,
+  .workspace-panel-container .sm\:grid-cols-2,
+  .workspace-panel-container .md\:grid-cols-2,
+  .workspace-panel-container .md\:grid-cols-3,
+  .workspace-panel-container .md\:grid-cols-4,
+  .workspace-panel-container .lg\:grid-cols-3,
+  .workspace-panel-container .lg\:grid-cols-4,
+  .workspace-panel-container .xl\:grid-cols-12 {
+    grid-template-columns: 1fr !important;
+  }
+
+  .workspace-panel-container .xl\:col-span-7,
+  .workspace-panel-container .xl\:col-span-5 {
+    grid-column: span 1 / span 1 !important;
+  }
+
+  /* Compact KPI numbers so they don't wrap awkwardly */
+  .workspace-panel-container .text-2xl,
+  .workspace-panel-container .text-3xl {
+    font-size: 1.25rem !important;
+    line-height: 1.5rem !important;
+  }
+
+  .workspace-panel-container .text-xl {
+    font-size: 1.125rem !important;
+    line-height: 1.375rem !important;
+  }
+
+  /* Header actions stack or wrap */
+  .workspace-panel-container h1 {
+    font-size: 1.125rem !important;
+  }
+
+  /* Calendar cells minimum height in tight spaces */
+  .workspace-panel-container .min-h-\[80px\],
+  .workspace-panel-container .min-h-\[110px\],
+  .workspace-panel-container .md\:min-h-\[110px\] {
+    min-height: 60px !important;
+    padding: 0.375rem !important;
+  }
 }
 

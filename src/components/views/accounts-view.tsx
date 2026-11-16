@@ -211,7 +211,7 @@ export function AccountsView() {
     return (
       <div className="p-4 md:p-6 space-y-4 max-w-6xl">
         <Skeleton className="h-10 w-48" />
-        <div className="grid grid-cols-1 @[550px]:grid-cols-2 @[850px]:grid-cols-3 gap-4">
+        <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
           {Array.from({ length: 3 }).map((_, i) => (
             <Skeleton key={i} className="h-56 rounded-xl" />
           ))}
@@ -250,7 +250,7 @@ export function AccountsView() {
 
       {/* Aggregate summary */}
       {accounts.length > 0 && (
-        <div className="grid grid-cols-2 @[600px]:grid-cols-4 gap-3">
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
           <SummaryStat
             label="Total Balance"
             value={formatSignedCents(aggregate.totalBalanceCents).text}
@@ -294,7 +294,7 @@ export function AccountsView() {
         </div>
       ) : (
         /* Account cards grid */
-        <div className="grid grid-cols-1 @[550px]:grid-cols-2 @[850px]:grid-cols-3 gap-4">
+        <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
           {accounts.map((a) => {
             const stats = statsByAccount.get(a.id);
             const tradesCount = stats?.count ?? 0;

@@ -37,12 +37,12 @@ export function LandingView() {
   const { navigate } = useNav();
 
   return (
-    <div className="min-h-screen flex flex-col bg-[#070B18] text-foreground font-inter antialiased selection:bg-sky-500/20 selection:text-sky-300">
+    <div className="min-h-screen flex flex-col bg-[#070B18] text-foreground font-inter antialiased selection:bg-cyan-500/20 selection:text-cyan-300">
       {/* SECTION 1 — NAVIGATION */}
       <PublicHeader />
 
       <main className="flex-1 w-full">
-        {/* SECTION 2 — HERO (Deep Navy + Interior Sky/Blue Glow + Floating Glass Cards) */}
+        {/* SECTION 2 — HERO (Atmospheric Deep Navy + Cyan/Blue Accents + Floating Financial Cards) */}
         <HeroSection
           onPrimary={() => navigate("signup")}
           onSecondary={() => {
@@ -54,10 +54,10 @@ export function LandingView() {
         {/* SECTION 3 — CAPABILITIES STRIP */}
         <CapabilitiesStrip />
 
-        {/* SECTION 4 — PLATFORM INTRODUCTION (Minimal Grid, Generous Whitespace, Interior Blue Accents) */}
+        {/* SECTION 4 — PLATFORM INTRODUCTION (Nordic Clean Slate Grid, Generous Whitespace) */}
         <PlatformIntroSection />
 
-        {/* SECTION 5 — TRADING JOURNAL (Trades Log, Executed Trades & Integrated No-Trade Observations) */}
+        {/* SECTION 5 — TRADING JOURNAL (Trades Log & Execution Details) */}
         <TradingJournalSection onAction={() => navigate("signup")} />
 
         {/* SECTION 6 — PERFORMANCE ANALYTICS */}
@@ -72,7 +72,7 @@ export function LandingView() {
         {/* SECTION 9 — MULTI-MARKET SUPPORT */}
         <MultiMarketSection />
 
-        {/* SECTION 10 — FINAL CTA (Deep Navy & Sky Atmosphere) */}
+        {/* SECTION 10 — FINAL CTA (Deep Technical Slate & Cyan Atmosphere) */}
         <FinalCtaSection
           onPrimary={() => navigate("signup")}
           onSecondary={() => navigate("signin")}
@@ -103,17 +103,17 @@ function HeroSection({
     >
       {/* Atmospheric lighting, glowing abstract shapes and radial gradients */}
       <div className="absolute inset-0 pointer-events-none overflow-hidden">
-        {/* Top-center soft blue/sky illumination */}
-        <div className="absolute top-[-10%] left-1/2 -translate-x-1/2 w-[900px] h-[550px] bg-gradient-to-b from-blue-600/20 via-sky-600/10 to-transparent blur-[140px] rounded-full" />
+        {/* Top-center soft blue/cyan illumination */}
+        <div className="absolute top-[-10%] left-1/2 -translate-x-1/2 w-[900px] h-[550px] bg-gradient-to-b from-blue-600/20 via-cyan-600/10 to-transparent blur-[140px] rounded-full" />
         
         {/* Right-side atmospheric glow behind floating cards */}
-        <div className="absolute top-[20%] right-[-5%] w-[650px] h-[650px] bg-gradient-to-br from-blue-500/25 via-sky-700/20 to-cyan-600/10 blur-[130px] rounded-full animate-pulse-glow" />
+        <div className="absolute top-[20%] right-[-5%] w-[650px] h-[650px] bg-gradient-to-br from-blue-600/25 via-cyan-700/20 to-slate-800/10 blur-[130px] rounded-full animate-pulse-glow" />
 
         {/* Subtle geometric grid backdrop */}
         <div className="absolute inset-0 bg-grid-white opacity-40 [mask-image:radial-gradient(ellipse_60%_50%_at_50%_40%,#000_70%,transparent_100%)]" />
 
         {/* Thin perspective horizon line */}
-        <div className="absolute bottom-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-sky-500/30 to-transparent" />
+        <div className="absolute bottom-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-cyan-500/30 to-transparent" />
       </div>
 
       <div className="relative mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 w-full">
@@ -121,24 +121,23 @@ function HeroSection({
           {/* Left Column: Hero Copy */}
           <div className="lg:col-span-6 space-y-6 text-left">
             {/* Tag pill */}
-            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full border border-sky-500/30 bg-sky-500/10 text-sky-300 text-xs font-medium backdrop-blur-md">
+            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full border border-cyan-500/30 bg-cyan-500/10 text-cyan-300 text-xs font-medium backdrop-blur-md">
               <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse" />
-              <span>Next-Gen Trading Journal &amp; Analytics OS</span>
+              <span>Comprehensive Trading Journal &amp; Performance Platform</span>
             </div>
 
             {/* Main Headline */}
             <h1 className="text-4xl sm:text-5xl lg:text-6xl font-bold tracking-tight text-white font-jakarta leading-[1.12]">
               Trade with clarity. <br />
-              <span className="bg-gradient-to-r from-sky-300 via-blue-200 to-white bg-clip-text text-transparent">
+              <span className="bg-gradient-to-r from-cyan-300 via-sky-200 to-white bg-clip-text text-transparent">
                 Perform with purpose.
               </span>
             </h1>
 
             {/* Supporting Copy */}
             <p className="text-base sm:text-lg text-slate-300/90 leading-relaxed max-w-xl font-normal">
-              AlphaPips transforms your daily executions and market observations into clear,
-              actionable performance intelligence. Record trades, document No-Trade discipline,
-              calculate position sizing, and track prop challenges with mathematical precision.
+              AlphaPips is an integrated trading performance platform. Journal executions and no-trade observations,
+              track dynamic strategy checklists, monitor prop firm risk limits, and uncover your quantitative edge across global markets.
             </p>
 
             {/* CTAs */}
@@ -146,7 +145,7 @@ function HeroSection({
               <Button
                 size="lg"
                 onClick={onPrimary}
-                className="relative group overflow-hidden bg-gradient-to-r from-blue-600 via-sky-600 to-blue-600 bg-[length:200%_auto] hover:bg-right transition-all duration-300 text-white font-semibold text-sm px-6 h-12 rounded-xl shadow-xl shadow-blue-600/30 border border-sky-400/30 cursor-pointer"
+                className="relative group overflow-hidden bg-gradient-to-r from-blue-600 via-cyan-600 to-blue-600 bg-[length:200%_auto] hover:bg-right transition-all duration-300 text-white font-semibold text-sm px-6 h-12 rounded-xl shadow-xl shadow-blue-600/30 border border-cyan-400/30"
               >
                 <span className="relative z-10 flex items-center gap-2">
                   <span>Get Started</span>
@@ -158,7 +157,7 @@ function HeroSection({
                 size="lg"
                 variant="outline"
                 onClick={onSecondary}
-                className="h-12 px-5 text-sm font-medium text-slate-200 border-white/15 bg-white/[0.04] hover:bg-white/[0.08] hover:text-white rounded-xl backdrop-blur-sm transition-all cursor-pointer"
+                className="h-12 px-5 text-sm font-medium text-slate-200 border-white/15 bg-white/[0.04] hover:bg-white/[0.08] hover:text-white rounded-xl backdrop-blur-sm transition-all"
               >
                 Explore the Platform
               </Button>
@@ -168,15 +167,15 @@ function HeroSection({
             <div className="pt-4 flex flex-wrap items-center gap-y-2 gap-x-6 text-xs text-slate-400">
               <div className="flex items-center gap-1.5">
                 <CheckCircle2 className="h-4 w-4 text-emerald-400" />
-                <span>Forex, Gold, Silver, Indices &amp; Crypto</span>
+                <span>Multi-Market (Forex, Gold, Silver, Indices, Crypto)</span>
               </div>
               <div className="flex items-center gap-1.5">
                 <CheckCircle2 className="h-4 w-4 text-emerald-400" />
-                <span>Integrated No-Trade Observations</span>
+                <span>Prop Firm Challenge &amp; Drawdown Tracking</span>
               </div>
               <div className="flex items-center gap-1.5">
                 <CheckCircle2 className="h-4 w-4 text-emerald-400" />
-                <span>Prop Firm Challenge &amp; Risk Guards</span>
+                <span>Trade Journaling &amp; No-Trade Observations</span>
               </div>
             </div>
           </div>
@@ -185,15 +184,15 @@ function HeroSection({
           <div className="lg:col-span-6 relative flex justify-center lg:justify-end">
             <div className="relative w-full max-w-[540px]">
               {/* Glow aura directly beneath cards */}
-              <div className="absolute inset-0 bg-gradient-to-tr from-blue-600/30 via-sky-600/20 to-teal-500/10 blur-3xl rounded-3xl" />
+              <div className="absolute inset-0 bg-gradient-to-tr from-blue-600/30 via-cyan-600/20 to-slate-800/10 blur-3xl rounded-3xl" />
 
               {/* Main Financial Glass Interface Card */}
               <div className="relative rounded-2xl border border-white/15 bg-[#0C1224]/90 backdrop-blur-xl p-5 sm:p-7 shadow-2xl shadow-black/60 text-white space-y-5 mt-4 sm:mt-2">
                 {/* Interface Header */}
                 <div className="flex items-center justify-between pb-4 border-b border-white/10 pt-2 sm:pt-0">
                   <div className="flex items-center gap-2.5">
-                    <div className="h-7 w-7 rounded-lg bg-sky-500/20 border border-sky-500/30 flex items-center justify-center">
-                      <Activity className="h-4 w-4 text-sky-400" />
+                    <div className="h-7 w-7 rounded-lg bg-cyan-500/20 border border-cyan-500/30 flex items-center justify-center">
+                      <Activity className="h-4 w-4 text-cyan-400" />
                     </div>
                     <div>
                       <div className="text-xs font-semibold text-slate-200 font-jakarta">
@@ -247,14 +246,14 @@ function HeroSection({
                 <div className="pt-2">
                   <div className="flex items-center justify-between text-[11px] text-slate-400 mb-1.5">
                     <span>Account Equity Progression</span>
-                    <span className="text-sky-300 font-mono-num font-medium">+31.2R Total</span>
+                    <span className="text-cyan-300 font-mono-num font-medium">+31.2R Total</span>
                   </div>
-                  <div className="h-28 w-full rounded-xl bg-gradient-to-b from-blue-950/30 to-sky-950/10 border border-white/10 p-2 relative overflow-hidden">
+                  <div className="h-28 w-full rounded-xl bg-gradient-to-b from-blue-950/30 to-cyan-950/10 border border-white/10 p-2 relative overflow-hidden">
                     <svg viewBox="0 0 400 90" className="w-full h-full overflow-visible" preserveAspectRatio="none">
                       <defs>
                         <linearGradient id="chartGradient" x1="0" y1="0" x2="0" y2="1">
-                          <stop offset="0%" stopColor="#0284C7" stopOpacity="0.4" />
-                          <stop offset="100%" stopColor="#0369A1" stopOpacity="0.0" />
+                          <stop offset="0%" stopColor="#0EA5E9" stopOpacity="0.4" />
+                          <stop offset="100%" stopColor="#2563EB" stopOpacity="0.0" />
                         </linearGradient>
                       </defs>
                       {/* Grid guideline */}
@@ -288,7 +287,7 @@ function HeroSection({
                   </div>
                   <div className="p-2 rounded-lg bg-white/[0.03] border border-white/5">
                     <div className="text-[10px] text-slate-400 uppercase font-mono">Expectancy</div>
-                    <div className="text-sm font-bold text-sky-300 font-mono-num mt-0.5">+1.35 R</div>
+                    <div className="text-sm font-bold text-cyan-300 font-mono-num mt-0.5">+1.35 R</div>
                   </div>
                   <div className="p-2 rounded-lg bg-white/[0.03] border border-white/5">
                     <div className="text-[10px] text-slate-400 uppercase font-mono">Avg Win/Loss</div>
@@ -299,7 +298,7 @@ function HeroSection({
 
               {/* Floating Element 1: Strategy Tag (Top Left) */}
               <div className="hidden sm:flex absolute -top-5 -left-4 z-20 rounded-xl border border-white/20 bg-[#0F162D]/95 backdrop-blur-md px-3 py-2 shadow-xl items-center gap-2.5 animate-float-subtle">
-                <div className="h-7 w-7 rounded-lg bg-sky-600/30 border border-sky-500/40 flex items-center justify-center text-sky-300">
+                <div className="h-7 w-7 rounded-lg bg-cyan-600/30 border border-cyan-500/40 flex items-center justify-center text-cyan-300">
                   <Zap className="h-3.5 w-3.5" />
                 </div>
                 <div>
@@ -342,28 +341,28 @@ function HeroSection({
 function CapabilitiesStrip() {
   const capabilities = [
     {
-      title: "Trade & Observation Journal",
-      desc: "Full execution & No-Trade logging",
+      title: "Trades & No-Trade Journal",
+      desc: "Executions, partials & patience logs",
       icon: BookOpenIcon,
     },
     {
-      title: "Multi-Domain Analytics",
-      desc: "Expectancy, sessions & timing analytics",
+      title: "4-Domain Analytics",
+      desc: "Performance, risk, timing & quality",
       icon: BarChart3,
     },
     {
       title: "Strategy Checklists",
-      desc: "Adherence scoring & version history",
+      desc: "Rules, versioning & adherence scores",
       icon: Layers,
     },
     {
-      title: "Multi-Market Risk Sizing",
-      desc: "Position calculator across all asset classes",
+      title: "Risk & Position Sizing",
+      desc: "Multi-market tick & lot calculation",
       icon: Shield,
     },
     {
       title: "Prop Challenge Tracking",
-      desc: "Drawdown guards & breach monitoring",
+      desc: "Drawdown rules, daily loss & metrics",
       icon: Target,
     },
   ];
@@ -372,18 +371,18 @@ function CapabilitiesStrip() {
     <section className="border-y border-white/10 bg-[#080D1D] relative z-10">
       <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-6">
         <div className="grid grid-cols-2 md:grid-cols-5 gap-4 md:gap-6">
-          {capabilities.map((cap, i) => {
+          {capabilities.map((cap) => {
             const Icon = cap.icon;
             return (
               <div
                 key={cap.title}
                 className="group flex flex-col sm:flex-row items-start sm:items-center gap-3 p-3 rounded-xl hover:bg-white/[0.04] transition-colors"
               >
-                <div className="h-9 w-9 rounded-lg bg-sky-500/10 border border-sky-500/20 flex items-center justify-center text-sky-400 shrink-0 group-hover:scale-105 group-hover:bg-sky-500/20 transition-all">
+                <div className="h-9 w-9 rounded-lg bg-cyan-500/10 border border-cyan-500/20 flex items-center justify-center text-cyan-400 shrink-0 group-hover:scale-105 group-hover:bg-cyan-500/20 transition-all">
                   <Icon className="h-4 w-4" />
                 </div>
                 <div>
-                  <div className="text-xs font-semibold text-white group-hover:text-sky-300 transition-colors">
+                  <div className="text-xs font-semibold text-white group-hover:text-cyan-300 transition-colors">
                     {cap.title}
                   </div>
                   <div className="text-[11px] text-slate-400 leading-snug">
@@ -418,14 +417,14 @@ function BookOpenIcon(props: React.SVGProps<SVGSVGElement>) {
 }
 
 /* ================================================================== */
-/* SECTION 4: PLATFORM INTRODUCTION                                   */
+/* SECTION 4: PLATFORM INTRODUCTION (Nordic Clean Slate Grid)          */
 /* ================================================================== */
 
 function PlatformIntroSection() {
   return (
-    <section id="platform" className="relative py-24 md:py-32 bg-[#F6F6FC] text-slate-900 overflow-hidden">
-      {/* Delicate background grid & soft blue lighting matching interior styling */}
-      <div className="absolute inset-0 bg-grid-blue opacity-70 pointer-events-none" />
+    <section id="platform" className="relative py-24 md:py-32 bg-[#F8FAFC] text-slate-900 overflow-hidden">
+      {/* Background grid & soft atmospheric blue lighting */}
+      <div className="absolute inset-0 bg-grid-blue opacity-50 pointer-events-none" />
       <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[700px] h-[350px] bg-sky-200/40 blur-[120px] rounded-full pointer-events-none" />
 
       <div className="relative mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
@@ -438,13 +437,13 @@ function PlatformIntroSection() {
 
           <h2 className="text-3xl sm:text-4xl md:text-5xl font-bold tracking-tight text-slate-900 font-jakarta leading-tight">
             Everything you need to <br className="hidden sm:block" />
-            <span className="text-blue-600">understand your trading.</span>
+            <span className="text-blue-600">master your trading edge.</span>
           </h2>
 
           <p className="text-base sm:text-lg text-slate-600 leading-relaxed font-normal">
-            AlphaPips brings trading records, integrated observations, strategy performance, analytics,
-            and risk management into one connected environment. Move past fragmented notes
-            and basic spreadsheets into a refined system built for precision.
+            AlphaPips connects trade journaling, no-trade discipline, quantitative analytics, and
+            account risk management into one unified performance platform. Move beyond basic spreadsheets
+            into a professional trading environment built for precision.
           </p>
         </div>
 
@@ -452,37 +451,37 @@ function PlatformIntroSection() {
         <div className="mt-16 grid grid-cols-1 md:grid-cols-3 gap-8">
           {/* Pillar 1 */}
           <div className="rounded-2xl border border-slate-200/80 bg-white p-7 shadow-sm hover:shadow-md transition-shadow relative overflow-hidden group">
-            <div className="h-10 w-10 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center font-bold text-sm mb-5 group-hover:bg-blue-600 group-hover:text-white transition-colors">
+            <div className="h-10 w-10 rounded-xl bg-sky-50 text-sky-600 flex items-center justify-center font-bold text-sm mb-5 group-hover:bg-blue-600 group-hover:text-white transition-colors">
               01
             </div>
             <h3 className="text-lg font-bold text-slate-900 font-jakarta mb-2">
-              Connect Decisions &amp; Observations
+              Comprehensive Trade &amp; No-Trade Context
             </h3>
             <p className="text-sm text-slate-600 leading-relaxed">
-              A standard spreadsheet only stores entry, exit, and cash balance.
-              AlphaPips links market context, strategy checklists, chart evidence,
-              and deliberate No-Trade observations in one unified log without skewing win-rate.
+              A basic tracker only records entries, exits, and raw cash. AlphaPips connects
+              the entire trade lifecycle: pre-trade thesis, dynamic checklist adherence, market session context,
+              scale-outs, and disciplined no-trade observations.
             </p>
             <div className="mt-6 pt-4 border-t border-slate-100 flex items-center gap-2 text-xs font-semibold text-blue-700">
-              <span>Full trade contextualization</span>
+              <span>Full trade &amp; observation contextualization</span>
               <ChevronRight className="h-3.5 w-3.5" />
             </div>
           </div>
 
           {/* Pillar 2 */}
           <div className="rounded-2xl border border-slate-200/80 bg-white p-7 shadow-sm hover:shadow-md transition-shadow relative overflow-hidden group">
-            <div className="h-10 w-10 rounded-xl bg-sky-50 text-sky-600 flex items-center justify-center font-bold text-sm mb-5 group-hover:bg-sky-600 group-hover:text-white transition-colors">
+            <div className="h-10 w-10 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center font-bold text-sm mb-5 group-hover:bg-blue-700 group-hover:text-white transition-colors">
               02
             </div>
             <h3 className="text-lg font-bold text-slate-900 font-jakarta mb-2">
-              Multi-Domain Performance Analytics
+              4-Domain Quantitative Analytics
             </h3>
             <p className="text-sm text-slate-600 leading-relaxed">
-              Uncover what actually generates your profitability across four domains:
-              Core Performance, Risk &amp; Drawdown, Execution Timing &amp; Sessions,
-              and Process &amp; Rule Adherence with sample-size aware metric distributions.
+              Evaluate your edge with institutional rigor. Explore performance distributions,
+              equity high-water marks, drawdown recovery curves, session heatmaps, holding time correlations,
+              and data quality audits.
             </p>
-            <div className="mt-6 pt-4 border-t border-slate-100 flex items-center gap-2 text-xs font-semibold text-sky-700">
+            <div className="mt-6 pt-4 border-t border-slate-100 flex items-center gap-2 text-xs font-semibold text-blue-700">
               <span>Expectancy &amp; session heatmaps</span>
               <ChevronRight className="h-3.5 w-3.5" />
             </div>
@@ -490,16 +489,16 @@ function PlatformIntroSection() {
 
           {/* Pillar 3 */}
           <div className="rounded-2xl border border-slate-200/80 bg-white p-7 shadow-sm hover:shadow-md transition-shadow relative overflow-hidden group">
-            <div className="h-10 w-10 rounded-xl bg-slate-100 text-slate-700 flex items-center justify-center font-bold text-sm mb-5 group-hover:bg-slate-900 group-hover:text-white transition-colors">
+            <div className="h-10 w-10 rounded-xl bg-slate-100 text-slate-700 flex items-center justify-center font-bold text-sm mb-5 group-hover:bg-slate-800 group-hover:text-white transition-colors">
               03
             </div>
             <h3 className="text-lg font-bold text-slate-900 font-jakarta mb-2">
-              Iterate Setups Like Versioned Code
+              Strategy &amp; Checklist Management
             </h3>
             <p className="text-sm text-slate-600 leading-relaxed">
-              Trading methodologies evolve over time. Track setup rule checklists, compare
-              version 1 against version 2, and verify whether a rule alteration
-              enhanced your expectancy or added unnecessary restriction.
+              Treat your setups like living, versioned systems. Define custom rulebooks,
+              mandate pre-execution checklists, and compare setup versions to measure how discipline
+              directly impacts your profitability.
             </p>
             <div className="mt-6 pt-4 border-t border-slate-100 flex items-center gap-2 text-xs font-semibold text-slate-700">
               <span>Version control &amp; checklist audit</span>
@@ -549,21 +548,6 @@ function TradingJournalSection({ onAction }: { onAction: () => void }) {
       emotion: "Focused",
     },
     {
-      id: "OBS-014",
-      symbol: "GBP/USD",
-      market: "Forex",
-      type: "NO-TRADE",
-      setup: "London Sweep",
-      entry: "—",
-      exit: "—",
-      rMultiple: "—",
-      pnl: "—",
-      positive: true,
-      rules: "Filtered (Discipline)",
-      emotion: "Patient Wait",
-      isObservation: true,
-    },
-    {
       id: "TRD-844",
       symbol: "US30",
       market: "Indices",
@@ -599,55 +583,54 @@ function TradingJournalSection({ onAction }: { onAction: () => void }) {
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-12 items-center">
           {/* Left: Section Narrative */}
           <div className="lg:col-span-5 space-y-6">
-            <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-sky-50 text-sky-700 text-xs font-semibold tracking-wide border border-sky-200/60">
-              <span>UNIFIED TRADES LOG &amp; OBSERVATIONS</span>
+            <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-sky-50 text-sky-700 text-xs font-semibold tracking-wide">
+              <span>TRADES &amp; NO-TRADE LOG</span>
             </div>
 
             <h2 className="text-3xl sm:text-4xl font-bold tracking-tight text-slate-900 font-jakarta leading-tight">
               Beyond entry and exit prices. <br />
-              <span className="text-blue-600">A unified journal for trades and disciplined patience.</span>
+              <span className="text-blue-600">A journal that records your entire decision process.</span>
             </h2>
 
             <p className="text-sm sm:text-base text-slate-600 leading-relaxed">
               Recording P&amp;L in isolation is like looking at a scoreboard without
-              reviewing the game film. AlphaPips logs executed trades with scale-outs,
-              commissions, and R-multiples alongside deliberate No-Trade observations that
-              track your patience without distorting win-rate statistics.
+              reviewing the game film. AlphaPips connects pre-trade theses, checklist compliance,
+              execution scale-outs, and deliberate No-Trade observations so you learn from what you took—and what you prudently skipped.
             </p>
 
             <div className="space-y-3.5 pt-2">
               <div className="flex items-start gap-3">
-                <div className="h-6 w-6 rounded-full bg-blue-50 text-blue-700 flex items-center justify-center shrink-0 mt-0.5">
+                <div className="h-6 w-6 rounded-full bg-sky-100 text-sky-700 flex items-center justify-center shrink-0 mt-0.5">
                   <Check className="h-3.5 w-3.5" />
                 </div>
                 <div>
-                  <h4 className="text-sm font-semibold text-slate-900">Executed Trades &amp; Integrated No-Trade Observations</h4>
+                  <h4 className="text-sm font-semibold text-slate-900">Pre-Trade Checklists &amp; Rules</h4>
                   <p className="text-xs text-slate-500">
-                    Log executions with partial exits and commission deductions, or document why you deliberately refrained from trading when rules weren't met.
+                    Verify every condition is met before risking capital. Measure how rule adherence correlates with profit.
                   </p>
                 </div>
               </div>
 
               <div className="flex items-start gap-3">
-                <div className="h-6 w-6 rounded-full bg-blue-50 text-blue-700 flex items-center justify-center shrink-0 mt-0.5">
+                <div className="h-6 w-6 rounded-full bg-sky-100 text-sky-700 flex items-center justify-center shrink-0 mt-0.5">
                   <Check className="h-3.5 w-3.5" />
                 </div>
                 <div>
-                  <h4 className="text-sm font-semibold text-slate-900">Pre-Trade Strategy Checklists</h4>
+                  <h4 className="text-sm font-semibold text-slate-900">No-Trade Observations &amp; Patience</h4>
                   <p className="text-xs text-slate-500">
-                    Verify every condition is met before risking capital. Measure how strategy compliance correlates directly with your realized R-multiple.
+                    Record disciplined market avoidance directly inside your journal without contaminating trade win-rate or financial P&amp;L statistics.
                   </p>
                 </div>
               </div>
 
               <div className="flex items-start gap-3">
-                <div className="h-6 w-6 rounded-full bg-blue-50 text-blue-700 flex items-center justify-center shrink-0 mt-0.5">
+                <div className="h-6 w-6 rounded-full bg-sky-100 text-sky-700 flex items-center justify-center shrink-0 mt-0.5">
                   <Check className="h-3.5 w-3.5" />
                 </div>
                 <div>
-                  <h4 className="text-sm font-semibold text-slate-900">Psychology, Discipline &amp; Chart Evidence</h4>
+                  <h4 className="text-sm font-semibold text-slate-900">Multi-Target Scaling &amp; Behavioral Leaks</h4>
                   <p className="text-xs text-slate-500">
-                    Tag emotional triggers (FOMO, hesitation, patience) and attach chart screenshots to track the mental and technical aspects of every decision.
+                    Capture partial profit targets, trailing stop maneuvers, and emotional tags (FOMO, hesitation) to eradicate costly behavioral patterns.
                   </p>
                 </div>
               </div>
@@ -656,7 +639,7 @@ function TradingJournalSection({ onAction }: { onAction: () => void }) {
             <div className="pt-2">
               <Button
                 onClick={onAction}
-                className="bg-slate-900 text-white hover:bg-slate-800 font-medium text-xs px-5 py-2.5 rounded-lg shadow cursor-pointer"
+                className="bg-slate-900 text-white hover:bg-slate-800 font-medium text-xs px-5 py-2.5 rounded-lg shadow"
               >
                 Start Journaling Free
                 <ArrowRight className="ml-2 h-3.5 w-3.5" />
@@ -672,7 +655,7 @@ function TradingJournalSection({ onAction }: { onAction: () => void }) {
                 <div className="flex items-center gap-2">
                   <span className="text-xs font-bold text-slate-800 font-jakarta">TRADES LOG</span>
                   <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-slate-200 text-slate-700">
-                    5 Entries (4 Trades, 1 Observation)
+                    4 Executions Displayed
                   </span>
                 </div>
 
@@ -680,16 +663,16 @@ function TradingJournalSection({ onAction }: { onAction: () => void }) {
                   <button
                     onClick={() => setSelectedFilter("all")}
                     className={cn(
-                      "px-2.5 py-1 rounded-md text-xs font-medium transition-colors cursor-pointer",
+                      "px-2.5 py-1 rounded-md text-xs font-medium transition-colors",
                       selectedFilter === "all" ? "bg-blue-600 text-white" : "bg-white text-slate-600 hover:bg-slate-100"
                     )}
                   >
-                    All Entries
+                    All Accounts
                   </button>
                   <button
                     onClick={() => setSelectedFilter("prop")}
                     className={cn(
-                      "px-2.5 py-1 rounded-md text-xs font-medium transition-colors cursor-pointer",
+                      "px-2.5 py-1 rounded-md text-xs font-medium transition-colors",
                       selectedFilter === "prop" ? "bg-blue-600 text-white" : "bg-white text-slate-600 hover:bg-slate-100"
                     )}
                   >
@@ -714,7 +697,7 @@ function TradingJournalSection({ onAction }: { onAction: () => void }) {
                   </thead>
                   <tbody className="divide-y divide-slate-100">
                     {sampleTrades.map((t) => (
-                      <tr key={t.id} className={cn("hover:bg-white/80 transition-colors", t.isObservation && "bg-slate-100/50")}>
+                      <tr key={t.id} className="hover:bg-white/80 transition-colors">
                         <td className="py-3 font-semibold text-slate-900 font-mono">
                           {t.symbol}
                           <span className="block text-[10px] text-slate-400 font-sans">{t.market}</span>
@@ -726,9 +709,7 @@ function TradingJournalSection({ onAction }: { onAction: () => void }) {
                               "px-1.5 py-0.5 rounded font-mono text-[10px] font-bold",
                               t.type === "LONG"
                                 ? "bg-emerald-100 text-emerald-800"
-                                : t.type === "SHORT"
-                                ? "bg-rose-100 text-rose-800"
-                                : "bg-slate-200 text-slate-700"
+                                : "bg-rose-100 text-rose-800"
                             )}
                           >
                             {t.type}
@@ -737,7 +718,7 @@ function TradingJournalSection({ onAction }: { onAction: () => void }) {
                         <td
                           className={cn(
                             "py-3 font-mono-num font-bold text-right",
-                            t.isObservation ? "text-slate-400 font-normal" : t.positive ? "text-emerald-600" : "text-rose-600"
+                            t.positive ? "text-emerald-600" : "text-rose-600"
                           )}
                         >
                           {t.rMultiple}
@@ -745,7 +726,7 @@ function TradingJournalSection({ onAction }: { onAction: () => void }) {
                         <td
                           className={cn(
                             "py-3 font-mono-num font-bold text-right",
-                            t.isObservation ? "text-slate-400 font-normal" : t.positive ? "text-emerald-600" : "text-rose-600"
+                            t.positive ? "text-emerald-600" : "text-rose-600"
                           )}
                         >
                           {t.pnl}
@@ -756,7 +737,7 @@ function TradingJournalSection({ onAction }: { onAction: () => void }) {
                           </span>
                         </td>
                         <td className="py-3">
-                          <span className="text-[10px] font-medium px-2 py-0.5 rounded bg-sky-50 text-sky-700 border border-sky-200">
+                          <span className="text-[10px] font-medium px-2 py-0.5 rounded bg-sky-50 text-blue-700 border border-sky-200">
                             {t.emotion}
                           </span>
                         </td>
@@ -787,13 +768,13 @@ function PerformanceAnalyticsSection() {
   const [activeTab, setActiveTab] = useState<"overview" | "sessions" | "instruments">("overview");
 
   return (
-    <section id="analytics" className="py-24 md:py-32 bg-[#F8F8FD] text-slate-900 border-t border-slate-200/80">
+    <section id="analytics" className="py-24 md:py-32 bg-[#F8FAFC] text-slate-900 border-t border-slate-200/80">
       <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
         {/* Section Heading */}
         <div className="text-center max-w-3xl mx-auto space-y-4">
-          <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-blue-100 text-blue-800 text-xs font-semibold tracking-wide uppercase">
-            <BarChart3 className="h-3.5 w-3.5 text-blue-600" />
-            <span>Advanced Analytics</span>
+          <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-sky-50 text-sky-800 border border-sky-200/80 text-xs font-semibold tracking-wide uppercase">
+            <BarChart3 className="h-3.5 w-3.5 text-sky-600" />
+            <span>Four Analytical Domains</span>
           </div>
 
           <h2 className="text-3xl sm:text-4xl md:text-5xl font-bold tracking-tight text-slate-900 font-jakarta leading-tight">
@@ -802,9 +783,41 @@ function PerformanceAnalyticsSection() {
           </h2>
 
           <p className="text-base text-slate-600 leading-relaxed max-w-2xl mx-auto">
-            Gain clarity on what actually drives your profitability with deep statistical
-            breakdowns across four core domains: Performance, Risk &amp; Capital, Execution &amp; Timing, and Process &amp; Quality.
+            Gain clarity on what actually drives your profitability across our four analytical domains:
+            Performance &amp; Expectancy, Risk &amp; Capital preservation, Execution &amp; Timing, and Process &amp; Rule adherence.
           </p>
+        </div>
+
+        {/* 4 Analytical Domain Highlights Strip */}
+        <div className="mt-8 max-w-5xl mx-auto grid grid-cols-2 md:grid-cols-4 gap-3 text-xs">
+          <div className="p-3 rounded-xl bg-white border border-slate-200 shadow-sm flex items-center gap-2.5">
+            <div className="h-2 w-2 rounded-full bg-blue-600 shrink-0" />
+            <div>
+              <div className="font-semibold text-slate-900">1. Performance</div>
+              <div className="text-[11px] text-slate-500">Expectancy &amp; Payoff</div>
+            </div>
+          </div>
+          <div className="p-3 rounded-xl bg-white border border-slate-200 shadow-sm flex items-center gap-2.5">
+            <div className="h-2 w-2 rounded-full bg-sky-500 shrink-0" />
+            <div>
+              <div className="font-semibold text-slate-900">2. Risk &amp; Capital</div>
+              <div className="text-[11px] text-slate-500">Drawdown &amp; Multipliers</div>
+            </div>
+          </div>
+          <div className="p-3 rounded-xl bg-white border border-slate-200 shadow-sm flex items-center gap-2.5">
+            <div className="h-2 w-2 rounded-full bg-indigo-600 shrink-0" />
+            <div>
+              <div className="font-semibold text-slate-900">3. Execution &amp; Timing</div>
+              <div className="text-[11px] text-slate-500">Sessions &amp; Duration</div>
+            </div>
+          </div>
+          <div className="p-3 rounded-xl bg-white border border-slate-200 shadow-sm flex items-center gap-2.5">
+            <div className="h-2 w-2 rounded-full bg-emerald-600 shrink-0" />
+            <div>
+              <div className="font-semibold text-slate-900">4. Process &amp; Quality</div>
+              <div className="text-[11px] text-slate-500">Checklists &amp; Violations</div>
+            </div>
+          </div>
         </div>
 
         {/* Analytics Switcher Tabs */}
@@ -847,14 +860,14 @@ function PerformanceAnalyticsSection() {
         </div>
 
         {/* Analytics Interactive Content Card */}
-        <div className="mt-10 max-w-5xl mx-auto rounded-2xl border border-slate-200 bg-white p-6 sm:p-8 shadow-sm">
+        <div className="mt-8 max-w-5xl mx-auto rounded-2xl border border-slate-200 bg-white p-6 sm:p-8 shadow-sm">
           {activeTab === "overview" && (
             <div className="space-y-8">
               {/* Stat Pillars */}
               <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                 <div className="p-4 rounded-xl bg-slate-50 border border-slate-100">
                   <div className="text-xs text-slate-500 font-medium">Expectancy (R/Trade)</div>
-                  <div className="text-2xl font-bold font-mono-num mt-1 text-blue-600">+1.42 R</div>
+                  <div className="text-2xl font-bold text-slate-900 font-mono-num mt-1 text-blue-600">+1.42 R</div>
                   <div className="text-[11px] text-slate-500 mt-1">Expected return per trade</div>
                 </div>
 
@@ -884,7 +897,7 @@ function PerformanceAnalyticsSection() {
                     <h4 className="text-sm font-bold text-slate-900">R-Multiple Outcome Distribution</h4>
                     <p className="text-xs text-slate-500">Distribution of executed trades across risk-reward multiples</p>
                   </div>
-                  <span className="text-xs font-mono text-blue-600 font-semibold">56 Sample Trades (Illustrative)</span>
+                  <span className="text-xs font-mono text-blue-600 font-semibold">56 Executions Analyzed</span>
                 </div>
 
                 <div className="grid grid-cols-6 gap-2 text-center text-xs">
@@ -958,10 +971,10 @@ function PerformanceAnalyticsSection() {
                   </div>
                 </div>
 
-                <div className="p-4 rounded-xl border border-sky-100 bg-sky-50/50">
+                <div className="p-4 rounded-xl border border-sky-200 bg-sky-50/50">
                   <div className="flex items-center justify-between">
                     <span className="font-semibold text-sm text-slate-900">New York Session</span>
-                    <span className="text-xs font-mono font-bold text-sky-700 bg-sky-100 px-2 py-0.5 rounded">
+                    <span className="text-xs font-mono font-bold text-sky-800 bg-sky-100 px-2 py-0.5 rounded">
                       +12.8R
                     </span>
                   </div>
@@ -1056,7 +1069,7 @@ function StrategyIntelligenceSection() {
                     <span className="text-sm font-bold text-slate-900 font-jakarta">
                       Liquidity Sweep Strategy
                     </span>
-                    <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-sky-100 text-sky-700 font-semibold border border-sky-200">
+                    <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-sky-100 text-sky-800 font-semibold border border-sky-200">
                       v2.2 ACTIVE
                     </span>
                   </div>
@@ -1069,21 +1082,21 @@ function StrategyIntelligenceSection() {
               </div>
 
               {/* Version Comparison Card */}
-              <div className="p-4 rounded-xl bg-blue-50/60 border border-blue-200/60 text-xs space-y-2">
-                <div className="font-semibold text-blue-900 flex items-center justify-between">
+              <div className="p-4 rounded-xl bg-sky-50/50 border border-sky-200/60 text-xs space-y-2">
+                <div className="font-semibold text-slate-900 flex items-center justify-between">
                   <span>Version Iteration Comparison</span>
-                  <span className="text-[10px] text-blue-600 font-mono">v1.1 vs v2.2</span>
+                  <span className="text-[10px] text-sky-700 font-mono">v1.1 vs v2.2</span>
                 </div>
                 <div className="grid grid-cols-2 gap-4 pt-1">
-                  <div className="p-2.5 rounded bg-white/80 border border-blue-100">
+                  <div className="p-2.5 rounded bg-white/80 border border-slate-200">
                     <div className="text-[10px] text-slate-500 uppercase font-mono">v1.1 (Legacy)</div>
                     <div className="text-sm font-bold text-slate-700 mt-0.5">52% Win • 1.45 PF</div>
                     <div className="text-[10px] text-slate-500">Without 5m MSS filter</div>
                   </div>
-                  <div className="p-2.5 rounded bg-white border border-blue-300 shadow-sm">
-                    <div className="text-[10px] text-blue-700 font-bold uppercase font-mono">v2.2 (Current)</div>
+                  <div className="p-2.5 rounded bg-white border border-sky-300 shadow-sm">
+                    <div className="text-[10px] text-sky-700 font-bold uppercase font-mono">v2.2 (Current)</div>
                     <div className="text-sm font-bold text-emerald-600 mt-0.5">68% Win • 2.38 PF</div>
-                    <div className="text-[10px] text-blue-700 font-medium">+16% Win rate increase</div>
+                    <div className="text-[10px] text-sky-700 font-medium">+16% Win rate increase</div>
                   </div>
                 </div>
               </div>
@@ -1133,7 +1146,7 @@ function StrategyIntelligenceSection() {
 
           {/* Right: Narrative Description */}
           <div className="lg:col-span-6 space-y-6 order-1 lg:order-2">
-            <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-blue-50 text-blue-700 text-xs font-semibold tracking-wide">
+            <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-sky-50 text-sky-700 border border-sky-200/80 text-xs font-semibold tracking-wide">
               <span>SETUPS &amp; CHECKLISTS</span>
             </div>
 
@@ -1151,7 +1164,7 @@ function StrategyIntelligenceSection() {
 
             <div className="space-y-4 pt-2">
               <div className="flex items-start gap-3">
-                <div className="h-6 w-6 rounded-full bg-blue-100 text-blue-700 flex items-center justify-center shrink-0 mt-0.5">
+                <div className="h-6 w-6 rounded-full bg-sky-100 text-sky-700 flex items-center justify-center shrink-0 mt-0.5">
                   <Check className="h-3.5 w-3.5" />
                 </div>
                 <div>
@@ -1164,7 +1177,7 @@ function StrategyIntelligenceSection() {
               </div>
 
               <div className="flex items-start gap-3">
-                <div className="h-6 w-6 rounded-full bg-blue-100 text-blue-700 flex items-center justify-center shrink-0 mt-0.5">
+                <div className="h-6 w-6 rounded-full bg-sky-100 text-sky-700 flex items-center justify-center shrink-0 mt-0.5">
                   <Check className="h-3.5 w-3.5" />
                 </div>
                 <div>
@@ -1184,16 +1197,16 @@ function StrategyIntelligenceSection() {
 }
 
 /* ================================================================== */
-/* SECTION 8: TRADING TOOLS (Prop Tracker, Risk Calc, Trading To-Do)  */
+/* SECTION 8: TRADING TOOLS (Prop Tracker, Risk Calc, Calendar/Tasks)  */
 /* ================================================================== */
 
 function TradingToolsSection() {
   return (
-    <section id="tools" className="py-24 md:py-32 bg-[#F6F6FC] text-slate-900 border-t border-slate-200/80">
+    <section id="tools" className="py-24 md:py-32 bg-[#F8FAFC] text-slate-900 border-t border-slate-200/80">
       <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
         <div className="text-center max-w-3xl mx-auto space-y-4">
-          <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-blue-100 text-blue-800 text-xs font-semibold tracking-wide uppercase">
-            <Sliders className="h-3.5 w-3.5 text-blue-600" />
+          <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-sky-100 text-sky-800 border border-sky-200 text-xs font-semibold tracking-wide uppercase">
+            <Sliders className="h-3.5 w-3.5 text-sky-600" />
             <span>Essential Workflows</span>
           </div>
 
@@ -1271,7 +1284,7 @@ function TradingToolsSection() {
           {/* Tool 2: Risk & Position Sizing Calculator */}
           <div className="rounded-2xl border border-slate-200 bg-white p-7 shadow-sm hover:shadow-md transition-all flex flex-col justify-between">
             <div>
-              <div className="h-11 w-11 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center mb-5">
+              <div className="h-11 w-11 rounded-xl bg-sky-50 text-sky-600 flex items-center justify-center mb-5">
                 <Calculator className="h-5 w-5" />
               </div>
               <h3 className="text-lg font-bold text-slate-900 font-jakarta mb-2">
@@ -1304,65 +1317,65 @@ function TradingToolsSection() {
 
             <ul className="mt-6 space-y-2 text-xs text-slate-600 border-t border-slate-100 pt-4">
               <li className="flex items-center gap-2">
-                <Check className="h-3.5 w-3.5 text-blue-600 shrink-0" />
-                <span>Forex, Gold, Silver, Indices &amp; Crypto tick models</span>
+                <Check className="h-3.5 w-3.5 text-sky-600 shrink-0" />
+                <span>Forex, Gold, Indices &amp; Crypto tick models</span>
               </li>
               <li className="flex items-center gap-2">
-                <Check className="h-3.5 w-3.5 text-blue-600 shrink-0" />
+                <Check className="h-3.5 w-3.5 text-sky-600 shrink-0" />
                 <span>Instant position sizing recommendations</span>
               </li>
               <li className="flex items-center gap-2">
-                <Check className="h-3.5 w-3.5 text-blue-600 shrink-0" />
+                <Check className="h-3.5 w-3.5 text-sky-600 shrink-0" />
                 <span>Preset risk thresholds (0.5%, 1%, 2%)</span>
               </li>
             </ul>
           </div>
 
-          {/* Tool 3: Trading To-Do & Watchlists */}
+          {/* Tool 3: Trading Calendar & Daily Routines */}
           <div className="rounded-2xl border border-slate-200 bg-white p-7 shadow-sm hover:shadow-md transition-all flex flex-col justify-between">
             <div>
               <div className="h-11 w-11 rounded-xl bg-sky-50 text-sky-600 flex items-center justify-center mb-5">
-                <ListTodo className="h-5 w-5" />
+                <Calendar className="h-5 w-5" />
               </div>
               <h3 className="text-lg font-bold text-slate-900 font-jakarta mb-2">
-                Trading To-Do &amp; Watchlists
+                Trading Calendar &amp; Routines
               </h3>
               <p className="text-xs text-slate-600 leading-relaxed mb-6">
-                Organize your pre-market routine, watchlist candidates, and session tasks in one distraction-free view.
+                Organize your day-by-day P&amp;L consistency, daily trading tasks, and market session routines in one interactive calendar.
               </p>
 
               {/* Visual Demo Pill */}
               <div className="p-3.5 rounded-xl bg-slate-50 border border-slate-100 text-xs space-y-2">
                 <div className="flex items-center gap-2 p-1.5 rounded bg-white border border-slate-200">
                   <span className="h-2 w-2 rounded-full bg-emerald-500" />
-                  <span className="text-slate-800 font-medium">Check High-Impact Red Folder News</span>
-                  <span className="ml-auto text-[10px] text-emerald-600 font-mono">✓</span>
+                  <span className="text-slate-800 font-medium">Pre-Market: Macro News &amp; Levels</span>
+                  <span className="ml-auto text-[10px] text-emerald-600 font-mono">✓ Ready</span>
                 </div>
                 <div className="flex items-center gap-2 p-1.5 rounded bg-white border border-slate-200">
-                  <span className="h-2 w-2 rounded-full bg-sky-500" />
-                  <span className="text-slate-800 font-medium">EUR/USD 1.0820 Liquidity sweep alert</span>
-                  <span className="ml-auto text-[10px] text-sky-600 font-mono">Watch</span>
+                  <span className="h-2 w-2 rounded-full bg-blue-500" />
+                  <span className="text-slate-800 font-medium">Session Net: +2.4R ($2,400)</span>
+                  <span className="ml-auto text-[10px] text-blue-600 font-mono">Profit</span>
                 </div>
                 <div className="flex items-center gap-2 p-1.5 rounded bg-white border border-slate-200">
                   <span className="h-2 w-2 rounded-full bg-slate-400" />
-                  <span className="text-slate-600">Daily trade log check &amp; tagging</span>
-                  <span className="ml-auto text-[10px] text-slate-400 font-mono">Pending</span>
+                  <span className="text-slate-600">Observation: Waited for 15M Sweep</span>
+                  <span className="ml-auto text-[10px] text-slate-500 font-mono">Logged</span>
                 </div>
               </div>
             </div>
 
             <ul className="mt-6 space-y-2 text-xs text-slate-600 border-t border-slate-100 pt-4">
               <li className="flex items-center gap-2">
-                <Check className="h-3.5 w-3.5 text-blue-600 shrink-0" />
-                <span>Pre-market ritual checklists</span>
+                <Check className="h-3.5 w-3.5 text-sky-600 shrink-0" />
+                <span>Monthly &amp; weekly P&amp;L heatmap calendar</span>
               </li>
               <li className="flex items-center gap-2">
-                <Check className="h-3.5 w-3.5 text-blue-600 shrink-0" />
-                <span>Session watchlist &amp; key level tagging</span>
+                <Check className="h-3.5 w-3.5 text-sky-600 shrink-0" />
+                <span>Daily preparation &amp; discipline routines</span>
               </li>
               <li className="flex items-center gap-2">
-                <Check className="h-3.5 w-3.5 text-blue-600 shrink-0" />
-                <span>Custom tag &amp; category sorting</span>
+                <Check className="h-3.5 w-3.5 text-sky-600 shrink-0" />
+                <span>Direct trade drilldown by execution date</span>
               </li>
             </ul>
           </div>
@@ -1388,15 +1401,15 @@ function MultiMarketSection() {
     {
       name: "Gold (XAU/USD)",
       tag: "Precious Metals",
-      desc: "Spot gold bullion with custom point & contract scaling",
-      formula: "$10/point standard lot calibration",
+      desc: "Spot gold bullion with separate tick size and monetary tick valuation",
+      formula: "100 oz contract • $0.01 tick specification",
       icon: "AU",
     },
     {
       name: "Silver (XAG/USD)",
       tag: "Precious Metals",
-      desc: "High-beta silver spot contracts and custom tick calculations",
-      formula: "$50/point contract sizing",
+      desc: "Silver spot contracts with distinct tick size and monetary contract multipliers",
+      formula: "5,000 oz contract • $0.001 tick specification",
       icon: "AG",
     },
     {
@@ -1419,7 +1432,7 @@ function MultiMarketSection() {
     <section id="markets" className="py-24 md:py-32 bg-white text-slate-900 border-t border-slate-200/80">
       <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
         <div className="text-center max-w-3xl mx-auto space-y-4">
-          <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-blue-50 text-blue-700 text-xs font-semibold tracking-wide">
+          <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-sky-50 text-sky-700 border border-sky-200 text-xs font-semibold tracking-wide">
             <span>UNIVERSAL ASSET COVERAGE</span>
           </div>
 
@@ -1445,7 +1458,7 @@ function MultiMarketSection() {
                   <div className="h-8 w-8 rounded-lg bg-blue-600 text-white font-mono font-bold text-xs flex items-center justify-center">
                     {m.icon}
                   </div>
-                  <span className="text-[10px] font-mono font-semibold uppercase text-blue-700 bg-blue-50 px-2 py-0.5 rounded border border-blue-200">
+                  <span className="text-[10px] font-mono font-semibold uppercase text-sky-700 bg-sky-50 px-2 py-0.5 rounded border border-sky-200">
                     {m.tag}
                   </span>
                 </div>
@@ -1470,7 +1483,7 @@ function MultiMarketSection() {
 }
 
 /* ================================================================== */
-/* SECTION 10: FINAL CTA (Deep Navy & Sky/Blue Atmosphere)           */
+/* SECTION 10: FINAL CTA (Deep Navy & Cyan Atmosphere)                */
 /* ================================================================== */
 
 function FinalCtaSection({
@@ -1482,21 +1495,21 @@ function FinalCtaSection({
 }) {
   return (
     <section className="relative overflow-hidden bg-[#070B18] text-white py-24 md:py-32 border-t border-white/10">
-      {/* Background glow and subtle nebula effects using interior sky/blue theme */}
+      {/* Background glow and subtle atmosphere */}
       <div className="absolute inset-0 pointer-events-none">
-        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[800px] h-[450px] bg-gradient-to-r from-blue-600/25 via-sky-600/20 to-blue-600/15 blur-[140px] rounded-full" />
+        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[800px] h-[450px] bg-gradient-to-r from-blue-600/25 via-cyan-500/20 to-blue-700/15 blur-[140px] rounded-full" />
         <div className="absolute inset-0 bg-grid-white opacity-30" />
       </div>
 
       <div className="relative mx-auto max-w-4xl px-4 sm:px-6 text-center space-y-6">
-        <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full border border-sky-500/30 bg-sky-500/10 text-sky-300 text-xs font-medium">
-          <Sparkles className="h-3.5 w-3.5 text-sky-400" />
+        <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full border border-cyan-500/30 bg-cyan-500/10 text-cyan-300 text-xs font-medium">
+          <Sparkles className="h-3.5 w-3.5 text-cyan-400" />
           <span>Elevate Your Edge Today</span>
         </div>
 
         <h2 className="text-3xl sm:text-4xl md:text-5xl font-bold tracking-tight text-white font-jakarta leading-tight">
           Your trading data deserves <br />
-          <span className="bg-gradient-to-r from-sky-300 via-blue-200 to-white bg-clip-text text-transparent">
+          <span className="bg-gradient-to-r from-cyan-200 via-sky-200 to-white bg-clip-text text-transparent">
             more than a spreadsheet.
           </span>
         </h2>
@@ -1510,7 +1523,7 @@ function FinalCtaSection({
           <Button
             size="lg"
             onClick={onPrimary}
-            className="relative group overflow-hidden bg-gradient-to-r from-blue-600 via-sky-600 to-blue-600 text-white font-semibold text-sm px-8 h-12 rounded-xl shadow-xl shadow-blue-600/30 border border-sky-400/30 transition-all duration-300 hover:scale-[1.02]"
+            className="relative group overflow-hidden bg-gradient-to-r from-blue-600 via-cyan-600 to-blue-600 text-white font-semibold text-sm px-8 h-12 rounded-xl shadow-xl shadow-blue-600/30 border border-cyan-400/30 transition-all duration-300 hover:scale-[1.02]"
           >
             <span className="relative z-10 flex items-center gap-2">
               <span>Get Started with AlphaPips</span>
@@ -1534,7 +1547,7 @@ function FinalCtaSection({
             Private encrypted journal
           </span>
           <span className="flex items-center gap-1.5">
-            <Shield className="h-3.5 w-3.5 text-sky-400" />
+            <Shield className="h-3.5 w-3.5 text-cyan-400" />
             Zero broker connection required
           </span>
           <span className="flex items-center gap-1.5">
