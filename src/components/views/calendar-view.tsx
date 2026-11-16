@@ -358,21 +358,22 @@ export function CalendarView() {
       {isLoading ? (
         <Skeleton className="h-[480px] bg-border rounded-xl" />
       ) : viewMode === "month" ? (
-        <Card className="bg-card border border-border rounded-xl shadow-sm overflow-hidden p-0">
-          {/* Weekday header */}
-          <div className="grid grid-cols-7 border-b border-border bg-muted/50">
-            {WEEKDAYS.map((d) => (
-              <div
-                key={d}
-                className="px-2 py-2 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground text-center border-r border-border last:border-r-0"
-              >
-                {d}
-              </div>
-            ))}
-          </div>
+        <Card className="bg-card border border-border rounded-xl shadow-sm overflow-x-auto overflow-y-hidden min-w-0 p-0">
+          <div className="min-w-[480px]">
+            {/* Weekday header */}
+            <div className="grid grid-cols-7 border-b border-border bg-muted/50">
+              {WEEKDAYS.map((d) => (
+                <div
+                  key={d}
+                  className="px-2 py-2 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground text-center border-r border-border last:border-r-0"
+                >
+                  {d}
+                </div>
+              ))}
+            </div>
 
-          {/* Day cells */}
-          <div className="grid grid-cols-7">
+            {/* Day cells */}
+            <div className="grid grid-cols-7">
             {cells.map((cell, i) => {
               if (!cell) {
                 return (
@@ -470,6 +471,7 @@ export function CalendarView() {
               );
             })}
           </div>
+          </div>
         </Card>
       ) : viewMode === "week" ? (
         /* Week View */
@@ -478,7 +480,7 @@ export function CalendarView() {
             <h3 className="text-sm font-semibold text-foreground">Week Overview</h3>
             <span className="text-xs text-muted-foreground">7 Days View</span>
           </div>
-          <div className="grid grid-cols-1 sm:grid-cols-7 gap-2">
+          <div className="grid grid-cols-1 @[640px]:grid-cols-7 gap-2">
             {currentWeekDays.map((cell, idx) => {
               if (!cell) {
                 return (

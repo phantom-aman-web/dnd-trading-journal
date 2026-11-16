@@ -193,7 +193,7 @@ export function PlaybooksView() {
           </Button>
         </Card>
       ) : (
-        <div className="grid sm:grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 @[600px]:grid-cols-2 gap-3">
           {strategies.map((s) => {
             const versions: any[] = s.versions ?? [];
             const latest = versions[0];
@@ -566,7 +566,7 @@ function SetupDialog({ open, onOpenChange, strategyId, onSaved }: SetupDialogPro
         </DialogHeader>
         <div className="space-y-4">
           {/* Basics */}
-          <div className="grid sm:grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 @[600px]:grid-cols-2 gap-3">
             <div className="space-y-2">
               <FieldLabel required>Setup Name</FieldLabel>
               <Input

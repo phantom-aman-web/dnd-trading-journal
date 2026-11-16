@@ -635,7 +635,7 @@ function OverallMetrics({
   return (
     <div className="space-y-6">
       {/* Big metric cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 @[400px]:grid-cols-2 @[750px]:grid-cols-4 gap-4">
         <BigMetric
           label="Total Closed Trades"
           value={String(m.closedTrades ?? 0)}
@@ -664,7 +664,7 @@ function OverallMetrics({
       {/* Core distribution summary */}
       <Card>
         <SectionHeading>Core Distribution Summary</SectionHeading>
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mt-4">
+        <div className="grid grid-cols-1 @[400px]:grid-cols-2 @[750px]:grid-cols-4 gap-4 mt-4">
           <DistributionMetric
             label="Avg Winning Trade"
             value={m.avgWinCents != null ? formatSignedCents(m.avgWinCents).text : "N/A"}
@@ -691,7 +691,7 @@ function OverallMetrics({
       {/* Execution & Streak Statistics */}
       <Card>
         <SectionHeading>Execution & Streak Statistics</SectionHeading>
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4 mt-4">
+        <div className="grid grid-cols-1 @[400px]:grid-cols-2 @[750px]:grid-cols-4 gap-4 mt-4">
           <DistributionMetric label="Net P&L" value={formatSignedCents(m.netPnlCents).text} tone={m.netPnlCents >= 0 ? "profit" : "loss"} />
           <DistributionMetric label="Expectancy ($)" value={m.expectancyCents != null ? formatSignedCents(m.expectancyCents).text : "N/A"} tone={(m.expectancyCents ?? 0) >= 0 ? "profit" : "loss"} />
           <DistributionMetric label="Avg R" value={formatR(m.avgR)} tone={m.avgR && dToNumber(m.avgR) > 0 ? "profit" : "loss"} />
@@ -730,7 +730,7 @@ function OverallMetrics({
         <p className="text-xs text-muted-foreground mt-1">
           Measure how long positions are held to identify behavioral disparities between winners and losers.
         </p>
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mt-4">
+        <div className="grid grid-cols-1 @[600px]:grid-cols-3 gap-4 mt-4">
           <DistributionMetric
             label="Avg Hold Time (All Trades)"
             value={formatDurationMinutes(holdingDuration?.avgAllMinutes)}
@@ -757,7 +757,7 @@ function OverallMetrics({
         <p className="text-xs text-muted-foreground mt-1">
           Maximum Favorable Excursion (MFE) and Maximum Adverse Excursion (MAE) track peak unrealized gains and drawdowns during trade life.
         </p>
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mt-4">
+        <div className="grid grid-cols-1 @[600px]:grid-cols-3 gap-4 mt-4">
           <DistributionMetric
             label="Avg MFE (Peak Potential)"
             value={excursion?.avgMfeR ? `${excursion.avgMfeR} R` : "—"}
@@ -1096,7 +1096,7 @@ function ChecklistAdherence({ data }: { data: any }) {
   return (
     <div className="space-y-6">
       {/* KPI Overview Strip */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 @[380px]:grid-cols-2 @[700px]:grid-cols-4 gap-4">
         <DistributionMetric
           label="Overall Discipline"
           value={summary.overallAdherencePct != null ? `${summary.overallAdherencePct}%` : "Insufficient data"}
@@ -1365,7 +1365,7 @@ function SessionsWeekdays({
 
   return (
     <div className="space-y-6">
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      <div className="grid grid-cols-1 @[700px]:grid-cols-2 gap-6">
         <Card>
           <SectionHeading icon={Clock}>By Session</SectionHeading>
           {hasSession ? (
@@ -1700,7 +1700,7 @@ function NoDataState({
 function AnalyticsSkeleton() {
   return (
     <div className="space-y-6">
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 @[400px]:grid-cols-2 @[750px]:grid-cols-4 gap-4">
         {Array.from({ length: 4 }).map((_, i) => (
           <Skeleton key={i} className="h-28 rounded-xl" />
         ))}

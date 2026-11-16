@@ -71,7 +71,7 @@ export function PublicFooter() {
           {/* Brand Column */}
           <div className="col-span-2">
             <div className="flex items-center gap-2.5 mb-4">
-              <div className="h-9 w-9 rounded-xl bg-gradient-to-br from-indigo-500 via-purple-600 to-indigo-700 p-0.5 shadow-md shadow-purple-900/30 ring-1 ring-white/20">
+              <div className="h-9 w-9 rounded-xl bg-gradient-to-br from-blue-600 via-sky-500 to-blue-700 p-0.5 shadow-md shadow-sky-950/30 ring-1 ring-white/20">
                 <div className="w-full h-full bg-[#0B1021] rounded-[10px] flex items-center justify-center">
                   <svg
                     xmlns="http://www.w3.org/2000/svg"
@@ -79,7 +79,7 @@ export function PublicFooter() {
                     fill="none"
                     stroke="currentColor"
                     strokeWidth="2.3"
-                    className="h-5 w-5 text-purple-300"
+                    className="h-5 w-5 text-sky-300"
                   >
                     <path d="M12 3 L20 20 L15.5 20 L12 11 L8.5 20 L4 20 Z" fill="currentColor" fillOpacity="0.25" />
                     <circle cx="12" cy="8" r="1.6" fill="#10B981" stroke="#10B981" />
@@ -100,7 +100,7 @@ export function PublicFooter() {
                 Zero-Knowledge Privacy
               </span>
               <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-white/[0.04] border border-white/10">
-                <ShieldCheck className="h-3.5 w-3.5 text-purple-400" />
+                <ShieldCheck className="h-3.5 w-3.5 text-sky-400" />
                 Encrypted Journal
               </span>
             </div>
@@ -120,7 +120,7 @@ export function PublicFooter() {
                       className="text-xs text-slate-400 hover:text-white transition-colors text-left flex items-center gap-1 group"
                     >
                       <span>{link.label}</span>
-                      <ArrowUpRight className="h-3 w-3 opacity-0 group-hover:opacity-100 transition-opacity text-purple-400" />
+                      <ArrowUpRight className="h-3 w-3 opacity-0 group-hover:opacity-100 transition-opacity text-sky-400" />
                     </button>
                   </li>
                 ))}

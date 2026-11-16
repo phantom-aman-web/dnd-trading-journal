@@ -786,7 +786,7 @@ export function TradesLogView() {
         <div className="space-y-4">
           <div className="bg-card rounded-xl border border-border shadow-sm overflow-hidden">
             {/* Mobile Card List */}
-            <div className="sm:hidden divide-y divide-border">
+            <div className="@[650px]:hidden divide-y divide-border">
               {allEntries.map((entry) => {
                 if (entry.kind === "observation") {
                   const o = entry.data;
@@ -936,7 +936,7 @@ export function TradesLogView() {
             </div>
 
             {/* Desktop Table View */}
-            <div className="hidden sm:block overflow-x-auto">
+            <div className="hidden @[650px]:block overflow-x-auto min-w-0">
               <table className="w-full text-sm">
                 <thead className="bg-muted/50 border-b border-border">
                   <tr className="text-left text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
@@ -962,7 +962,7 @@ export function TradesLogView() {
                       </div>
                     </th>
                     <th className="px-4 py-3">Type / Direction</th>
-                    <th className="px-4 py-3 hidden md:table-cell">Setup</th>
+                    <th className="px-4 py-3 hidden @[850px]:table-cell">Setup</th>
                     <th className="px-4 py-3">Status / Reason</th>
                     <th className="px-4 py-3 text-right cursor-pointer select-none hover:text-foreground" onClick={() => toggleSort("netPnlCents")}>
                       <div className="inline-flex items-center justify-end gap-1 w-full">
@@ -974,8 +974,8 @@ export function TradesLogView() {
                         )}
                       </div>
                     </th>
-                    <th className="px-4 py-3 text-right hidden sm:table-cell">R Multiple</th>
-                    <th className="px-4 py-3 text-right hidden lg:table-cell">Adherence / Notes</th>
+                    <th className="px-4 py-3 text-right hidden @[750px]:table-cell">R Multiple</th>
+                    <th className="px-4 py-3 text-right hidden @[950px]:table-cell">Adherence / Notes</th>
                     <th className="px-4 py-3 text-right"></th>
                   </tr>
                 </thead>
@@ -1036,10 +1036,10 @@ export function TradesLogView() {
                           <td className="px-4 py-3 text-right tabular-nums text-muted-foreground/40 font-mono">
                             —
                           </td>
-                          <td className="px-4 py-3 text-right tabular-nums text-muted-foreground/40 font-mono hidden sm:table-cell">
+                          <td className="px-4 py-3 text-right tabular-nums text-muted-foreground/40 font-mono hidden @[750px]:table-cell">
                             —
                           </td>
-                          <td className="px-4 py-3 text-right text-muted-foreground truncate max-w-[160px] hidden lg:table-cell" title={o.conditionMissing || o.observation}>
+                          <td className="px-4 py-3 text-right text-muted-foreground truncate max-w-[160px] hidden @[950px]:table-cell" title={o.conditionMissing || o.observation}>
                             {o.conditionMissing || o.observation || "—"}
                           </td>
                           <td className="px-4 py-3 text-right">
@@ -1095,7 +1095,7 @@ export function TradesLogView() {
                         <td className="px-4 py-3">
                           <DirectionBadge direction={t.direction} />
                         </td>
-                        <td className="px-4 py-3 hidden md:table-cell text-muted-foreground">
+                        <td className="px-4 py-3 hidden @[850px]:table-cell text-muted-foreground">
                           {setup ?? <span className="text-muted-foreground/70">—</span>}
                         </td>
                         <td className="px-4 py-3">
@@ -1118,7 +1118,7 @@ export function TradesLogView() {
                         </td>
                         <td
                           className={cn(
-                            "px-4 py-3 text-right tabular-nums whitespace-nowrap hidden sm:table-cell",
+                            "px-4 py-3 text-right tabular-nums whitespace-nowrap hidden @[750px]:table-cell",
                             rNum == null
                               ? "text-muted-foreground/70"
                               : rNum > 0
@@ -1130,7 +1130,7 @@ export function TradesLogView() {
                         >
                           {isPrivate ? "••••••" : formatR(t.actualR)}
                         </td>
-                        <td className="px-4 py-3 text-right tabular-nums text-muted-foreground hidden lg:table-cell">
+                        <td className="px-4 py-3 text-right tabular-nums text-muted-foreground hidden @[950px]:table-cell">
                           {adherence == null ? (
                             <span className="text-muted-foreground/70">—</span>
                           ) : (

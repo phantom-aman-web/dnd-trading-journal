@@ -648,10 +648,11 @@ h1, h2, h3, .font-display, [data-typography="display"] {
     linear-gradient(to bottom, rgba(255, 255, 255, 0.04) 1px, transparent 1px);
 }
 
-.bg-grid-purple {
+.bg-grid-purple,
+.bg-grid-blue {
   background-size: 32px 32px;
   background-image: 
-    linear-gradient(to right, rgba(124, 58, 237, 0.05) 1px, transparent 1px),
-    linear-gradient(to bottom, rgba(124, 58, 237, 0.05) 1px, transparent 1px);
+    linear-gradient(to right, rgba(37, 99, 235, 0.05) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(37, 99, 235, 0.05) 1px, transparent 1px);
 }
 
