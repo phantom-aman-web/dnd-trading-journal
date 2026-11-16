@@ -114,3 +114,7 @@ export const useNav = create<NavState>()(
 
 export const useNavStore = useNav;
 
+if (typeof window !== "undefined") {
+  (window as any).__navStore = useNav;
+}
+

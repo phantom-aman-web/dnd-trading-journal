@@ -145,6 +145,12 @@ export function AccountsView() {
 
   const accounts: TradingAccount[] = Array.isArray(accountsData) ? accountsData : ((accountsData as any)?.items ?? (Array.isArray((accountsData as any)?.accounts) ? (accountsData as any).accounts : []));
   const trades: TradeRow[] = Array.isArray(tradesData) ? tradesData : ((tradesData as any)?.items ?? (Array.isArray((tradesData as any)?.trades) ? (tradesData as any).trades : []));
+  const propChallenges: any[] = useMemo(() => {
+    if (Array.isArray(propChallengesData)) return propChallengesData;
+    if (Array.isArray((propChallengesData as any)?.items)) return (propChallengesData as any).items;
+    if (Array.isArray((propChallengesData as any)?.challenges)) return (propChallengesData as any).challenges;
+    return [];
+  }, [propChallengesData]);
 
   // Group trades by account and compute per-account stats.
   const statsByAccount = useMemo(() => {
@@ -361,7 +367,7 @@ export function AccountsView() {
                         </span>
                       )}
                       {(() => {
-                        const linkedChallenge = (propChallengesData as any[]).find(
+                        const linkedChallenge = propChallenges.find(
                           (c: any) => c.accountId === a.id || c.account?.id === a.id
                         );
                         if (linkedChallenge) {

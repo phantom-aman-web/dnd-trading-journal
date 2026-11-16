@@ -4,12 +4,18 @@ import { useEffect, useState, useCallback } from "react";
 
 export type DndTheme = "nordic" | "terminal" | "institutional";
 export type DndFont = "default" | "jetbrains" | "inter" | "jakarta" | "playfair" | "cinzel";
+export type DndInterfaceFont = "default" | "inter" | "jakarta";
+export type DndDisplayFont = "default" | "jakarta" | "inter" | "playfair" | "cinzel" | "system";
+export type DndFinancialFont = "jetbrains" | "system";
 export type DndFontSize = "small" | "medium" | "large" | "xlarge";
 export type DndDensity = "compact" | "comfortable" | "spacious";
 
 // Simple event-based theme store so components can reactively track the current theme.
 let currentTheme: DndTheme = "nordic";
 let currentFont: DndFont = "default";
+let currentInterfaceFont: DndInterfaceFont = "default";
+let currentDisplayFont: DndDisplayFont = "default";
+let currentFinancialFont: DndFinancialFont = "jetbrains";
 let currentFontSize: DndFontSize = "medium";
 let currentDensity: DndDensity = "comfortable";
 let currentMonoNumbers = false;
@@ -36,9 +42,9 @@ function notifyFont(f: DndFont) {
 
 function applyThemeToDOM(t: DndTheme) {
   document.documentElement.setAttribute("data-theme", t);
-  document.documentElement.classList.toggle("dark", t === "terminal");
+  document.documentElement.classList.toggle("dark", t === "terminal" || t === "institutional");
   // Also set color-scheme so native form controls + scrollbars match.
-  document.documentElement.style.colorScheme = t === "terminal" ? "dark" : "light";
+  document.documentElement.style.colorScheme = (t === "terminal" || t === "institutional") ? "dark" : "light";
 }
 
 function applyFontToDOM(f: DndFont) {
@@ -47,6 +53,12 @@ function applyFontToDOM(f: DndFont) {
   } else {
     document.documentElement.setAttribute("data-font", f);
   }
+}
+
+function applyTypographyRolesToDOM(interfaceF: DndInterfaceFont, displayF: DndDisplayFont, financialF: DndFinancialFont) {
+  document.documentElement.setAttribute("data-font-interface", interfaceF);
+  document.documentElement.setAttribute("data-font-display", displayF);
+  document.documentElement.setAttribute("data-font-financial", financialF);
 }
 
 /**
@@ -118,6 +130,18 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     applyFontToDOM(storedFont);
     notifyFont(storedFont);
 
+    // Three independent typography roles
+    const storedInterface = (localStorage.getItem("alphapips-font-interface") as DndInterfaceFont) ||
+      (storedFont === "inter" || storedFont === "jakarta" || storedFont === "default" ? storedFont : "default");
+    const storedDisplay = (localStorage.getItem("alphapips-font-display") as DndDisplayFont) ||
+      (storedFont === "playfair" || storedFont === "cinzel" || storedFont === "jakarta" || storedFont === "inter" ? storedFont : "default");
+    const storedFinancial = (localStorage.getItem("alphapips-font-financial") as DndFinancialFont) || "jetbrains";
+
+    currentInterfaceFont = storedInterface;
+    currentDisplayFont = storedDisplay;
+    currentFinancialFont = storedFinancial;
+    applyTypographyRolesToDOM(storedInterface, storedDisplay, storedFinancial);
+
     const density = (localStorage.getItem("dnd-density") as DndDensity) || "comfortable";
     currentDensity = density;
     document.documentElement.setAttribute("data-density", density);
@@ -146,6 +170,36 @@ export function setFont(font: DndFont) {
   } catch {}
   applyFontToDOM(font);
   notifyFont(font);
+}
+
+export function setInterfaceFont(f: DndInterfaceFont) {
+  if (typeof window === "undefined") return;
+  currentInterfaceFont = f;
+  try {
+    localStorage.setItem("alphapips-font-interface", f);
+  } catch {}
+  document.documentElement.setAttribute("data-font-interface", f);
+  notifyPrefs();
+}
+
+export function setDisplayFont(f: DndDisplayFont) {
+  if (typeof window === "undefined") return;
+  currentDisplayFont = f;
+  try {
+    localStorage.setItem("alphapips-font-display", f);
+  } catch {}
+  document.documentElement.setAttribute("data-font-display", f);
+  notifyPrefs();
+}
+
+export function setFinancialFont(f: DndFinancialFont) {
+  if (typeof window === "undefined") return;
+  currentFinancialFont = f;
+  try {
+    localStorage.setItem("alphapips-font-financial", f);
+  } catch {}
+  document.documentElement.setAttribute("data-font-financial", f);
+  notifyPrefs();
 }
 
 export function setTheme(theme: DndTheme) {
@@ -199,12 +253,27 @@ export function setReducedMotion(on: boolean) {
   notifyPrefs();
 }
 
+if (typeof window !== "undefined") {
+  (window as any).__themeControl = {
+    setTheme,
+    setDensity,
+    setFont,
+    setInterfaceFont,
+    setDisplayFont,
+    setFinancialFont,
+    getTheme,
+  };
+}
+
 /**
  * Reactive hook for all user appearance, typography, and density preferences.
  */
 export function usePreferences() {
   const [theme, setThemeState] = useState<DndTheme>(currentTheme);
   const [font, setFontState] = useState<DndFont>(currentFont);
+  const [interfaceFont, setInterfaceFontState] = useState<DndInterfaceFont>(currentInterfaceFont);
+  const [displayFont, setDisplayFontState] = useState<DndDisplayFont>(currentDisplayFont);
+  const [financialFont, setFinancialFontState] = useState<DndFinancialFont>(currentFinancialFont);
   const [fontSize, setFontSizeState] = useState<DndFontSize>(currentFontSize);
   const [density, setDensityState] = useState<DndDensity>(currentDensity);
   const [monoNumbers, setMonoNumbersState] = useState<boolean>(currentMonoNumbers);
@@ -213,6 +282,9 @@ export function usePreferences() {
     const update = () => {
       setThemeState(currentTheme);
       setFontState(currentFont);
+      setInterfaceFontState(currentInterfaceFont);
+      setDisplayFontState(currentDisplayFont);
+      setFinancialFontState(currentFinancialFont);
       setFontSizeState(currentFontSize);
       setDensityState(currentDensity);
       setMonoNumbersState(currentMonoNumbers);
@@ -230,6 +302,12 @@ export function usePreferences() {
     setTheme,
     font,
     setFont,
+    interfaceFont,
+    setInterfaceFont,
+    displayFont,
+    setDisplayFont,
+    financialFont,
+    setFinancialFont,
     fontSize,
     setFontSize,
     density,

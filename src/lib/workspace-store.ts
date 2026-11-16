@@ -15,13 +15,19 @@ export interface WorkspacePanel {
 }
 
 export const SUPPORTED_PANEL_VIEWS: { key: ViewKey; label: string }[] = [
+  { key: "dashboard", label: "Dashboard" },
   { key: "tradesLog", label: "Trades Log" },
   { key: "tradeDetail", label: "Trade Detail" },
-  { key: "analytics", label: "Analytics" },
-  { key: "riskCalculator", label: "Risk Calculator" },
-  { key: "setups", label: "Setups & Playbooks" },
-  { key: "calendar", label: "Calendar" },
+  { key: "calendar", label: "Trading Calendar" },
+  { key: "analytics", label: "Analytics Engine" },
   { key: "accounts", label: "Accounts" },
+  { key: "propChallenges", label: "Prop Challenges" },
+  { key: "riskCalculator", label: "Risk Calculator" },
+  { key: "setups", label: "Setups & Checklists" },
+  { key: "tradingTodo", label: "Trading To-Do" },
+  { key: "settings", label: "Preferences" },
+  { key: "archived", label: "Archived Records" },
+  { key: "backup", label: "Backup / Restore" },
 ];
 
 export const DEFAULT_PANELS: WorkspacePanel[] = [

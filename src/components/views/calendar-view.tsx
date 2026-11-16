@@ -394,15 +394,16 @@ export function CalendarView() {
                   onClick={() => onDayClick(cell)}
                   className={cn(
                     "group relative min-h-[80px] md:min-h-[110px] p-2 text-left border-r border-b border-border last-of-type:border-r-0 transition-colors flex flex-col",
-                    isToday ? "bg-blue-50" : "bg-card hover:bg-muted/50",
-                    isToday && "ring-1 ring-inset ring-blue-200",
+                    isToday
+                      ? "bg-primary/10 ring-1 ring-inset ring-primary/40 shadow-xs"
+                      : "bg-card hover:bg-muted/50",
                   )}
                 >
                   <div className="flex items-start justify-between">
                     <span
                       className={cn(
                         "text-xs font-semibold tnum",
-                        isToday ? "text-blue-700" : "text-foreground",
+                        isToday ? "text-primary font-bold" : "text-foreground",
                       )}
                     >
                       {dayNum}
@@ -415,7 +416,7 @@ export function CalendarView() {
                         </span>
                       ) : null}
                       {isToday && (
-                        <span className="text-[9px] uppercase tracking-wide font-semibold text-blue-600">
+                        <span className="text-[9px] uppercase tracking-wide font-bold px-1.5 py-0.5 rounded bg-primary/20 text-primary border border-primary/30">
                           Today
                         </span>
                       )}
@@ -458,8 +459,8 @@ export function CalendarView() {
                       <div className="text-[10px] text-muted-foreground">Market restraint</div>
                     </div>
                   ) : (
-                    <div className="mt-auto">
-                      <span className="text-[10px] text-muted-foreground/70 group-hover:text-foreground inline-flex items-center gap-0.5 transition-colors">
+                    <div className="mt-auto opacity-0 group-hover:opacity-100 transition-opacity">
+                      <span className="text-[10px] text-muted-foreground hover:text-foreground inline-flex items-center gap-0.5 transition-colors">
                         <Plus className="h-3 w-3" />
                         Log Day
                       </span>

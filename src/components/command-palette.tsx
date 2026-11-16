@@ -194,7 +194,7 @@ export function CommandPalette({ onOpenShortcuts }: CommandPaletteProps) {
   return (
     <CommandDialog open={commandOpen} onOpenChange={setCommandOpen}>
       <CommandInput
-        placeholder="Type a command, shortcut, or search trades, setups, tasks, dictionary..."
+        placeholder="Search trades, observations, setups, tasks, notes... (or type shortcut)"
         value={query}
         onValueChange={setQuery}
       />

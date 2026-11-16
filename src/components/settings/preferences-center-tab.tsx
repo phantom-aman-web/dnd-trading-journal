@@ -6,6 +6,9 @@ import {
   useTheme,
   useFont,
   setFont,
+  setInterfaceFont,
+  setDisplayFont,
+  setFinancialFont,
   setTheme,
   setDensity,
   setFontSize,
@@ -13,6 +16,9 @@ import {
   setReducedMotion,
   type DndTheme,
   type DndFont,
+  type DndInterfaceFont,
+  type DndDisplayFont,
+  type DndFinancialFont,
   type DndDensity,
   type DndFontSize,
 } from "@/components/theme-provider";
@@ -63,20 +69,75 @@ const THEME_OPTIONS = [
     key: "nordic" as DndTheme,
     label: "Nordic",
     desc: "Light, calm, balanced contrast and clear typography",
-    swatches: ["#FFFFFF", "#0F172A", "#10B981"],
+    sidebarBg: "#FFFFFF",
+    sidebarBorder: "#E2E8F0",
+    workspaceBg: "#F8FAFC",
+    cardBg: "#FFFFFF",
+    cardBorder: "#E2E8F0",
+    primaryAccent: "#1E293B",
+    primaryFg: "#FFFFFF",
+    profitColor: "#047857",
+    lossColor: "#DC2626",
+    chartColor: "#1E293B",
+    textFg: "#1E293B",
+    textMuted: "#64748B",
+    swatches: ["#FFFFFF", "#0F172A", "#047857"],
   },
   {
     key: "terminal" as DndTheme,
-    label: "Terminal",
-    desc: "Dark, technical aesthetic with cyan and emerald accents",
-    swatches: ["#0B0F17", "#1E293B", "#06B6D4"],
+    label: "Sleek Terminal",
+    desc: "Dark technical aesthetic with cyan interaction accent and emerald profit",
+    sidebarBg: "#111923",
+    sidebarBorder: "#2E4052",
+    workspaceBg: "#0B0F14",
+    cardBg: "#192431",
+    cardBorder: "#2E4052",
+    primaryAccent: "#55C8F2",
+    primaryFg: "#0B0F14",
+    profitColor: "#34D399",
+    lossColor: "#FB7185",
+    chartColor: "#55C8F2",
+    textFg: "#F1F5F9",
+    textMuted: "#94A3B8",
+    swatches: ["#0B0F14", "#192431", "#55C8F2"],
   },
   {
     key: "institutional" as DndTheme,
     label: "Slate Contrast",
-    desc: "Dark sidebar and high-contrast slate workspace for professional analysis",
-    swatches: ["#0F172A", "#1E293B", "#38BDF8"],
+    desc: "Deep slate dark workspace, dark sidebar, restrained soft blue accent",
+    sidebarBg: "#080D13",
+    sidebarBorder: "#30363D",
+    workspaceBg: "#0D1117",
+    cardBg: "#1A2633",
+    cardBorder: "#43566A",
+    primaryAccent: "#83B6E4",
+    primaryFg: "#080D13",
+    profitColor: "#34D399",
+    lossColor: "#FB7185",
+    chartColor: "#83B6E4",
+    textFg: "#F0F6FC",
+    textMuted: "#8B949E",
+    swatches: ["#0D1117", "#1A2633", "#83B6E4"],
   },
+];
+
+const INTERFACE_FONT_OPTIONS: { key: DndInterfaceFont; label: string; desc: string; previewFont: string }[] = [
+  { key: "default", label: "Default System", desc: "Clean modern OS font for menus, tables & inputs", previewFont: "system-ui, -apple-system, sans-serif" },
+  { key: "inter", label: "Inter (Recommended)", desc: "Swiss precision, ultra-clean forms and dense data grids", previewFont: "'Inter', sans-serif" },
+  { key: "jakarta", label: "Plus Jakarta Sans", desc: "Contemporary geometric sans-serif for sleek ergonomics", previewFont: "'Plus Jakarta Sans', sans-serif" },
+];
+
+const DISPLAY_FONT_OPTIONS: { key: DndDisplayFont; label: string; desc: string; previewFont: string }[] = [
+  { key: "default", label: "Plus Jakarta (Default)", desc: "Balanced modern heading typography", previewFont: "'Plus Jakarta Sans', sans-serif" },
+  { key: "inter", label: "Inter", desc: "Minimalist structured headings", previewFont: "'Inter', sans-serif" },
+  { key: "playfair", label: "Playfair Display", desc: "Classic editorial luxury serif", previewFont: "'Playfair Display', Georgia, serif" },
+  { key: "cinzel", label: "Cinzel", desc: "Historic Roman display serif", previewFont: "'Cinzel', serif" },
+  { key: "system", label: "Default System", desc: "Standard native sans heading", previewFont: "system-ui, sans-serif" },
+];
+
+const FINANCIAL_FONT_OPTIONS: { key: DndFinancialFont; label: string; desc: string; previewFont: string }[] = [
+  { key: "jetbrains", label: "JetBrains Mono (Recommended)", desc: "Fixed-pitch monospace with slashed zeros and aligned tabular columns", previewFont: "'JetBrains Mono', monospace" },
+  { key: "system", label: "System Tabular Numbers", desc: "Proportional tabular numerals with native system font", previewFont: "system-ui, monospace" },
 ];
 
 const FONT_OPTIONS: { key: DndFont; label: string; desc: string; previewFont: string }[] = [
@@ -119,7 +180,19 @@ const PREFERENCE_CATEGORIES = [
 ];
 
 export function PreferencesCenterTab() {
-  const { theme, font, fontSize, density, monoNumbers } = usePreferences();
+  const {
+    theme,
+    font,
+    interfaceFont,
+    setInterfaceFont,
+    displayFont,
+    setDisplayFont,
+    financialFont,
+    setFinancialFont,
+    fontSize,
+    density,
+    monoNumbers,
+  } = usePreferences();
   const { isPrivate, togglePrivacy } = usePrivacyStore();
   const { layout, setLayout, resetWorkspace } = useWorkspaceStore();
   const { isOnline, status: syncStatus, pendingCount, triggerSync } = useSyncStore();
@@ -241,7 +314,7 @@ export function PreferencesCenterTab() {
                   toast.success(`Theme updated to ${t.label}`);
                 }}
                 className={cn(
-                  "p-4 rounded-xl border text-left transition-all flex flex-col justify-between group",
+                  "p-3.5 rounded-xl border text-left transition-all flex flex-col justify-between group cursor-pointer",
                   theme === t.key
                     ? "border-primary ring-2 ring-primary/20 bg-card shadow-xs"
                     : "border-border hover:bg-muted/40 bg-card"
@@ -256,19 +329,110 @@ export function PreferencesCenterTab() {
                       {t.swatches.map((color, i) => (
                         <span
                           key={i}
-                          className="h-3 w-3 rounded-full border border-border/60"
+                          className="h-2.5 w-2.5 rounded-full border border-border/60"
                           style={{ backgroundColor: color }}
                           title={color}
                         />
                       ))}
                     </div>
                   </div>
-                  <p className="text-xs text-muted-foreground mt-1.5 leading-relaxed">
+                  <p className="text-[11px] text-muted-foreground mt-1 leading-snug">
                     {t.desc}
                   </p>
+
+                  {/* Accurate Miniature Theme Preview */}
+                  <div
+                    className="w-full h-32 rounded-lg border overflow-hidden relative shadow-inner p-1.5 flex flex-col justify-between my-2.5 transition-transform group-hover:scale-[1.01]"
+                    style={{
+                      backgroundColor: t.workspaceBg,
+                      borderColor: t.cardBorder,
+                    }}
+                  >
+                    <div className="flex h-full gap-1.5 overflow-hidden">
+                      {/* Mini Sidebar */}
+                      <div
+                        className="w-14 rounded p-1 flex flex-col gap-1 border shrink-0"
+                        style={{
+                          backgroundColor: t.sidebarBg,
+                          borderColor: t.sidebarBorder,
+                        }}
+                      >
+                        <div className="flex items-center gap-1">
+                          <span className="h-2 w-2 rounded-full" style={{ backgroundColor: t.primaryAccent }} />
+                          <span className="h-1.5 w-6 rounded-xs" style={{ backgroundColor: t.textFg, opacity: 0.8 }} />
+                        </div>
+                        <div className="space-y-1 mt-1">
+                          <div className="h-2 rounded-xs px-1 flex items-center" style={{ backgroundColor: t.primaryAccent }}>
+                            <span className="h-1 w-7 rounded-xs" style={{ backgroundColor: t.primaryFg }} />
+                          </div>
+                          <div className="h-1.5 w-8 rounded-xs" style={{ backgroundColor: t.textMuted, opacity: 0.5 }} />
+                          <div className="h-1.5 w-6 rounded-xs" style={{ backgroundColor: t.textMuted, opacity: 0.5 }} />
+                        </div>
+                        <div className="mt-auto">
+                          <div className="h-1.5 w-8 rounded-xs" style={{ backgroundColor: t.textMuted, opacity: 0.3 }} />
+                        </div>
+                      </div>
+
+                      {/* Mini Workspace Area */}
+                      <div className="flex-1 flex flex-col gap-1 min-w-0">
+                        {/* Mini Topbar */}
+                        <div
+                          className="h-3.5 rounded px-1.5 flex items-center justify-between border"
+                          style={{
+                            backgroundColor: t.cardBg,
+                            borderColor: t.cardBorder,
+                          }}
+                        >
+                          <div className="h-1.5 w-10 rounded-xs" style={{ backgroundColor: t.textMuted, opacity: 0.4 }} />
+                          <span className="h-1.5 w-6 rounded-xs" style={{ backgroundColor: t.primaryAccent }} />
+                        </div>
+
+                        {/* Mini KPI Card with Profit & Loss */}
+                        <div
+                          className="rounded p-1 border flex items-center justify-between shadow-2xs"
+                          style={{
+                            backgroundColor: t.cardBg,
+                            borderColor: t.cardBorder,
+                          }}
+                        >
+                          <div>
+                            <div className="h-1 w-8 rounded-xs" style={{ backgroundColor: t.textMuted, opacity: 0.7 }} />
+                            <div className="text-[9px] font-bold font-mono tracking-tight mt-0.5" style={{ color: t.profitColor }}>
+                              +$1,420
+                            </div>
+                          </div>
+                          <div className="text-right">
+                            <div className="h-1 w-6 rounded-xs ml-auto" style={{ backgroundColor: t.textMuted, opacity: 0.7 }} />
+                            <div className="text-[9px] font-bold font-mono tracking-tight mt-0.5" style={{ color: t.lossColor }}>
+                              -0.8 R
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Mini Sparkline Chart */}
+                        <div
+                          className="flex-1 rounded p-0.5 border flex items-end justify-between overflow-hidden"
+                          style={{
+                            backgroundColor: t.cardBg,
+                            borderColor: t.cardBorder,
+                          }}
+                        >
+                          <svg className="w-full h-full" viewBox="0 0 100 24" preserveAspectRatio="none">
+                            <path
+                              d="M0,18 L15,16 L30,20 L45,12 L60,14 L75,6 L90,8 L100,2"
+                              fill="none"
+                              stroke={t.primaryAccent}
+                              strokeWidth="2.5"
+                              strokeLinecap="round"
+                            />
+                          </svg>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
                 </div>
 
-                <div className="mt-4 pt-2 border-t border-border/50 flex items-center justify-between">
+                <div className="pt-2 border-t border-border/50 flex items-center justify-between">
                   {theme === t.key ? (
                     <span className="inline-flex items-center gap-1 text-[11px] font-bold text-primary uppercase tracking-wide">
                       <Check className="h-3.5 w-3.5" /> Active Theme
@@ -285,51 +449,135 @@ export function PreferencesCenterTab() {
         </div>
       )}
 
-      {/* 2. Typography & Fonts */}
+      {/* 2. Typography & Fonts — 3 Independent Typography Roles */}
       {(selectedSubSection === "all" || selectedSubSection === "typography") && (
-        <div className="bg-card rounded-xl border border-border p-6 shadow-sm space-y-4">
+        <div className="bg-card rounded-xl border border-border p-6 shadow-sm space-y-6">
           <div className="flex items-center gap-2">
             <Type className="h-4 w-4 text-primary" />
             <h2 className="text-sm font-semibold text-foreground uppercase tracking-wide">
-              Typography &amp; Readability
+              Typography System (3 Independent Roles)
             </h2>
           </div>
           <p className="text-xs text-muted-foreground">
-            Configure font family, base interface sizing, and numerical formatting to match your preferred trading ergonomics.
+            Configure independent font families for interface navigation &amp; forms, display headings, and financial numbers. This prevents decorative fonts from degrading data-heavy tables while preserving brand character.
           </p>
 
-          {/* Font Family Grid */}
-          <div className="space-y-2 pt-2">
-            <label className="text-xs font-medium text-foreground">Font Family</label>
-            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2.5">
-              {FONT_OPTIONS.map((f) => (
+          {/* Role 1: Interface Font */}
+          <div className="space-y-2.5 pt-1">
+            <div className="flex items-center justify-between">
+              <div>
+                <label className="text-xs font-bold text-foreground">Role 1: Interface &amp; Navigation Font</label>
+                <p className="text-[11px] text-muted-foreground">Applied to buttons, form inputs, data tables, sidebar items, and body text.</p>
+              </div>
+              <Badge variant="outline" className="text-[10px] font-mono">
+                Active: {interfaceFont}
+              </Badge>
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+              {INTERFACE_FONT_OPTIONS.map((f) => (
                 <button
                   key={f.key}
+                  type="button"
                   onClick={() => {
-                    setFont(f.key);
-                    toast.success(`Font updated to ${f.label}`);
+                    setInterfaceFont(f.key);
+                    toast.success(`Interface font updated to ${f.label}`);
                   }}
                   className={cn(
-                    "p-3 rounded-lg border text-left transition-colors flex flex-col justify-between",
-                    font === f.key
+                    "p-3 rounded-lg border text-left transition-colors flex flex-col justify-between cursor-pointer",
+                    interfaceFont === f.key
                       ? "border-primary bg-primary/5 ring-1 ring-primary/30"
                       : "border-border hover:bg-muted/50 bg-card"
                   )}
                 >
                   <div className="flex items-center justify-between w-full">
-                    <span
-                      className="text-sm font-medium text-foreground"
-                      style={{ fontFamily: f.previewFont }}
-                    >
+                    <span className="text-xs font-medium text-foreground" style={{ fontFamily: f.previewFont }}>
                       {f.label}
                     </span>
-                    {font === f.key && (
-                      <span className="h-2 w-2 rounded-full bg-primary" />
-                    )}
+                    {interfaceFont === f.key && <span className="h-2 w-2 rounded-full bg-primary" />}
                   </div>
-                  <span className="text-[11px] text-muted-foreground mt-1">
-                    {f.desc}
-                  </span>
+                  <span className="text-[10px] text-muted-foreground mt-1 leading-snug">{f.desc}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <Separator className="bg-border/60" />
+
+          {/* Role 2: Display / Heading Font */}
+          <div className="space-y-2.5">
+            <div className="flex items-center justify-between">
+              <div>
+                <label className="text-xs font-bold text-foreground">Role 2: Display &amp; Heading Font</label>
+                <p className="text-[11px] text-muted-foreground">Applied to page titles, card headers, and prominent display labels.</p>
+              </div>
+              <Badge variant="outline" className="text-[10px] font-mono">
+                Active: {displayFont}
+              </Badge>
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2.5">
+              {DISPLAY_FONT_OPTIONS.map((f) => (
+                <button
+                  key={f.key}
+                  type="button"
+                  onClick={() => {
+                    setDisplayFont(f.key);
+                    toast.success(`Display font updated to ${f.label}`);
+                  }}
+                  className={cn(
+                    "p-3 rounded-lg border text-left transition-colors flex flex-col justify-between cursor-pointer",
+                    displayFont === f.key
+                      ? "border-primary bg-primary/5 ring-1 ring-primary/30"
+                      : "border-border hover:bg-muted/50 bg-card"
+                  )}
+                >
+                  <div className="flex items-center justify-between w-full">
+                    <span className="text-xs font-medium text-foreground" style={{ fontFamily: f.previewFont }}>
+                      {f.label}
+                    </span>
+                    {displayFont === f.key && <span className="h-2 w-2 rounded-full bg-primary" />}
+                  </div>
+                  <span className="text-[10px] text-muted-foreground mt-1 leading-snug">{f.desc}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <Separator className="bg-border/60" />
+
+          {/* Role 3: Financial & Technical Font */}
+          <div className="space-y-2.5">
+            <div className="flex items-center justify-between">
+              <div>
+                <label className="text-xs font-bold text-foreground">Role 3: Financial &amp; Technical Numbers</label>
+                <p className="text-[11px] text-muted-foreground">Applied to P&amp;L, balance metrics, lot sizes, tick prices, and R multiples.</p>
+              </div>
+              <Badge variant="outline" className="text-[10px] font-mono">
+                Active: {financialFont}
+              </Badge>
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+              {FINANCIAL_FONT_OPTIONS.map((f) => (
+                <button
+                  key={f.key}
+                  type="button"
+                  onClick={() => {
+                    setFinancialFont(f.key);
+                    toast.success(`Financial font updated to ${f.label}`);
+                  }}
+                  className={cn(
+                    "p-3 rounded-lg border text-left transition-colors flex flex-col justify-between cursor-pointer",
+                    financialFont === f.key
+                      ? "border-primary bg-primary/5 ring-1 ring-primary/30"
+                      : "border-border hover:bg-muted/50 bg-card"
+                  )}
+                >
+                  <div className="flex items-center justify-between w-full">
+                    <span className="text-xs font-mono font-medium text-foreground" style={{ fontFamily: f.previewFont }}>
+                      {f.label}
+                    </span>
+                    {financialFont === f.key && <span className="h-2 w-2 rounded-full bg-primary" />}
+                  </div>
+                  <span className="text-[10px] text-muted-foreground mt-1 leading-snug">{f.desc}</span>
                 </button>
               ))}
             </div>
@@ -365,16 +613,16 @@ export function PreferencesCenterTab() {
 
             <div className="flex items-center justify-between gap-4 p-3 rounded-lg border border-border bg-muted/20">
               <div>
-                <div className="text-sm font-medium text-foreground">Monospace Financial Digits</div>
+                <div className="text-sm font-medium text-foreground">Tabular Numerical Alignment</div>
                 <div className="text-xs text-muted-foreground">
-                  Format prices and P&amp;L with fixed-width tabular alignment.
+                  Lock digit widths so table columns and prices never jitter.
                 </div>
               </div>
               <Switch
                 checked={monoNumbers}
                 onCheckedChange={(on) => {
                   setMonoNumbers(on);
-                  toast.success(on ? "Monospace digits enabled" : "Standard numeric font restored");
+                  toast.success(on ? "Tabular digits enabled" : "Standard numeric font restored");
                 }}
               />
             </div>
@@ -383,11 +631,13 @@ export function PreferencesCenterTab() {
           {/* Live Typography Preview Box */}
           <div className="p-3.5 rounded-lg border border-border bg-muted/20 space-y-2">
             <div className="text-[11px] font-mono uppercase text-muted-foreground flex items-center justify-between">
-              <span>Live Typography &amp; Digit Preview</span>
-              <span className="font-sans text-[10px] text-primary">Active: {font} ({fontSize})</span>
+              <span>Live Multi-Role Typography Preview</span>
+              <span className="font-sans text-[10px] text-primary">
+                Interface: {interfaceFont} · Heading: {displayFont} · Financial: {financialFont}
+              </span>
             </div>
             <div className="p-3 rounded-lg border border-border bg-card space-y-1.5">
-              <div className="text-xs font-semibold text-foreground flex items-center justify-between">
+              <div className="text-xs font-bold text-foreground flex items-center justify-between font-display">
                 <span>EURUSD · London Breakout Long Execution</span>
                 <span className="tnum font-mono text-profit font-bold">+$250.00 (+1.50R)</span>
               </div>

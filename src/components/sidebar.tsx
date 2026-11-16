@@ -6,11 +6,18 @@ import { useAuth } from "@/lib/auth-store";
 import { useFavorites } from "@/lib/favorites-store";
 import { Button } from "@/components/ui/button";
 import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import {
   LayoutDashboard,
   CalendarDays,
   Wallet,
   ListChecks,
   PlusCircle,
+  Plus,
   BookOpen,
   BarChart3,
   Settings as SettingsIcon,
@@ -54,36 +61,42 @@ const NAV_GROUPS: NavGroup[] = [
     ],
   },
   {
-    id: "trade",
-    label: "TRADE",
+    id: "journal",
+    label: "JOURNAL",
     items: [
       { view: "tradesLog", label: "Trades Log", icon: BookOpen, dataTour: "trades-log", shortcut: "G T" },
       { view: "calendar", label: "Trading Calendar", icon: CalendarDays, dataTour: "calendar", shortcut: "G C" },
-      { view: "accounts", label: "Accounts", icon: Wallet, dataTour: "accounts" },
     ],
   },
   {
-    id: "understand",
-    label: "UNDERSTAND",
+    id: "analyze",
+    label: "ANALYZE",
     items: [
       { view: "analytics", label: "Analytics Engine", icon: BarChart3, dataTour: "analytics", shortcut: "G A" },
       { view: "setups", label: "Setups & Checklists", icon: ListChecks, dataTour: "setups", shortcut: "G S" },
     ],
   },
   {
-    id: "tools",
-    label: "TOOLS",
+    id: "risk",
+    label: "RISK & ACCOUNTS",
     items: [
+      { view: "accounts", label: "Accounts", icon: Wallet, dataTour: "accounts" },
       { view: "propChallenges", label: "Prop Challenges", icon: Trophy, dataTour: "prop-challenges", shortcut: "G P" },
       { view: "riskCalculator", label: "Risk Calculator", icon: Calculator, dataTour: "risk-calculator", shortcut: "G R" },
+    ],
+  },
+  {
+    id: "tasks",
+    label: "TASKS",
+    items: [
       { view: "tradingTodo", label: "Trading To-Do", icon: CheckSquare, dataTour: "trading-todo", shortcut: "G W" },
     ],
   },
   {
-    id: "system",
-    label: "SYSTEM",
+    id: "manage",
+    label: "MANAGE",
     items: [
-      { view: "settings", label: "Settings", icon: SettingsIcon, dataTour: "settings", shortcut: "G ," },
+      { view: "settings", label: "Preferences", icon: SettingsIcon, dataTour: "settings", shortcut: "G ," },
       { view: "archived", label: "Archived Records", icon: Archive },
       { view: "backup", label: "Backup / Restore", icon: DatabaseBackup },
     ],
@@ -163,30 +176,65 @@ export function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
         )}
       </div>
 
-      {/* New Trade & Observation buttons */}
+      {/* New Entry Action (Unified dropdown for executed trades and observations) */}
       <div className="px-3 pt-4 space-y-1.5">
-        <Button
-          onClick={() => {
-            navigate("tradeNew");
-            onNavigate?.();
-          }}
-          data-tour="add-trade"
-          className={cn(
-            "bg-sidebar-primary text-sidebar-primary-foreground hover:bg-sidebar-primary/90 font-semibold text-sm border-0 relative group shadow-sm",
-            sidebarCollapsed ? "w-10 h-10 p-0 mx-auto" : "w-full",
-          )}
-          title={sidebarCollapsed ? "New Trade (N)" : undefined}
-        >
-          <PlusCircle className="h-4 w-4 shrink-0" />
-          {!sidebarCollapsed && (
-            <div className="flex items-center justify-between w-full ml-1.5">
-              <span>New Trade</span>
-              <kbd className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-white/15 text-sidebar-primary-foreground/90 font-normal">
-                N
-              </kbd>
-            </div>
-          )}
-        </Button>
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button
+              data-tour="add-trade"
+              className={cn(
+                "bg-sidebar-primary text-sidebar-primary-foreground hover:bg-sidebar-primary/90 font-semibold text-sm border-0 relative group shadow-sm cursor-pointer",
+                sidebarCollapsed ? "w-10 h-10 p-0 mx-auto justify-center" : "w-full justify-between",
+              )}
+              title={sidebarCollapsed ? "New Entry (N)" : undefined}
+            >
+              <div className="flex items-center gap-2 min-w-0">
+                <PlusCircle className="h-4 w-4 shrink-0" />
+                {!sidebarCollapsed && <span className="truncate">New Entry</span>}
+              </div>
+              {!sidebarCollapsed && <ChevronDown className="h-3.5 w-3.5 opacity-70 shrink-0" />}
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="start" className="w-56 p-1.5 bg-card border-border shadow-lg">
+            <DropdownMenuItem
+              onClick={() => {
+                navigate("tradeNew");
+                onNavigate?.();
+              }}
+              className="cursor-pointer py-2"
+            >
+              <div className="h-7 w-7 rounded-md bg-primary/10 text-primary flex items-center justify-center mr-2.5 shrink-0">
+                <Plus className="h-4 w-4" />
+              </div>
+              <div className="flex flex-col flex-1">
+                <div className="flex items-center justify-between">
+                  <span className="font-semibold text-xs">Log Executed Trade</span>
+                  <kbd className="text-[10px] font-mono px-1 rounded bg-muted text-muted-foreground">N</kbd>
+                </div>
+                <span className="text-[10px] text-muted-foreground">Quick Entry or Wizard</span>
+              </div>
+            </DropdownMenuItem>
+
+            <DropdownMenuItem
+              onClick={() => {
+                useNav.getState().setNoTradeFormOpen(true);
+                onNavigate?.();
+              }}
+              className="cursor-pointer py-2"
+            >
+              <div className="h-7 w-7 rounded-md bg-amber-500/10 text-amber-500 flex items-center justify-center mr-2.5 shrink-0">
+                <EyeOff className="h-4 w-4" />
+              </div>
+              <div className="flex flex-col flex-1">
+                <div className="flex items-center justify-between">
+                  <span className="font-semibold text-xs">Log No-Trade Observation</span>
+                  <kbd className="text-[10px] font-mono px-1 rounded bg-muted text-muted-foreground">O</kbd>
+                </div>
+                <span className="text-[10px] text-muted-foreground">Market restraint record</span>
+              </div>
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
       </div>
 
       {/* Nav groups */}

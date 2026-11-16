@@ -119,7 +119,7 @@ export function TopBar({ onOpenMobileNav, onOpenShortcuts }: TopBarProps) {
       >
         <div className="flex items-center gap-2 truncate">
           <Search className="h-4 w-4 shrink-0" />
-          <span className="hidden sm:inline truncate">Search notes, symbol, tags...</span>
+          <span className="hidden sm:inline truncate">Search trades, observations, setups, tasks, notes...</span>
           <span className="sm:hidden">Search</span>
         </div>
         <kbd className="hidden sm:inline-flex items-center gap-0.5 text-[10px] font-mono px-1.5 py-0.5 rounded bg-muted text-muted-foreground border border-border group-hover:border-foreground/30">

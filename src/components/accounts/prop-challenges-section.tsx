@@ -592,36 +592,36 @@ export function PropChallengesSection({ accounts, hideHeader = false }: PropChal
 
       {/* New / Edit Challenge Dialog */}
       <Dialog open={isModalOpen} onOpenChange={setIsModalOpen}>
-        <DialogContent className="sm:max-w-[520px]">
+        <DialogContent className="max-w-xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>{editingId ? "Edit Challenge Tracker" : "Track Prop Firm Challenge"}</DialogTitle>
             <DialogDescription>
-              Configure evaluation target, daily loss limit, and drawdown rules.
+              Configure evaluation target, daily loss limit, drawdown rules, and reset parameters.
             </DialogDescription>
           </DialogHeader>
 
           {/* Quick presets in modal */}
           {!editingId && (
-            <div className="flex items-center gap-1.5 pb-2 border-b border-border text-xs">
+            <div className="flex items-center gap-1.5 pb-2 border-b border-border text-xs flex-wrap">
               <span className="text-muted-foreground text-[11px] font-medium">Presets:</span>
               <button
                 type="button"
                 onClick={() => applyPreset("ftmo")}
-                className="px-2 py-0.5 rounded bg-muted hover:bg-muted/80 text-[11px] font-medium"
+                className="px-2 py-0.5 rounded bg-muted hover:bg-muted/80 text-[11px] font-medium transition-colors"
               >
                 FTMO 100k
               </button>
               <button
                 type="button"
                 onClick={() => applyPreset("apex")}
-                className="px-2 py-0.5 rounded bg-muted hover:bg-muted/80 text-[11px] font-medium"
+                className="px-2 py-0.5 rounded bg-muted hover:bg-muted/80 text-[11px] font-medium transition-colors"
               >
                 Apex 50k
               </button>
               <button
                 type="button"
                 onClick={() => applyPreset("fundednext")}
-                className="px-2 py-0.5 rounded bg-muted hover:bg-muted/80 text-[11px] font-medium"
+                className="px-2 py-0.5 rounded bg-muted hover:bg-muted/80 text-[11px] font-medium transition-colors"
               >
                 FundedNext 100k
               </button>
@@ -630,11 +630,11 @@ export function PropChallengesSection({ accounts, hideHeader = false }: PropChal
 
           <div className="space-y-4 py-2 text-xs">
             {/* Account & Firm */}
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-1.5">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div className="min-w-0 space-y-1.5">
                 <Label>Account</Label>
                 <Select value={accountId} onValueChange={setAccountId}>
-                  <SelectTrigger className="h-9">
+                  <SelectTrigger className="h-9 w-full">
                     <SelectValue placeholder="Select account" />
                   </SelectTrigger>
                   <SelectContent>
@@ -647,33 +647,33 @@ export function PropChallengesSection({ accounts, hideHeader = false }: PropChal
                 </Select>
               </div>
 
-              <div className="space-y-1.5">
+              <div className="min-w-0 space-y-1.5">
                 <Label>Prop Firm</Label>
                 <Input
                   value={propFirm}
                   onChange={(e) => setPropFirm(e.target.value)}
                   placeholder="e.g. FTMO, Apex, MFF"
-                  className="h-9"
+                  className="h-9 w-full"
                 />
               </div>
             </div>
 
             {/* Name & Stage */}
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-1.5">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div className="min-w-0 space-y-1.5">
                 <Label>Challenge Name</Label>
                 <Input
                   value={name}
                   onChange={(e) => setName(e.target.value)}
                   placeholder="e.g. FTMO 100K Phase 1"
-                  className="h-9"
+                  className="h-9 w-full"
                 />
               </div>
 
-              <div className="space-y-1.5">
+              <div className="min-w-0 space-y-1.5">
                 <Label>Stage / Phase</Label>
                 <Select value={stage} onValueChange={setStage}>
-                  <SelectTrigger className="h-9">
+                  <SelectTrigger className="h-9 w-full">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
@@ -687,92 +687,98 @@ export function PropChallengesSection({ accounts, hideHeader = false }: PropChal
             </div>
 
             {/* Starting Balance & Profit Target */}
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-1.5">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div className="min-w-0 space-y-1.5">
                 <Label>Starting Balance ($)</Label>
                 <Input
                   type="number"
                   value={startingBalance}
                   onChange={(e) => setStartingBalance(e.target.value)}
                   placeholder="100000"
-                  className="h-9"
+                  className="h-9 w-full"
                 />
               </div>
 
-              <div className="space-y-1.5">
+              <div className="min-w-0 space-y-1.5">
                 <Label>Profit Target (%)</Label>
                 <Input
                   type="number"
                   value={profitTargetPct}
                   onChange={(e) => setProfitTargetPct(e.target.value)}
                   placeholder="10"
-                  className="h-9"
+                  className="h-9 w-full"
                 />
               </div>
             </div>
 
             {/* Daily Loss & Max DD */}
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-1.5">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div className="min-w-0 space-y-1.5">
                 <Label>Daily Loss Limit (%)</Label>
                 <Input
                   type="number"
                   value={dailyLossLimitPct}
                   onChange={(e) => setDailyLossLimitPct(e.target.value)}
                   placeholder="5"
-                  className="h-9"
+                  className="h-9 w-full"
                 />
               </div>
 
-              <div className="space-y-1.5">
+              <div className="min-w-0 space-y-1.5">
                 <Label>Max Drawdown (%)</Label>
                 <Input
                   type="number"
                   value={maxDrawdownPct}
                   onChange={(e) => setMaxDrawdownPct(e.target.value)}
                   placeholder="10"
-                  className="h-9"
+                  className="h-9 w-full"
                 />
               </div>
             </div>
 
-            {/* Drawdown Type & Min Trading Days */}
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-1.5">
+            {/* Drawdown Type & Min Trading Days — Non-colliding responsive structure */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div className="min-w-0 space-y-1.5">
                 <Label>Drawdown Model</Label>
                 <Select value={drawdownType} onValueChange={setDrawdownType}>
-                  <SelectTrigger className="h-9">
-                    <SelectValue />
+                  <SelectTrigger className="h-9 w-full">
+                    <SelectValue className="truncate" />
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="static">Static (From Starting Balance)</SelectItem>
                     <SelectItem value="trailing">Trailing (High-Water Mark)</SelectItem>
                   </SelectContent>
                 </Select>
+                <p className="text-[11px] text-muted-foreground leading-tight">
+                  Static: initial capital basis. Trailing: follows equity peak.
+                </p>
               </div>
 
-              <div className="space-y-1.5">
+              <div className="min-w-0 space-y-1.5">
                 <Label>Min Trading Days</Label>
                 <Input
                   type="number"
                   value={minTradingDays}
                   onChange={(e) => setMinTradingDays(e.target.value)}
                   placeholder="4"
-                  className="h-9"
+                  className="h-9 w-full"
                 />
+                <p className="text-[11px] text-muted-foreground leading-tight">
+                  Required active days before completion/payout.
+                </p>
               </div>
             </div>
 
             {/* Consistency Rules Configuration */}
-            <div className="p-3 rounded-lg border border-border bg-muted/30 space-y-3">
+            <div className="p-3.5 rounded-lg border border-border bg-muted/30 space-y-3">
               <Label className="text-xs font-semibold text-foreground flex items-center gap-1.5">
                 <Percent className="h-3.5 w-3.5 text-primary" /> Configurable Consistency Rules
               </Label>
-              <div className="grid grid-cols-3 gap-2">
-                <div className="space-y-1">
-                  <span className="text-[11px] text-muted-foreground">Rule Type</span>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div className="min-w-0 space-y-1">
+                  <span className="text-[11px] text-muted-foreground font-medium">Rule Type</span>
                   <Select value={consistencyRuleType} onValueChange={setConsistencyRuleType}>
-                    <SelectTrigger className="h-8 text-xs">
+                    <SelectTrigger className="h-8 text-xs w-full">
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
@@ -782,26 +788,26 @@ export function PropChallengesSection({ accounts, hideHeader = false }: PropChal
                   </Select>
                 </div>
 
-                <div className="space-y-1">
-                  <span className="text-[11px] text-muted-foreground">Threshold %</span>
+                <div className="min-w-0 space-y-1">
+                  <span className="text-[11px] text-muted-foreground font-medium">Threshold %</span>
                   <Input
                     type="number"
                     disabled={consistencyRuleType === "none"}
                     value={consistencyThresholdPct}
                     onChange={(e) => setConsistencyThresholdPct(e.target.value)}
                     placeholder="50"
-                    className="h-8 text-xs"
+                    className="h-8 text-xs w-full"
                   />
                 </div>
 
-                <div className="space-y-1">
-                  <span className="text-[11px] text-muted-foreground">Action On Breach</span>
+                <div className="min-w-0 space-y-1">
+                  <span className="text-[11px] text-muted-foreground font-medium">Action On Breach</span>
                   <Select
                     disabled={consistencyRuleType === "none"}
                     value={consistencyAction}
                     onValueChange={(v: any) => setConsistencyAction(v)}
                   >
-                    <SelectTrigger className="h-8 text-xs">
+                    <SelectTrigger className="h-8 text-xs w-full">
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
@@ -816,11 +822,11 @@ export function PropChallengesSection({ accounts, hideHeader = false }: PropChal
             </div>
 
             {/* Daily Cutoff Reset Timezone & Hour */}
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-1.5">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div className="min-w-0 space-y-1.5">
                 <Label>Reset Timezone</Label>
                 <Select value={resetTimezone} onValueChange={setResetTimezone}>
-                  <SelectTrigger className="h-9">
+                  <SelectTrigger className="h-9 w-full">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
@@ -833,10 +839,10 @@ export function PropChallengesSection({ accounts, hideHeader = false }: PropChal
                 </Select>
               </div>
 
-              <div className="space-y-1.5">
+              <div className="min-w-0 space-y-1.5">
                 <Label>Daily Reset Hour</Label>
                 <Select value={resetHour} onValueChange={setResetHour}>
-                  <SelectTrigger className="h-9">
+                  <SelectTrigger className="h-9 w-full">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>

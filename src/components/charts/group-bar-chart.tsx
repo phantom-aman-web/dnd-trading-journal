@@ -28,14 +28,22 @@ export function GroupBarChart({ data, valueLabel = "Value" }: { data: Row[]; val
             labelStyle={CHART_TOOLTIP_LABEL_STYLE}
             itemStyle={CHART_TOOLTIP_ITEM_STYLE}
             cursor={{ fill: "var(--muted)", fillOpacity: 0.3 }}
-            formatter={(value: number, _name: any, ctx: any) => [`${value.toFixed(2)} (${ctx?.payload?.count ?? 0} trades)`, valueLabel]}
+            formatter={(value: number, _name: any, ctx: any) => [
+              `${Number(value).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} (${ctx?.payload?.count ?? 0} trades)`,
+              valueLabel,
+            ]}
           />
           <ReferenceLine x={0} stroke="var(--muted-foreground)" strokeOpacity={0.3} />
           <Bar dataKey="value" radius={[0, 2, 2, 0]}>
             {data.map((d, i) => (
               <Cell key={i} fill={d.value >= 0 ? "var(--profit)" : "var(--loss)"} />
             ))}
-            <LabelList dataKey="value" position="right" style={{ fontSize: 10, fill: "var(--muted-foreground)" }} formatter={(v: number) => v.toFixed(2)} />
+            <LabelList
+              dataKey="value"
+              position="right"
+              style={{ fontSize: 10, fill: "var(--muted-foreground)" }}
+              formatter={(v: number) => Number(v).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+            />
           </Bar>
         </BarChart>
       </ResponsiveContainer>

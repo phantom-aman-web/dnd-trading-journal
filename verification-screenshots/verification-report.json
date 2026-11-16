@@ -1,0 +1,88 @@
+{
+  "timestamp": "2026-11-16T09:31:47.079Z",
+  "viewports": {
+    "tablet": {
+      "width": 768,
+      "height": 1024,
+      "screenshot": "13-dashboard-tablet-768.png"
+    },
+    "mobile": {
+      "width": 390,
+      "height": 844,
+      "screenshot": "14-dashboard-mobile-390.png"
+    }
+  },
+  "themes": {
+    "terminal": {
+      "theme": "terminal",
+      "primary": "#55c8f2",
+      "profit": "#34d399"
+    },
+    "slateContrast": {
+      "theme": "institutional",
+      "background": "#0d1117",
+      "card": "#1a2633",
+      "border": "#43566a"
+    }
+  },
+  "views": {
+    "dashboard": {
+      "verified": true,
+      "theme": "nordic",
+      "screenshot": "01-dashboard-nordic.png"
+    },
+    "tradesLog": {
+      "hasTable": true,
+      "rowsCount": 22,
+      "hasNewEntryBtn": true
+    },
+    "tradeNew": {
+      "verified": true,
+      "screenshot": "05-new-trade-wizard.png"
+    },
+    "calendar": {
+      "cellCount": 0,
+      "hasTodayHighlight": true,
+      "repetitivePlusLogDayCount": 0
+    },
+    "analyticsDataQuality": {
+      "hasCompletenessCard": true,
+      "hasFormulaDrawerBtn": false,
+      "issueCardsCount": 13
+    },
+    "riskCalculator": {
+      "hasHeader": false,
+      "hasScenariosBtn": true,
+      "hasSaveScenarioBtn": true,
+      "hasTransferBtn": true
+    },
+    "preferences": {
+      "hasThemeCards": false,
+      "hasInterfaceFontSelect": false,
+      "hasDisplayFontSelect": false,
+      "hasFinancialFontSelect": false,
+      "hasTypographyLivePreview": false
+    },
+    "landing": {
+      "verified": true,
+      "screenshot": "15-landing-page.png"
+    }
+  },
+  "collisionChecks": {
+    "propChallengeModal": {
+      "found": true,
+      "drawdownBox": {
+        "left": 489,
+        "right": 705,
+        "width": 216
+      },
+      "minDaysBox": {
+        "left": 721,
+        "right": 936,
+        "width": 216
+      },
+      "colliding": false,
+      "cleanSeparation": true
+    }
+  }
+}

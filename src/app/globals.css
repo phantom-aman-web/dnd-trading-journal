@@ -71,7 +71,7 @@
   --muted-foreground: #64748B;
   --accent: #F1F5F9;
   --accent-foreground: #1E293B;
-  --destructive: #FB7185;
+  --destructive: #EF4444;
   --destructive-foreground: #FFFFFF;
   --border: #E2E8F0;
   --input: #E2E8F0;
@@ -88,100 +88,97 @@
   --sidebar-border: #E2E8F0;
   --sidebar-ring: #94A3B8;
   --chart-1: #1E293B;
+  --chart-2: #047857;
+  --chart-3: #DC2626;
+  --chart-4: #F59E0B;
+  --chart-5: #64748B;
+}
+
+/* THEME B: SLEEK TERMINAL (dark technical aesthetic: cyan interaction accent, emerald profit, rose loss) */
+[data-theme="terminal"] {
+  --radius: 0.4rem;
+  --background: #0B0F14;
+  --foreground: #F1F5F9;
+  --card: #192431;
+  --card-foreground: #F1F5F9;
+  --popover: #192431;
+  --popover-foreground: #F1F5F9;
+  --primary: #55C8F2;
+  --primary-foreground: #0B0F14;
+  --secondary: #1F2D3D;
+  --secondary-foreground: #F1F5F9;
+  --muted: #1F2D3D;
+  --muted-foreground: #94A3B8;
+  --accent: #1F2D3D;
+  --accent-foreground: #F1F5F9;
+  --destructive: #FB7185;
+  --destructive-foreground: #FFFFFF;
+  --border: #2E4052;
+  --input: #2E4052;
+  --ring: #55C8F2;
+  --profit: #34D399;
+  --loss: #FB7185;
+  --warning: #F59E0B;
+  --sidebar: #111923;
+  --sidebar-foreground: #F1F5F9;
+  --sidebar-primary: #55C8F2;
+  --sidebar-primary-foreground: #0B0F14;
+  --sidebar-accent: #192431;
+  --sidebar-accent-foreground: #F1F5F9;
+  --sidebar-border: #2E4052;
+  --sidebar-ring: #55C8F2;
+  --chart-1: #55C8F2;
   --chart-2: #34D399;
   --chart-3: #FB7185;
   --chart-4: #F59E0B;
   --chart-5: #64748B;
 }
 
-/* THEME B: TERMINAL (dark) */
-[data-theme="terminal"] {
-  --radius: 0.4rem;
-  --background: #0E1114;
-  --foreground: #F1F5F9;
-  --card: #15191E;
-  --card-foreground: #F1F5F9;
-  --popover: #15191E;
-  --popover-foreground: #F1F5F9;
-  --primary: #10B981;
-  --primary-foreground: #0E1114;
-  --secondary: #1F262E;
-  --secondary-foreground: #F1F5F9;
-  --muted: #1F262E;
-  --muted-foreground: #94A3B8;
-  --accent: #1F262E;
-  --accent-foreground: #F1F5F9;
-  --destructive: #F43F5E;
-  --destructive-foreground: #FFFFFF;
-  --border: #2A3138;
-  --input: #2A3138;
-  --ring: #4A5260;
-  --profit: #10B981;
-  --loss: #F43F5E;
-  --warning: #F59E0B;
-  --sidebar: #0E1114;
-  --sidebar-foreground: #F1F5F9;
-  --sidebar-primary: #10B981;
-  --sidebar-primary-foreground: #0E1114;
-  --sidebar-accent: #1A2026;
-  --sidebar-accent-foreground: #F1F5F9;
-  --sidebar-border: #2A3138;
-  --sidebar-ring: #4A5260;
-  --chart-1: #10B981;
-  --chart-2: #F43F5E;
-  --chart-3: #94A3B8;
-  --chart-4: #F59E0B;
-  --chart-5: #4A5260;
-}
-
-/* THEME C: SLATE CONTRAST (Hybrid Deep Slate Dark Header & Sidebar / Crisp Light Workspace) */
+/* THEME C: SLATE CONTRAST (distinct deep slate dark workspace, dark sidebar, restrained soft blue accent) */
 [data-theme="slate"],
 [data-theme="institutional"] {
   --radius: 0.5rem;
-  /* Workspace surfaces (crisp light) */
-  --background: #F8FAFC;
-  --foreground: #0F172A;
-  --card: #FFFFFF;
-  --card-foreground: #0F172A;
-  --popover: #FFFFFF;
-  --popover-foreground: #0F172A;
-  --primary: #2563EB;
-  --primary-foreground: #FFFFFF;
-  --secondary: #F1F5F9;
-  --secondary-foreground: #0F172A;
-  --muted: #F1F5F9;
-  --muted-foreground: #64748B;
-  --accent: #F1F5F9;
-  --accent-foreground: #0F172A;
-  --destructive: #EF4444;
+  --background: #0D1117;
+  --foreground: #F0F6FC;
+  --card: #1A2633;
+  --card-foreground: #F0F6FC;
+  --popover: #1A2633;
+  --popover-foreground: #F0F6FC;
+  --primary: #83B6E4;
+  --primary-foreground: #080D13;
+  --secondary: #212E3F;
+  --secondary-foreground: #F0F6FC;
+  --muted: #212E3F;
+  --muted-foreground: #8B949E;
+  --accent: #212E3F;
+  --accent-foreground: #F0F6FC;
+  --destructive: #FB7185;
   --destructive-foreground: #FFFFFF;
-  --border: #E2E8F0;
-  --input: #E2E8F0;
-  --ring: #2563EB;
-  --profit: #047857;
-  --loss: #DC2626;
+  --border: #43566A;
+  --input: #43566A;
+  --ring: #83B6E4;
+  --profit: #34D399;
+  --loss: #FB7185;
   --warning: #F59E0B;
-  /* Header & Navigation surfaces (deep slate dark with high-contrast bright text) */
-  --header: #0F172A;
-  --header-foreground: #F8FAFC;
-  --header-muted: #94A8BE;
-  --header-border: #1E293B;
-  --header-input: #1E293B;
-  --header-accent: #1E293B;
-  /* Sidebar surfaces (deep slate dark with high-contrast bright text) */
-  --sidebar: #0F172A;
-  --sidebar-foreground: #F8FAFC;
-  --sidebar-primary: #2563EB;
-  --sidebar-primary-foreground: #FFFFFF;
-  --sidebar-accent: #1E293B;
-  --sidebar-accent-foreground: #FFFFFF;
-  --sidebar-border: #1E293B;
-  --sidebar-ring: #3B82F6;
-  --chart-1: #2563EB;
-  --chart-2: #EF4444;
-  --chart-3: #10B981;
+  --header: #080D13;
+  --header-foreground: #F0F6FC;
+  --header-muted: #8B949E;
+  --header-border: #30363D;
+  --header-input: #1A2633;
+  --header-accent: #212E3F;
+  --sidebar: #080D13;
+  --sidebar-foreground: #F0F6FC;
+  --sidebar-primary: #83B6E4;
+  --sidebar-primary-foreground: #080D13;
+  --sidebar-accent: #1A2633;
+  --sidebar-accent-foreground: #F0F6FC;
+  --sidebar-border: #30363D;
+  --sidebar-ring: #83B6E4;
+  --chart-1: #83B6E4;
+  --chart-2: #34D399;
+  --chart-3: #FB7185;
   --chart-4: #F59E0B;
-  --chart-5: #64748B;
+  --chart-5: #6E7681;
 }
 
 /* Custom header & accent theme styling for Slate Contrast */
@@ -542,36 +539,47 @@ body {
   background: rgba(255, 255, 255, 0.35);
 }
 
-/* Typography presets configurable from Appearance menu */
-[data-font="jetbrains"],
-[data-font="jetbrains"] body {
-  font-family: 'JetBrains Mono', monospace !important;
+/* Typography System: 3 Independent Roles (Interface, Display, Financial) */
+:root {
+  --font-interface: 'Inter', system-ui, -apple-system, sans-serif;
+  --font-display: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
+  --font-financial: 'JetBrains Mono', monospace;
 }
 
-[data-font="inter"],
-[data-font="inter"] body {
-  font-family: 'Inter', system-ui, -apple-system, sans-serif !important;
+body, button, input, select, textarea, table, label, nav {
+  font-family: var(--font-interface);
 }
 
-[data-font="jakarta"],
-[data-font="jakarta"] body {
-  font-family: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif !important;
+h1, h2, h3, .font-display, [data-typography="display"] {
+  font-family: var(--font-display);
 }
 
-[data-font="playfair"],
-[data-font="playfair"] body {
-  font-family: 'Playfair Display', Georgia, serif !important;
+.tnum, .tabular-nums, .font-mono-num, [data-financial] {
+  font-family: var(--font-financial) !important;
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum" 1, "zero" 1;
 }
 
-[data-font="cinzel"],
-[data-font="cinzel"] body {
-  font-family: 'Cinzel', serif !important;
-}
+/* Independent Role Attribute Selectors */
+[data-font-interface="default"], [data-font-interface="system"] { --font-interface: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+[data-font-interface="inter"] { --font-interface: 'Inter', system-ui, -apple-system, sans-serif; }
+[data-font-interface="jakarta"] { --font-interface: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif; }
 
-[data-font="system"],
-[data-font="system"] body {
-  font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif !important;
-}
+[data-font-display="default"], [data-font-display="jakarta"] { --font-display: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif; }
+[data-font-display="inter"] { --font-display: 'Inter', system-ui, -apple-system, sans-serif; }
+[data-font-display="playfair"] { --font-display: 'Playfair Display', Georgia, serif; }
+[data-font-display="cinzel"] { --font-display: 'Cinzel', serif; }
+[data-font-display="system"] { --font-display: system-ui, -apple-system, sans-serif; }
+
+[data-font-financial="jetbrains"] { --font-financial: 'JetBrains Mono', monospace; }
+[data-font-financial="system"] { --font-financial: system-ui, monospace; }
+
+/* Backward Compatibility with legacy data-font */
+[data-font="inter"]:not([data-font-interface]) { --font-interface: 'Inter', system-ui, sans-serif; }
+[data-font="jakarta"]:not([data-font-interface]) { --font-interface: 'Plus Jakarta Sans', system-ui, sans-serif; }
+[data-font="playfair"]:not([data-font-display]) { --font-display: 'Playfair Display', Georgia, serif; }
+[data-font="cinzel"]:not([data-font-display]) { --font-display: 'Cinzel', serif; }
+[data-font="jetbrains"]:not([data-font-financial]) { --font-financial: 'JetBrains Mono', monospace; }
 
 /* Focus ring */
 :focus-visible {

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
   useWorkspaceStore,
   SUPPORTED_PANEL_VIEWS,
@@ -10,6 +10,11 @@ import {
 import { useNav, type ViewKey } from "@/lib/nav-store";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import {
+  ResizablePanelGroup,
+  ResizablePanel,
+  ResizableHandle,
+} from "@/components/ui/resizable";
 import {
   Columns2,
   Columns3,
@@ -21,12 +26,13 @@ import {
   Maximize2,
   Minimize2,
   Link2,
-  ChevronDown,
   LayoutGrid,
+  AlertTriangle,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 // Views to render inside panels
+import { DashboardView } from "@/components/views/dashboard-view";
 import { TradesLogView } from "@/components/views/trades-log-view";
 import { TradeDetailView } from "@/components/views/trade-detail-view";
 import { AnalyticsView } from "@/components/views/analytics-view";
@@ -34,13 +40,17 @@ import { RiskCalculatorView } from "@/components/views/risk-calculator-view";
 import { PlaybooksView } from "@/components/views/playbooks-view";
 import { CalendarView } from "@/components/views/calendar-view";
 import { AccountsView } from "@/components/views/accounts-view";
+import { PropChallengesView } from "@/components/views/prop-challenges-view";
+import { TradingTodoView } from "@/components/views/trading-todo-view";
+import { SettingsView } from "@/components/views/settings-view";
+import { ArchivedView } from "@/components/views/archived-view";
+import { BackupView } from "@/components/views/backup-view";
 
 export function MultiPanelWorkspace() {
   const {
     isActive,
     layout,
     panels,
-    linkedTradeId,
     setLayout,
     setPanelView,
     addPanel,
@@ -51,10 +61,22 @@ export function MultiPanelWorkspace() {
 
   const [activeMobileTab, setActiveMobileTab] = useState<string>(panels[0]?.id || "panel-1");
   const [maximizedPanelId, setMaximizedPanelId] = useState<string | null>(null);
+  const [viewportWidth, setViewportWidth] = useState<number>(
+    typeof window !== "undefined" ? window.innerWidth : 1440
+  );
+
+  useEffect(() => {
+    function handleResize() {
+      setViewportWidth(window.innerWidth);
+    }
+    window.addEventListener("resize", handleResize);
+    return () => window.removeEventListener("resize", handleResize);
+  }, []);
 
   if (!isActive) return null;
 
   const maximizedPanel = panels.find((p) => p.id === maximizedPanelId);
+  const isWidthCrampedFor3Col = layout === "3-col" && viewportWidth < 1300;
 
   return (
     <div className="flex flex-col h-full w-full bg-background overflow-hidden select-none">
@@ -75,6 +97,19 @@ export function MultiPanelWorkspace() {
               Maximized: {maximizedPanel?.title}
             </Badge>
           )}
+          {isWidthCrampedFor3Col && (
+            <div className="hidden xl:flex items-center gap-1.5 px-2 py-0.5 rounded-md bg-amber-500/10 border border-amber-500/20 text-amber-600 dark:text-amber-400 text-[11px]">
+              <AlertTriangle className="h-3 w-3 shrink-0" />
+              <span>Width &lt; 1300px: 2 Panels Recommended</span>
+              <button
+                type="button"
+                onClick={() => setLayout("2-col")}
+                className="ml-1 underline font-bold hover:text-amber-700 dark:hover:text-amber-300"
+              >
+                Switch
+              </button>
+            </div>
+          )}
         </div>
 
         {/* Layout Presets */}
@@ -87,10 +122,10 @@ export function MultiPanelWorkspace() {
                 setLayout("2-col");
               }}
               className={cn(
-                "p-1.5 rounded transition-colors",
+                "p-1.5 rounded transition-colors cursor-pointer",
                 !maximizedPanelId && layout === "2-col" ? "bg-background text-foreground shadow-xs font-semibold" : "text-muted-foreground hover:text-foreground"
               )}
-              title="2 Columns (Split Screen)"
+              title="2 Columns (Split Screen - Recommended)"
             >
               <Columns2 className="h-3.5 w-3.5" />
             </button>
@@ -101,10 +136,10 @@ export function MultiPanelWorkspace() {
                 setLayout("3-col");
               }}
               className={cn(
-                "p-1.5 rounded transition-colors",
+                "p-1.5 rounded transition-colors cursor-pointer",
                 !maximizedPanelId && layout === "3-col" ? "bg-background text-foreground shadow-xs font-semibold" : "text-muted-foreground hover:text-foreground"
               )}
-              title="3 Columns (Pro Analysis)"
+              title="3 Columns (Wide Displays 1400px+)"
             >
               <Columns3 className="h-3.5 w-3.5" />
             </button>
@@ -115,7 +150,7 @@ export function MultiPanelWorkspace() {
                 setLayout("2-row");
               }}
               className={cn(
-                "p-1.5 rounded transition-colors",
+                "p-1.5 rounded transition-colors cursor-pointer",
                 !maximizedPanelId && layout === "2-row" ? "bg-background text-foreground shadow-xs font-semibold" : "text-muted-foreground hover:text-foreground"
               )}
               title="2 Rows (Stacked)"
@@ -129,7 +164,7 @@ export function MultiPanelWorkspace() {
                 setLayout("4-grid");
               }}
               className={cn(
-                "p-1.5 rounded transition-colors",
+                "p-1.5 rounded transition-colors cursor-pointer",
                 !maximizedPanelId && layout === "4-grid" ? "bg-background text-foreground shadow-xs font-semibold" : "text-muted-foreground hover:text-foreground"
               )}
               title="4 Grid (Quad Matrix)"
@@ -143,7 +178,7 @@ export function MultiPanelWorkspace() {
               variant="outline"
               size="sm"
               onClick={() => addPanel("tradesLog")}
-              className="h-7 text-xs gap-1 hidden sm:flex"
+              className="h-7 text-xs gap-1 hidden sm:flex cursor-pointer"
             >
               <Plus className="h-3 w-3" />
               <span>Add Panel</span>
@@ -157,8 +192,8 @@ export function MultiPanelWorkspace() {
               setMaximizedPanelId(null);
               resetWorkspace();
             }}
-            className="h-7 text-xs text-muted-foreground hover:text-foreground hidden sm:flex"
-            title="Reset layout to default"
+            className="h-7 text-xs text-muted-foreground hover:text-foreground hidden sm:flex cursor-pointer"
+            title="Reset layout to default 2-panel"
           >
             <RotateCcw className="h-3 w-3" />
           </Button>
@@ -167,7 +202,7 @@ export function MultiPanelWorkspace() {
             variant="outline"
             size="sm"
             onClick={() => setIsActive(false)}
-            className="h-7 text-xs gap-1 font-medium bg-card hover:bg-muted/50"
+            className="h-7 text-xs gap-1 font-medium bg-card hover:bg-muted/50 cursor-pointer"
           >
             <X className="h-3.5 w-3.5" />
             <span>Exit Workspace</span>
@@ -183,7 +218,7 @@ export function MultiPanelWorkspace() {
             type="button"
             onClick={() => setActiveMobileTab(p.id)}
             className={cn(
-              "px-3 py-1 rounded-md text-xs font-medium whitespace-nowrap transition-colors",
+              "px-3 py-1 rounded-md text-xs font-medium whitespace-nowrap transition-colors cursor-pointer",
               activeMobileTab === p.id
                 ? "bg-card text-foreground font-semibold shadow-xs border border-border"
                 : "text-muted-foreground hover:text-foreground"
@@ -207,29 +242,111 @@ export function MultiPanelWorkspace() {
         </div>
       ) : (
         <>
-          {/* Main Desktop Grid with Anti-Shrink Horizontal Scroll Container */}
-          <div className="hidden lg:block flex-1 overflow-x-auto overflow-y-hidden h-full w-full">
-            <div
-              className={cn(
-                "h-full min-h-0 w-full",
-                layout === "2-col" && "grid grid-cols-2 divide-x divide-border min-w-[760px] lg:min-w-full",
-                layout === "3-col" && "grid grid-cols-3 divide-x divide-border min-w-[1140px] xl:min-w-full",
-                layout === "2-row" && "grid grid-rows-2 divide-y divide-border min-w-full",
-                layout === "4-grid" && "grid grid-cols-2 grid-rows-2 divide-x divide-y divide-border min-w-[760px] lg:min-w-full"
-              )}
-            >
-              {panels.map((panel) => (
-                <SinglePanelContainer
-                  key={panel.id}
-                  panel={panel}
-                  canClose={panels.length > 1}
-                  isMaximized={false}
-                  onToggleMaximize={() => setMaximizedPanelId(panel.id)}
-                  onClose={() => removePanel(panel.id)}
-                  onChangeView={(view) => setPanelView(panel.id, view)}
-                />
-              ))}
-            </div>
+          {/* Main Desktop Resizable Layout */}
+          <div className="hidden lg:block flex-1 overflow-hidden h-full w-full">
+            {layout === "2-col" && (
+              <ResizablePanelGroup direction="horizontal" className="h-full w-full">
+                {panels.slice(0, 2).map((panel, idx) => (
+                  <React.Fragment key={panel.id}>
+                    {idx > 0 && <ResizableHandle withHandle />}
+                    <ResizablePanel defaultSize={panel.sizePct || 50} minSize={25} className="min-w-[320px]">
+                      <SinglePanelContainer
+                        panel={panel}
+                        canClose={panels.length > 1}
+                        isMaximized={false}
+                        onToggleMaximize={() => setMaximizedPanelId(panel.id)}
+                        onClose={() => removePanel(panel.id)}
+                        onChangeView={(view) => setPanelView(panel.id, view)}
+                      />
+                    </ResizablePanel>
+                  </React.Fragment>
+                ))}
+              </ResizablePanelGroup>
+            )}
+
+            {layout === "3-col" && (
+              <ResizablePanelGroup direction="horizontal" className="h-full w-full">
+                {panels.slice(0, 3).map((panel, idx) => (
+                  <React.Fragment key={panel.id}>
+                    {idx > 0 && <ResizableHandle withHandle />}
+                    <ResizablePanel defaultSize={panel.sizePct || 33} minSize={20} className="min-w-[280px]">
+                      <SinglePanelContainer
+                        panel={panel}
+                        canClose={panels.length > 1}
+                        isMaximized={false}
+                        onToggleMaximize={() => setMaximizedPanelId(panel.id)}
+                        onClose={() => removePanel(panel.id)}
+                        onChangeView={(view) => setPanelView(panel.id, view)}
+                      />
+                    </ResizablePanel>
+                  </React.Fragment>
+                ))}
+              </ResizablePanelGroup>
+            )}
+
+            {layout === "2-row" && (
+              <ResizablePanelGroup direction="vertical" className="h-full w-full">
+                {panels.slice(0, 2).map((panel, idx) => (
+                  <React.Fragment key={panel.id}>
+                    {idx > 0 && <ResizableHandle withHandle />}
+                    <ResizablePanel defaultSize={panel.sizePct || 50} minSize={25} className="min-h-[220px]">
+                      <SinglePanelContainer
+                        panel={panel}
+                        canClose={panels.length > 1}
+                        isMaximized={false}
+                        onToggleMaximize={() => setMaximizedPanelId(panel.id)}
+                        onClose={() => removePanel(panel.id)}
+                        onChangeView={(view) => setPanelView(panel.id, view)}
+                      />
+                    </ResizablePanel>
+                  </React.Fragment>
+                ))}
+              </ResizablePanelGroup>
+            )}
+
+            {layout === "4-grid" && (
+              <ResizablePanelGroup direction="vertical" className="h-full w-full">
+                <ResizablePanel defaultSize={50} minSize={30}>
+                  <ResizablePanelGroup direction="horizontal" className="h-full w-full">
+                    {panels.slice(0, 2).map((panel, idx) => (
+                      <React.Fragment key={panel.id}>
+                        {idx > 0 && <ResizableHandle withHandle />}
+                        <ResizablePanel defaultSize={50} minSize={25}>
+                          <SinglePanelContainer
+                            panel={panel}
+                            canClose={panels.length > 1}
+                            isMaximized={false}
+                            onToggleMaximize={() => setMaximizedPanelId(panel.id)}
+                            onClose={() => removePanel(panel.id)}
+                            onChangeView={(view) => setPanelView(panel.id, view)}
+                          />
+                        </ResizablePanel>
+                      </React.Fragment>
+                    ))}
+                  </ResizablePanelGroup>
+                </ResizablePanel>
+                <ResizableHandle withHandle />
+                <ResizablePanel defaultSize={50} minSize={30}>
+                  <ResizablePanelGroup direction="horizontal" className="h-full w-full">
+                    {panels.slice(2, 4).map((panel, idx) => (
+                      <React.Fragment key={panel.id}>
+                        {idx > 0 && <ResizableHandle withHandle />}
+                        <ResizablePanel defaultSize={50} minSize={25}>
+                          <SinglePanelContainer
+                            panel={panel}
+                            canClose={panels.length > 1}
+                            isMaximized={false}
+                            onToggleMaximize={() => setMaximizedPanelId(panel.id)}
+                            onClose={() => removePanel(panel.id)}
+                            onChangeView={(view) => setPanelView(panel.id, view)}
+                          />
+                        </ResizablePanel>
+                      </React.Fragment>
+                    ))}
+                  </ResizablePanelGroup>
+                </ResizablePanel>
+              </ResizablePanelGroup>
+            )}
           </div>
 
           {/* Mobile View: Render only active tab */}
@@ -281,7 +398,7 @@ function SinglePanelContainer({
             className="h-6 px-1.5 rounded bg-transparent hover:bg-muted/50 border-0 text-xs font-semibold text-foreground cursor-pointer focus:outline-hidden"
           >
             {SUPPORTED_PANEL_VIEWS.map((v) => (
-              <option key={v.key} value={v.key}>
+              <option key={v.key} value={v.key} className="bg-card text-foreground">
                 {v.label}
               </option>
             ))}
@@ -300,7 +417,7 @@ function SinglePanelContainer({
             <button
               type="button"
               onClick={onToggleMaximize}
-              className="p-1 rounded text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-colors"
+              className="p-1 rounded text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-colors cursor-pointer"
               title={isMaximized ? "Restore split layout" : "Maximize this panel"}
             >
               {isMaximized ? (
@@ -315,7 +432,7 @@ function SinglePanelContainer({
             <button
               type="button"
               onClick={onClose}
-              className="p-1 rounded text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-colors"
+              className="p-1 rounded text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-colors cursor-pointer"
               title="Close this panel"
             >
               <X className="h-3 w-3" />
@@ -324,8 +441,8 @@ function SinglePanelContainer({
         </div>
       </div>
 
-      {/* Panel Scrollable Content */}
-      <div className="flex-1 overflow-y-auto overflow-x-auto min-w-0">
+      {/* Panel Scrollable Content with Container Query Scope */}
+      <div className="flex-1 overflow-y-auto overflow-x-auto min-w-0 @container">
         <PanelContentRenderer panel={panel} />
       </div>
     </div>
@@ -337,6 +454,8 @@ function PanelContentRenderer({ panel }: { panel: WorkspacePanel }) {
   const tradeId = panel.recordId || linkedTradeId;
 
   switch (panel.view) {
+    case "dashboard":
+      return <DashboardView />;
     case "tradesLog":
       return <TradesLogView />;
     case "tradeDetail":
@@ -362,6 +481,16 @@ function PanelContentRenderer({ panel }: { panel: WorkspacePanel }) {
       return <CalendarView />;
     case "accounts":
       return <AccountsView />;
+    case "propChallenges":
+      return <PropChallengesView />;
+    case "tradingTodo":
+      return <TradingTodoView />;
+    case "settings":
+      return <SettingsView />;
+    case "archived":
+      return <ArchivedView />;
+    case "backup":
+      return <BackupView />;
     default:
       return <div className="p-4 text-xs text-muted-foreground">Select a view for this panel.</div>;
   }

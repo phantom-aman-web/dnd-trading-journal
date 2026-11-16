@@ -65,19 +65,69 @@ import { DataQualityTab } from "@/components/analytics/data-quality-tab";
 import { MetricDefinitionsModal } from "@/components/analytics/metric-definitions-modal";
 import { SharedFilterBar, type AnalyticsFilterState } from "@/components/analytics/shared-filter-bar";
 
-const TABS = [
-  { key: "overall", label: "Overall Metrics" },
-  { key: "instruments", label: "By Instrument" },
-  { key: "setup", label: "By Setup & Strategy" },
-  { key: "drawdown", label: "Equity & Drawdown" },
-  { key: "holdingTime", label: "Time in Trade" },
-  { key: "checklist", label: "Checklist Adherence" },
-  { key: "violations", label: "Rule Violations" },
-  { key: "sessions", label: "Sessions & Weekdays" },
-  { key: "dataQuality", label: "Data Quality" },
-] as const;
+export type TabKey =
+  | "overall"
+  | "instruments"
+  | "setup"
+  | "drawdown"
+  | "holdingTime"
+  | "checklist"
+  | "violations"
+  | "sessions"
+  | "dataQuality";
 
-type TabKey = (typeof TABS)[number]["key"];
+export interface AnalyticsSectionDef {
+  key: TabKey;
+  label: string;
+  icon: React.ComponentType<{ className?: string }>;
+  desc: string;
+}
+
+export interface AnalyticsCategoryDef {
+  id: string;
+  label: string;
+  sections: AnalyticsSectionDef[];
+}
+
+export const ANALYTICS_CATEGORIES: AnalyticsCategoryDef[] = [
+  {
+    id: "performance",
+    label: "Performance",
+    sections: [
+      { key: "overall", label: "Overall Metrics", icon: BarChart3, desc: "P&L, win rate, profit factor, expectancy" },
+      { key: "instruments", label: "By Instrument", icon: Compass, desc: "Asset class and symbol breakdown" },
+      { key: "setup", label: "By Setup & Strategy", icon: Target, desc: "Playbook and strategy edge analysis" },
+    ],
+  },
+  {
+    id: "risk",
+    label: "Risk & Capital",
+    sections: [
+      { key: "drawdown", label: "Equity & Drawdown", icon: TrendingUp, desc: "High-water mark and drawdown recovery" },
+    ],
+  },
+  {
+    id: "execution",
+    label: "Execution",
+    sections: [
+      { key: "holdingTime", label: "Time in Trade", icon: Timer, desc: "Holding time distributions and trade duration" },
+      { key: "sessions", label: "Sessions & Weekdays", icon: Calendar, desc: "NY/London/Asia session and weekday performance" },
+    ],
+  },
+  {
+    id: "quality",
+    label: "Process & Quality",
+    sections: [
+      { key: "checklist", label: "Checklist Adherence", icon: CheckCircle2, desc: "Rule adherence and plan execution rate" },
+      { key: "violations", label: "Rule Violations", icon: AlertTriangle, desc: "Discipline mistakes and behavioral impact" },
+      { key: "dataQuality", label: "Data Quality", icon: ShieldCheck, desc: "Journal completeness and integrity audit" },
+    ],
+  },
+];
+
+export const ALL_SECTIONS: AnalyticsSectionDef[] = ANALYTICS_CATEGORIES.flatMap((c) => c.sections);
+
+const TABS = ALL_SECTIONS;
 
 /** Maps each tab to the analytics API dimension it needs. */
 const TAB_DIMENSION: Record<TabKey, string> = {
@@ -323,25 +373,111 @@ export function AnalyticsView() {
           </button>
         </div>
 
-        {/* Tab bar */}
-        <Tabs value={tab} onValueChange={(v) => setTab(v as TabKey)}>
-          <div className="border-b border-border overflow-x-auto">
-            <TabsList className="bg-transparent h-auto p-0 rounded-none gap-0 w-auto">
-              {TABS.map((t) => (
-                <TabsTrigger
-                  key={t.key}
-                  value={t.key}
-                  className={cn(
-                    "rounded-none border-b-2 border-transparent bg-transparent px-4 py-3 text-sm font-medium whitespace-nowrap",
-                    "data-[state=active]:bg-transparent data-[state=active]:shadow-none data-[state=active]:border-[#1e2330] data-[state=active]:text-foreground",
-                    "text-muted-foreground hover:text-foreground",
-                  )}
-                >
-                  {t.label}
-                </TabsTrigger>
-              ))}
-            </TabsList>
+        {/* Grouped Analytics Navigation — Full Discoverability without Horizontal Scrolling */}
+        <div className="space-y-3">
+          {/* Mobile / Narrow Workspace Panel Dropdown Selector */}
+          <div className="block md:hidden">
+            <Select value={tab} onValueChange={(v) => setTab(v as TabKey)}>
+              <SelectTrigger className="w-full h-10 bg-card border-border text-xs font-semibold">
+                <SelectValue placeholder="Select analytics section" />
+              </SelectTrigger>
+              <SelectContent>
+                {ANALYTICS_CATEGORIES.map((cat) => (
+                  <div key={cat.id} className="py-1">
+                    <div className="px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-muted-foreground bg-muted/30">
+                      {cat.label}
+                    </div>
+                    {cat.sections.map((s) => {
+                      const Icon = s.icon;
+                      return (
+                        <SelectItem key={s.key} value={s.key} className="text-xs py-2 cursor-pointer">
+                          <span className="flex items-center gap-2">
+                            <Icon className="h-3.5 w-3.5 text-primary" />
+                            <span>{s.label}</span>
+                          </span>
+                        </SelectItem>
+                      );
+                    })}
+                  </div>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
+
+          {/* Desktop & Workspace Grouped Navigation */}
+          <div className="hidden md:flex flex-col gap-2 rounded-xl border border-border bg-card/60 p-2.5 shadow-xs">
+            {/* Tier 1: Categories */}
+            <div className="flex items-center gap-1.5 flex-wrap border-b border-border/60 pb-2">
+              {ANALYTICS_CATEGORIES.map((cat) => {
+                const isCatActive = cat.sections.some((s) => s.key === tab);
+                return (
+                  <button
+                    key={cat.id}
+                    type="button"
+                    onClick={() => {
+                      if (!isCatActive) {
+                        setTab(cat.sections[0].key);
+                      }
+                    }}
+                    className={cn(
+                      "px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer",
+                      isCatActive
+                        ? "bg-primary text-primary-foreground shadow-xs"
+                        : "text-muted-foreground hover:text-foreground hover:bg-muted/60"
+                    )}
+                  >
+                    <span>{cat.label}</span>
+                    <span
+                      className={cn(
+                        "text-[10px] px-1.5 py-0.2 rounded-full font-mono",
+                        isCatActive
+                          ? "bg-primary-foreground/20 text-primary-foreground"
+                          : "bg-muted text-muted-foreground"
+                      )}
+                    >
+                      {cat.sections.length}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+
+            {/* Tier 2: Specific Sections within Active Category */}
+            <div className="flex items-center gap-1.5 flex-wrap pt-0.5">
+              {ANALYTICS_CATEGORIES.find((c) => c.sections.some((s) => s.key === tab))?.sections.map((s) => {
+                const Icon = s.icon;
+                const isSelected = tab === s.key;
+                return (
+                  <button
+                    key={s.key}
+                    type="button"
+                    onClick={() => setTab(s.key)}
+                    className={cn(
+                      "px-3 py-1.5 rounded-md text-xs font-medium transition-all flex items-center gap-2 cursor-pointer border",
+                      isSelected
+                        ? "border-primary bg-primary/10 text-primary font-bold shadow-2xs"
+                        : "border-border/60 bg-muted/30 text-muted-foreground hover:text-foreground hover:bg-muted/60"
+                    )}
+                    title={s.desc}
+                  >
+                    <Icon className={cn("h-3.5 w-3.5 shrink-0", isSelected ? "text-primary" : "text-muted-foreground")} />
+                    <span>{s.label}</span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+
+        {/* Tab content containers */}
+        <Tabs value={tab} onValueChange={(v) => setTab(v as TabKey)}>
+          <TabsList className="hidden">
+            {ALL_SECTIONS.map((t) => (
+              <TabsTrigger key={t.key} value={t.key}>
+                {t.label}
+              </TabsTrigger>
+            ))}
+          </TabsList>
 
           <TabsContent value="overall" className="mt-6 focus-visible:outline-none">
             {loading || tab !== "overall" ? (

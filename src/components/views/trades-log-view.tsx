@@ -481,13 +481,13 @@ export function TradesLogView() {
         <div className="sm:ml-auto flex items-center gap-2">
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button className="bg-primary text-primary-foreground font-semibold shadow-xs gap-1.5">
+              <Button className="bg-primary text-primary-foreground font-semibold shadow-xs gap-1.5 cursor-pointer">
                 <Plus className="h-4 w-4" />
-                <span>Add Entry</span>
+                <span>New Entry</span>
                 <ChevronDown className="h-3.5 w-3.5 opacity-80" />
               </Button>
             </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-56 p-1.5">
+            <DropdownMenuContent align="end" className="w-56 p-1.5 bg-card border-border shadow-lg">
               <DropdownMenuItem
                 onClick={() => navigate("tradeNew")}
                 className="cursor-pointer py-2"
@@ -497,10 +497,10 @@ export function TradesLogView() {
                 </div>
                 <div className="flex flex-col flex-1">
                   <div className="flex items-center justify-between">
-                    <span className="font-semibold text-xs">Log Trade</span>
+                    <span className="font-semibold text-xs">Log Executed Trade</span>
                     <kbd className="text-[10px] font-mono px-1 rounded bg-muted text-muted-foreground">N</kbd>
                   </div>
-                  <span className="text-[10px] text-muted-foreground">Record executed position</span>
+                  <span className="text-[10px] text-muted-foreground">Quick Entry or Wizard</span>
                 </div>
               </DropdownMenuItem>
 
@@ -513,10 +513,10 @@ export function TradesLogView() {
                 </div>
                 <div className="flex flex-col flex-1">
                   <div className="flex items-center justify-between">
-                    <span className="font-semibold text-xs">Log Observation</span>
+                    <span className="font-semibold text-xs">Log No-Trade Observation</span>
                     <kbd className="text-[10px] font-mono px-1 rounded bg-muted text-muted-foreground">O</kbd>
                   </div>
-                  <span className="text-[10px] text-muted-foreground">Record market restraint</span>
+                  <span className="text-[10px] text-muted-foreground">Market restraint record</span>
                 </div>
               </DropdownMenuItem>
             </DropdownMenuContent>

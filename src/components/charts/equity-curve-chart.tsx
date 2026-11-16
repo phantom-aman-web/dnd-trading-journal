@@ -36,15 +36,15 @@ export function EquityCurveChart({ data, startingBalanceCents = 0 }: { data: Poi
             tick={CHART_AXIS_TICK_STYLE}
             tickLine={false}
             axisLine={false}
-            width={50}
-            tickFormatter={(v) => `$${v.toFixed(0)}`}
+            width={60}
+            tickFormatter={(v) => `$${Number(v).toLocaleString(undefined, { maximumFractionDigits: 0 })}`}
           />
           <Tooltip
             contentStyle={CHART_TOOLTIP_CONTENT_STYLE}
             labelStyle={CHART_TOOLTIP_LABEL_STYLE}
             itemStyle={CHART_TOOLTIP_ITEM_STYLE}
             cursor={{ stroke: "var(--muted-foreground)", strokeOpacity: 0.3 }}
-            formatter={(value: number) => [`$${value.toFixed(2)}`, "Equity"]}
+            formatter={(value: number) => [`$${Number(value).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`, "Equity"]}
           />
           <ReferenceLine y={startingBalanceCents / 100} stroke="var(--muted-foreground)" strokeDasharray="3 3" strokeOpacity={0.4} />
           <Area
