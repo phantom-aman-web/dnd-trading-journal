@@ -1,5 +1,5 @@
 {
-  "timestamp": "2026-11-16T09:31:47.079Z",
+  "timestamp": "2026-11-16T09:40:40.911Z",
   "viewports": {
     "tablet": {
       "width": 768,
@@ -33,7 +33,7 @@
     },
     "tradesLog": {
       "hasTable": true,
-      "rowsCount": 22,
+      "rowsCount": 32,
       "hasNewEntryBtn": true
     },
     "tradeNew": {
@@ -57,11 +57,16 @@
       "hasTransferBtn": true
     },
     "preferences": {
-      "hasThemeCards": false,
+      "hasThemeCards": true,
       "hasInterfaceFontSelect": false,
       "hasDisplayFontSelect": false,
       "hasFinancialFontSelect": false,
       "hasTypographyLivePreview": false
+    },
+    "workspace": {
+      "hasResizePanels": true,
+      "hasAdaptiveWarning": false,
+      "panelsCount": 3
     },
     "landing": {
       "verified": true,

@@ -1,0 +1,36 @@
+{
+  "riskCalcAndAnalytics": {
+    "hasRiskCalcInputs": true,
+    "hasAnalyticsTabs": true,
+    "p1Width": 622,
+    "p2Width": 622
+  },
+  "tradesLogAndCalendar": {
+    "hasTradesTable": false,
+    "tradesRowCount": 0,
+    "hasCalendarMonth": true,
+    "p1Width": 622,
+    "p2Width": 622
+  },
+  "accountsAndCalendar": {
+    "hasAccountCards": true,
+    "hasCalendarCells": true,
+    "p1Width": 622,
+    "p2Width": 622
+  },
+  "threePanels": {
+    "panelsRendered": 3,
+    "panelWidths": [
+      373,
+      435,
+      435
+    ]
+  },
+  "twoAnalytics": {
+    "hasTwoPanels": true,
+    "p1Content": "Analytics Engine",
+    "p2Content": "Analytics Engine",
+    "p1Width": 622,
+    "p2Width": 622
+  }
+}

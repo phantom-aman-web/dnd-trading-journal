@@ -34,6 +34,9 @@ import {
   AlertTriangle,
   ShieldCheck,
   Sparkles,
+  History,
+  RotateCcw,
+  Trash2,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
@@ -198,6 +201,47 @@ export function BackupView() {
     issues: string[];
   } | null>(null);
   const [csvImportResult, setCsvImportResult] = useState<{ imported: number } | null>(null);
+
+  // Import History & Batches (spec §6.5.F, §6.5.G — batch tracking & safe rollback)
+  const { data: importHistoryData, refetch: refetchImports } = useQuery<{ items: any[] }>({
+    queryKey: ["imports-history"],
+    queryFn: async () => {
+      const res = await fetch("/api/imports");
+      if (!res.ok) return { items: [] };
+      return res.json();
+    },
+  });
+  const [rollingBackId, setRollingBackId] = useState<string | null>(null);
+
+  async function handleRollbackImport(importId: string, filename: string) {
+    if (!window.confirm(`Are you sure you want to rollback the import batch for "${filename}"?\n\nThis will safely remove ONLY the records created by this batch. Any manually recorded trades or subsequently modified/linked trades will remain protected.`)) {
+      return;
+    }
+    setRollingBackId(importId);
+    try {
+      const res = await fetch(`/api/imports/${importId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "rollback", confirmed: true, protectModified: true }),
+      });
+      if (!res.ok) throw new Error("Rollback failed");
+      const data = await res.json();
+      if (data.protectedCount > 0) {
+        toast.success(`Successfully rolled back ${data.rolledBackCount ?? 0} imported trades (${data.protectedCount} subsequently modified trades preserved).`);
+      } else {
+        toast.success(`Successfully rolled back ${data.rolledBackCount ?? 0} imported trades.`);
+      }
+      refetchImports();
+      qc.invalidateQueries({ queryKey: ["trades"] });
+      qc.invalidateQueries({ queryKey: ["analytics"] });
+      qc.invalidateQueries({ queryKey: ["dashboard"] });
+      qc.invalidateQueries({ queryKey: ["accounts"] });
+    } catch {
+      toast.error("Failed to rollback import batch.");
+    } finally {
+      setRollingBackId(null);
+    }
+  }
 
   // --- Export -------------------------------------------------------------
   async function handleExport() {
@@ -429,6 +473,7 @@ export function BackupView() {
       }
       setCsvImportResult(data);
       toast.success(`Successfully imported ${data.imported} trades into your trading journal!`);
+      refetchImports();
       qc.invalidateQueries({ queryKey: ["trades"] });
       qc.invalidateQueries({ queryKey: ["dashboard"] });
       qc.invalidateQueries({ queryKey: ["accounts"] });
@@ -954,6 +999,89 @@ export function BackupView() {
                       <span>Successfully imported {csvImportResult.imported} trades into your trading journal!</span>
                     </div>
                   )}
+                </div>
+              )}
+
+              {/* Import History & Batch Rollback (spec §6.5.F, §6.5.G) */}
+              {importHistoryData?.items && importHistoryData.items.length > 0 && (
+                <div className="pt-4 mt-4 border-t border-border space-y-2.5">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-semibold text-foreground flex items-center gap-1.5">
+                      <History className="h-3.5 w-3.5 text-primary" /> Import Batches &amp; Rollback History
+                    </span>
+                    <span className="text-[10px] text-muted-foreground">Batches can be individually rolled back safely</span>
+                  </div>
+
+                  <div className="space-y-2">
+                    {importHistoryData.items.map((batch: any) => {
+                      let summary: any = {};
+                      try { summary = JSON.parse(batch.summaryJson || "{}"); } catch {}
+                      const isImported = batch.status === "imported";
+                      const isRolledBack = batch.status === "rolled_back";
+
+                      return (
+                        <div
+                          key={batch.id}
+                          className="flex items-center justify-between gap-3 p-2.5 rounded-lg border border-border bg-muted/20 text-xs"
+                        >
+                          <div className="min-w-0">
+                            <div className="font-semibold text-foreground truncate">{batch.filename}</div>
+                            <div className="text-[10px] text-muted-foreground mt-0.5 flex items-center gap-2">
+                              <span>{new Date(batch.createdAt).toLocaleDateString()} {new Date(batch.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</span>
+                              <span>·</span>
+                              <span>{batch.rowCount} rows</span>
+                              {summary.imported != null && (
+                                <>
+                                  <span>·</span>
+                                  <span className="text-emerald-600 dark:text-emerald-400 font-medium">{summary.imported} imported</span>
+                                </>
+                              )}
+                              {summary.rolledBackCount != null && (
+                                <>
+                                  <span>·</span>
+                                  <span className="text-amber-600 dark:text-amber-400 font-medium">{summary.rolledBackCount} rolled back</span>
+                                </>
+                              )}
+                            </div>
+                          </div>
+
+                          <div className="flex items-center gap-2 shrink-0">
+                            <Badge
+                              variant="outline"
+                              className={cn(
+                                "text-[10px] font-mono capitalize",
+                                isImported
+                                  ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/30"
+                                  : isRolledBack
+                                    ? "bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/30"
+                                    : "bg-muted text-muted-foreground border-border"
+                              )}
+                            >
+                              {batch.status.replace(/_/g, " ")}
+                            </Badge>
+
+                            {isImported && (
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => handleRollbackImport(batch.id, batch.filename)}
+                                disabled={rollingBackId === batch.id}
+                                className="h-7 text-[11px] text-loss border-loss/30 hover:bg-loss/10 flex items-center gap-1"
+                                title="Safely remove records created by this batch"
+                              >
+                                {rollingBackId === batch.id ? (
+                                  <Loader2 className="h-3 w-3 animate-spin" />
+                                ) : (
+                                  <RotateCcw className="h-3 w-3" />
+                                )}
+                                Rollback Batch
+                              </Button>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
                 </div>
               )}
             </div>

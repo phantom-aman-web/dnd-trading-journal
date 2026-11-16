@@ -144,6 +144,7 @@ export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: strin
     }
     const rows = await db.importRow.findMany({ where: { importId: id, status: "valid" } });
 
+    const createdTradeIds: string[] = [];
     const imported = await db.$transaction(async (tx) => {
       let count = 0;
       for (const row of rows) {
@@ -208,7 +209,7 @@ export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: strin
           }
         }
 
-        await tx.trade.create({
+        const newTrade = await tx.trade.create({
           data: {
             userId: user.id,
             accountId: targetAccount.id,
@@ -251,16 +252,101 @@ export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: strin
             },
           },
         });
+        createdTradeIds.push(newTrade.id);
         await tx.importRow.update({ where: { id: row.id }, data: { status: "imported" } });
         count++;
       }
       return count;
     }, { timeout: 60000 });
 
-    await db.import.update({ where: { id }, data: { status: "imported", summaryJson: JSON.stringify({ imported }) } });
-    await audit("import.completed", "import", id, { imported });
-    return ok({ imported });
+    await db.import.update({
+      where: { id },
+      data: {
+        status: "imported",
+        summaryJson: JSON.stringify({
+          imported,
+          tradeIds: createdTradeIds,
+          importedAt: new Date().toISOString(),
+        }),
+      },
+    });
+    await audit("import.completed", "import", id, { imported, tradeCount: createdTradeIds.length });
+    return ok({ imported, tradeIds: createdTradeIds });
   }
+
+  if (body.action === "rollback") {
+    // Require explicit confirmation before executing batch rollback
+    if (body.confirmed !== true) {
+      return bad("Explicit confirmation is required to rollback an import batch.");
+    }
+
+    // Transactional, user-scoped rollback strictly restricted to verified records created by this batch
+    let rolledBackCount = 0;
+    let protectedCount = 0;
+    if (importRecord.summaryJson) {
+      try {
+        const summary = JSON.parse(importRecord.summaryJson);
+        if (Array.isArray(summary.tradeIds) && summary.tradeIds.length > 0) {
+          // Identify candidates strictly belonging to this user and batch
+          const candidateTrades = await db.trade.findMany({
+            where: { id: { in: summary.tradeIds }, userId: user.id },
+            select: { id: true, notes: true, lessons: true, strategyId: true, thesisJson: true, setupJson: true },
+          });
+
+          const tradesToDelete: string[] = [];
+          for (const t of candidateTrades) {
+            // Protect subsequently modified or linked trades unless user explicitly opted to include them
+            const isModified = Boolean(t.notes || t.lessons || t.strategyId || t.thesisJson || t.setupJson);
+            if (isModified && body.protectModified !== false) {
+              protectedCount++;
+            } else {
+              tradesToDelete.push(t.id);
+            }
+          }
+
+          if (tradesToDelete.length > 0) {
+            await db.$transaction(async (tx) => {
+              const delRes = await tx.trade.deleteMany({
+                where: { id: { in: tradesToDelete }, userId: user.id },
+              });
+              rolledBackCount = delRes.count;
+              await tx.import.update({
+                where: { id },
+                data: {
+                  status: tradesToDelete.length === candidateTrades.length ? "rolled_back" : "partially_rolled_back",
+                  summaryJson: JSON.stringify({
+                    ...summary,
+                    rolledBackCount,
+                    protectedCount,
+                    rolledBackAt: new Date().toISOString(),
+                    remainingTradeIds: summary.tradeIds.filter((tid: string) => !tradesToDelete.includes(tid)),
+                  }),
+                },
+              });
+            });
+          } else {
+            // All candidates were protected
+            await db.import.update({
+              where: { id },
+              data: {
+                summaryJson: JSON.stringify({
+                  ...summary,
+                  rolledBackCount: 0,
+                  protectedCount,
+                  rolledBackAt: new Date().toISOString(),
+                }),
+              },
+            });
+          }
+        }
+      } catch (err) {
+        console.error("Rollback error:", err);
+      }
+    }
+    await audit("import.rolled_back", "import", id, { rolledBackCount, protectedCount });
+    return ok({ ok: true, rolledBackCount, protectedCount });
+  }
+
   return bad("Unknown action");
 }
 
@@ -270,6 +356,42 @@ export async function DELETE(_req: NextRequest, ctx: { params: Promise<{ id: str
   const { id } = await ctx.params;
   const importRecord = await db.import.findFirst({ where: { id, userId: user.id } });
   if (!importRecord) return notFound("Import not found");
-  await db.import.delete({ where: { id } });
-  return ok({ ok: true });
+
+  // Rollback records created by this batch transactionally before deleting the import metadata
+  let rolledBackCount = 0;
+  let protectedCount = 0;
+  if (importRecord.summaryJson) {
+    try {
+      const summary = JSON.parse(importRecord.summaryJson);
+      if (Array.isArray(summary.tradeIds) && summary.tradeIds.length > 0) {
+        const candidateTrades = await db.trade.findMany({
+          where: { id: { in: summary.tradeIds }, userId: user.id },
+          select: { id: true, notes: true, lessons: true, strategyId: true, thesisJson: true, setupJson: true },
+        });
+        const tradesToDelete = candidateTrades
+          .filter((t) => !(t.notes || t.lessons || t.strategyId || t.thesisJson || t.setupJson))
+          .map((t) => t.id);
+        protectedCount = candidateTrades.length - tradesToDelete.length;
+
+        await db.$transaction(async (tx) => {
+          if (tradesToDelete.length > 0) {
+            const delRes = await tx.trade.deleteMany({
+              where: { id: { in: tradesToDelete }, userId: user.id },
+            });
+            rolledBackCount = delRes.count;
+          }
+          await tx.import.delete({ where: { id } });
+        });
+      } else {
+        await db.import.delete({ where: { id } });
+      }
+    } catch {
+      await db.import.delete({ where: { id } });
+    }
+  } else {
+    await db.import.delete({ where: { id } });
+  }
+
+  await audit("import.deleted", "import", id, { rolledBackCount, protectedCount });
+  return ok({ ok: true, rolledBackCount, protectedCount });
 }

@@ -253,7 +253,8 @@ export function setReducedMotion(on: boolean) {
   notifyPrefs();
 }
 
-if (typeof window !== "undefined") {
+// Test & development instrumentation — strictly gated to non-production environments
+if (typeof window !== "undefined" && process.env.NODE_ENV !== "production") {
   (window as any).__themeControl = {
     setTheme,
     setDensity,

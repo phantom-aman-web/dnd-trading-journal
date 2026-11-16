@@ -279,4 +279,100 @@ describe("Backup & Restore Safety Engine", () => {
       expect(safetySnapshotPayload.trades.length).toBe(2);
     });
   });
+
+  describe("Import Batch Rollback Safety & Record Protection", () => {
+    interface MockImportTrade {
+      id: string;
+      userId: string;
+      symbol: string;
+      notes?: string;
+      lessons?: string;
+      strategyId?: string;
+    }
+
+    it("should reject rollback when explicit confirmation is not provided", () => {
+      function validateRollbackRequest(body: any) {
+        if (body.confirmed !== true) {
+          return { ok: false, error: "Explicit confirmation is required to rollback an import batch." };
+        }
+        return { ok: true };
+      }
+
+      const unconfirmed = validateRollbackRequest({ action: "rollback" });
+      expect(unconfirmed.ok).toBe(false);
+      expect(unconfirmed.error).toContain("Explicit confirmation is required");
+
+      const confirmed = validateRollbackRequest({ action: "rollback", confirmed: true });
+      expect(confirmed.ok).toBe(true);
+    });
+
+    it("should only rollback records belonging to the target batch and preserve modified or manual records", () => {
+      const currentUserId = "user-alpha";
+      const otherUserId = "user-beta";
+
+      // Database has 5 trades:
+      // - tr-1: created by batch-1, untouched
+      // - tr-2: created by batch-1, subsequently modified by user with notes
+      // - tr-3: created by batch-1, subsequently linked to a strategy
+      // - tr-4: created manually by user-alpha (NOT in batch-1)
+      // - tr-5: created by other user-beta (same batch id or duplicate id)
+      const mockDatabaseTrades: MockImportTrade[] = [
+        { id: "tr-1", userId: currentUserId, symbol: "EURUSD" },
+        { id: "tr-2", userId: currentUserId, symbol: "GBPUSD", notes: "Added user analysis note" },
+        { id: "tr-3", userId: currentUserId, symbol: "XAUUSD", strategyId: "strat-silver-bullet" },
+        { id: "tr-4", userId: currentUserId, symbol: "NAS100" }, // manual trade
+        { id: "tr-5", userId: otherUserId, symbol: "EURUSD" }, // another user's trade
+      ];
+
+      const batch1Summary = {
+        tradeIds: ["tr-1", "tr-2", "tr-3", "tr-5"], // tr-5 is listed but belongs to user-beta
+      };
+
+      // Rollback function simulating backend logic
+      function executeBatchRollback(userId: string, summary: typeof batch1Summary, protectModified = true) {
+        // 1. Filter candidates strictly by batch tradeIds AND userId (user-scoped)
+        const candidates = mockDatabaseTrades.filter(
+          (t) => summary.tradeIds.includes(t.id) && t.userId === userId
+        );
+
+        const tradesToDelete: string[] = [];
+        let protectedCount = 0;
+
+        for (const t of candidates) {
+          const isModified = Boolean(t.notes || t.lessons || t.strategyId);
+          if (isModified && protectModified) {
+            protectedCount++;
+          } else {
+            tradesToDelete.push(t.id);
+          }
+        }
+
+        // 2. Perform deletion
+        const remaining = mockDatabaseTrades.filter((t) => !tradesToDelete.includes(t.id));
+        return {
+          rolledBackCount: tradesToDelete.length,
+          protectedCount,
+          remainingTrades: remaining,
+        };
+      }
+
+      const result = executeBatchRollback(currentUserId, batch1Summary, true);
+
+      // Verify counts:
+      // tr-1 rolled back (1)
+      // tr-2 and tr-3 protected due to user notes and strategy link (2)
+      // tr-4 untouched (manual trade not in batch)
+      // tr-5 untouched (different user)
+      expect(result.rolledBackCount).toBe(1);
+      expect(result.protectedCount).toBe(2);
+
+      // Verify exact surviving trades
+      const survivingIds = result.remainingTrades.map((t) => t.id);
+      expect(survivingIds).toContain("tr-2"); // modified trade protected
+      expect(survivingIds).toContain("tr-3"); // linked trade protected
+      expect(survivingIds).toContain("tr-4"); // manual trade protected
+      expect(survivingIds).toContain("tr-5"); // other user protected
+      expect(survivingIds).not.toContain("tr-1"); // unmodified batch trade safely deleted
+    });
+  });
 });

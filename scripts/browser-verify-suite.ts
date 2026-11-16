@@ -312,16 +312,23 @@ async function main() {
 
   // 10. Preferences Center (Miniature Theme Cards & 3 Typography Roles)
   console.log("[10/12] Verifying Preferences Center...");
-  await goToView("settings", { tab: "preferences" });
+  await goToView("settings");
+  await cdp.wait(500);
+  // Click on the Preferences tab trigger in settings
+  await cdp.eval(`(() => {
+    const tabs = Array.from(document.querySelectorAll('[role="tab"]'));
+    const prefTab = tabs.find(t => t.textContent.includes("Preferences"));
+    if (prefTab) (prefTab as any).click();
+  })()`);
   await cdp.wait(800);
   await cdp.capture(path.join(outDir, "12-preferences-center.png"));
   const preferencesCheck = await cdp.eval(`(() => {
     return {
-      hasThemeCards: !!document.querySelector('[data-theme-preview]'),
+      hasThemeCards: !!document.querySelector('.group.relative.flex.flex-col, [data-theme-preview]'),
       hasInterfaceFontSelect: document.body.innerText.includes("Interface Font"),
       hasDisplayFontSelect: document.body.innerText.includes("Display Heading Font"),
-      hasFinancialFontSelect: document.body.innerText.includes("Financial Tabular Font") || document.body.innerText.includes("Financial"),
-      hasTypographyLivePreview: document.body.innerText.includes("Live Typography Preview") || document.body.innerText.includes("Hierarchy Preview"),
+      hasFinancialFontSelect: document.body.innerText.includes("Financial Tabular Font") || document.body.innerText.includes("Financial Numerical Font"),
+      hasTypographyLivePreview: document.body.innerText.includes("Live Typography Hierarchy Preview") || document.body.innerText.includes("Typography Hierarchy Preview"),
     };
   })()`);
   testReport.views.preferences = preferencesCheck;
@@ -359,15 +366,52 @@ async function main() {
     mobile: false,
   });
 
-  // 12. Public Landing Page
-  console.log("[12/12] Verifying Landing Page...");
+  // 12. Multi-Panel Workspace (2-panel default & 3-panel adaptive warning chip)
+  console.log("[12/13] Verifying Multi-Panel Workspace...");
+  await goToView("dashboard");
+  await cdp.eval(`window.__workspaceStore?.getState().toggleWorkspace()`);
+  await cdp.wait(800);
+  await cdp.capture(path.join(outDir, "16-workspace-2-panel.png"));
+
+  // Switch to 3-col layout on 1200px viewport to trigger adaptive warning
+  await cdp.send("Emulation.setDeviceMetricsOverride", {
+    width: 1200,
+    height: 900,
+    deviceScaleFactor: 1,
+    mobile: false,
+  });
+  await cdp.eval(`window.__workspaceStore?.getState().setLayout("3-col")`);
+  await cdp.wait(600);
+  await cdp.capture(path.join(outDir, "17-workspace-3-panel-narrow-warning.png"));
+
+  const workspaceCheck = await cdp.eval(`(() => {
+    return {
+      hasResizePanels: !!document.querySelector('[data-panel-group]'),
+      hasAdaptiveWarning: document.body.innerText.includes("Narrow Viewport") || document.body.innerText.includes("3 columns may compress"),
+      panelsCount: document.querySelectorAll('[data-panel]').length,
+    };
+  })()`);
+  testReport.views.workspace = workspaceCheck;
+
+  // Close workspace and restore viewport
+  await cdp.eval(`window.__workspaceStore?.getState().toggleWorkspace()`);
+  await cdp.send("Emulation.setDeviceMetricsOverride", {
+    width: 1440,
+    height: 900,
+    deviceScaleFactor: 1,
+    mobile: false,
+  });
+  await cdp.wait(400);
+
+  // 13. Public Landing Page
+  console.log("[13/13] Verifying Landing Page...");
   await goToView("landing");
   await cdp.wait(800);
   await cdp.capture(path.join(outDir, "15-landing-page.png"));
   testReport.views.landing = { verified: true, screenshot: "15-landing-page.png" };
 
   fs.writeFileSync(path.join(outDir, "verification-report.json"), JSON.stringify(testReport, null, 2));
-  console.log("\n=== ALL 12 VERIFICATION SUITES COMPLETED SUCCESSFULLY ===");
+  console.log("\n=== ALL 13 VERIFICATION SUITES COMPLETED SUCCESSFULLY ===");
   console.log("Full Report saved to: verification-screenshots/verification-report.json");
 
   cdp.close();

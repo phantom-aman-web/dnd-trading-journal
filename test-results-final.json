@@ -1,0 +1,187 @@
+{
+  "timestamp": "2026-11-16T10:43:17.681Z",
+  "totalSuites": 22,
+  "passedSuites": 22,
+  "failedSuites": 0,
+  "totalPass": 258,
+  "totalFail": 0,
+  "totalExpect": 1236,
+  "suites": [
+    {
+      "file": "src/lib/backup-safety.test.ts",
+      "pass": true,
+      "passCount": 8,
+      "failCount": 0,
+      "expectCount": 29,
+      "durationMs": 93
+    },
+    {
+      "file": "src/lib/broker-csv-mappings.test.ts",
+      "pass": true,
+      "passCount": 35,
+      "failCount": 0,
+      "expectCount": 146,
+      "durationMs": 127
+    },
+    {
+      "file": "src/lib/checklist-adherence.test.ts",
+      "pass": true,
+      "passCount": 5,
+      "failCount": 0,
+      "expectCount": 34,
+      "durationMs": 119
+    },
+    {
+      "file": "src/lib/duration-analytics.test.ts",
+      "pass": true,
+      "passCount": 5,
+      "failCount": 0,
+      "expectCount": 29,
+      "durationMs": 364
+    },
+    {
+      "file": "src/lib/filter-presets.test.ts",
+      "pass": true,
+      "passCount": 4,
+      "failCount": 0,
+      "expectCount": 16,
+      "durationMs": 60
+    },
+    {
+      "file": "src/lib/financial-engine.test.ts",
+      "pass": true,
+      "passCount": 60,
+      "failCount": 0,
+      "expectCount": 135,
+      "durationMs": 114
+    },
+    {
+      "file": "src/lib/global-search-domains.test.ts",
+      "pass": true,
+      "passCount": 9,
+      "failCount": 0,
+      "expectCount": 28,
+      "durationMs": 81
+    },
+    {
+      "file": "src/lib/instrument-catalog.test.ts",
+      "pass": true,
+      "passCount": 10,
+      "failCount": 0,
+      "expectCount": 87,
+      "durationMs": 125
+    },
+    {
+      "file": "src/lib/multi-user-isolation.test.ts",
+      "pass": true,
+      "passCount": 2,
+      "failCount": 0,
+      "expectCount": 13,
+      "durationMs": 25060
+    },
+    {
+      "file": "src/lib/phase1-4-acceptance-deep.test.ts",
+      "pass": true,
+      "passCount": 11,
+      "failCount": 0,
+      "expectCount": 51,
+      "durationMs": 80
+    },
+    {
+      "file": "src/lib/phase1-hardening.test.ts",
+      "pass": true,
+      "passCount": 12,
+      "failCount": 0,
+      "expectCount": 57,
+      "durationMs": 77
+    },
+    {
+      "file": "src/lib/phase2-workflow.test.ts",
+      "pass": true,
+      "passCount": 17,
+      "failCount": 0,
+      "expectCount": 85,
+      "durationMs": 80
+    },
+    {
+      "file": "src/lib/phase3-analytics.test.ts",
+      "pass": true,
+      "passCount": 10,
+      "failCount": 0,
+      "expectCount": 153,
+      "durationMs": 96
+    },
+    {
+      "file": "src/lib/phase4-secondary-workflows.test.ts",
+      "pass": true,
+      "passCount": 12,
+      "failCount": 0,
+      "expectCount": 51,
+      "durationMs": 131
+    },
+    {
+      "file": "src/lib/phase5-workspace-widgets.test.ts",
+      "pass": true,
+      "passCount": 10,
+      "failCount": 0,
+      "expectCount": 128,
+      "durationMs": 150
+    },
+    {
+      "file": "src/lib/population.test.ts",
+      "pass": true,
+      "passCount": 12,
+      "failCount": 0,
+      "expectCount": 49,
+      "durationMs": 118
+    },
+    {
+      "file": "src/lib/prop-firm-engine.test.ts",
+      "pass": true,
+      "passCount": 8,
+      "failCount": 0,
+      "expectCount": 30,
+      "durationMs": 136
+    },
+    {
+      "file": "src/lib/strategy-comparison.test.ts",
+      "pass": true,
+      "passCount": 5,
+      "failCount": 0,
+      "expectCount": 22,
+      "durationMs": 55
+    },
+    {
+      "file": "src/lib/strategy-management.test.ts",
+      "pass": true,
+      "passCount": 4,
+      "failCount": 0,
+      "expectCount": 24,
+      "durationMs": 62
+    },
+    {
+      "file": "src/lib/trade-idempotency.test.ts",
+      "pass": true,
+      "passCount": 8,
+      "failCount": 0,
+      "expectCount": 30,
+      "durationMs": 106331
+    },
+    {
+      "file": "src/lib/trades-filtering.test.ts",
+      "pass": true,
+      "passCount": 6,
+      "failCount": 0,
+      "expectCount": 13,
+      "durationMs": 154
+    },
+    {
+      "file": "src/lib/trades-pagination-search.test.ts",
+      "pass": true,
+      "passCount": 5,
+      "failCount": 0,
+      "expectCount": 26,
+      "durationMs": 150
+    }
+  ]
+}

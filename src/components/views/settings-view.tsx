@@ -136,9 +136,9 @@ export function SettingsView() {
   const qc = useQueryClient();
   const { params } = useNav();
   const initialTab =
-    params.tab === "appearance" || params.tab === "preferences"
+    params.tab === "appearance" || params.tab === "preferences" || !params.tab
       ? "preferences"
-      : params.tab || "profile";
+      : params.tab;
   const [activeTab, setActiveTab] = useState<string>(initialTab);
 
   useEffect(() => {
@@ -148,6 +148,8 @@ export function SettingsView() {
           ? "preferences"
           : params.tab
       );
+    } else {
+      setActiveTab("preferences");
     }
   }, [params.tab]);
 
