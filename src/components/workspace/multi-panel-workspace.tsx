@@ -461,12 +461,16 @@ function PanelContentRenderer({ panel }: { panel: WorkspacePanel }) {
     case "tradeDetail":
       if (!tradeId) {
         return (
-          <div className="p-8 text-center text-xs text-muted-foreground space-y-2">
-            <Link2 className="h-6 w-6 mx-auto text-muted-foreground/60" />
-            <div className="font-semibold text-foreground">No Trade Selected</div>
-            <p className="max-w-xs mx-auto text-[11px] leading-relaxed">
-              Click on any trade in the Trades Log panel to inspect its execution and metrics here.
-            </p>
+          <div className="flex flex-col items-center justify-center p-8 text-center text-xs text-muted-foreground space-y-3 min-h-[240px]">
+            <div className="h-10 w-10 rounded-full bg-muted/60 flex items-center justify-center text-muted-foreground/70 border border-border">
+              <Link2 className="h-5 w-5" />
+            </div>
+            <div className="space-y-1">
+              <div className="font-semibold text-foreground text-sm">No Trade Selected</div>
+              <p className="max-w-xs mx-auto text-xs leading-relaxed text-muted-foreground">
+                Select any trade in the Trades Log panel to inspect its execution details, thesis, and metrics here.
+              </p>
+            </div>
           </div>
         );
       }

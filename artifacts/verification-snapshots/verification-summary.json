@@ -1,0 +1,896 @@
+{
+  "timestamp": "2026-11-17T05:27:31.668Z",
+  "desktop": {
+    "desktop_1280": {
+      "dashboard": {
+        "fileName": "desktop_dashboard_1280.png",
+        "metrics": {
+          "scrollWidth": 1280,
+          "clientWidth": 1280,
+          "hasHorizontalOverflow": false
+        },
+        "desktopChecks": {
+          "sidebarVisible": true,
+          "bottomNavHidden": true,
+          "drawerHidden": true
+        }
+      },
+      "tradesLog": {
+        "fileName": "desktop_trades_log_1280.png",
+        "metrics": {
+          "scrollWidth": 1280,
+          "clientWidth": 1280,
+          "hasHorizontalOverflow": false
+        }
+      },
+      "analytics": {
+        "fileName": "desktop_analytics_1280.png",
+        "metrics": {
+          "scrollWidth": 1280,
+          "clientWidth": 1280,
+          "hasHorizontalOverflow": false
+        }
+      },
+      "workspace": {
+        "fileName": "desktop_workspace_1280.png",
+        "metrics": {
+          "scrollWidth": 1280,
+          "clientWidth": 1280,
+          "hasHorizontalOverflow": false
+        }
+      }
+    },
+    "desktop_1440": {
+      "dashboard": {
+        "fileName": "desktop_dashboard_1440.png",
+        "metrics": {
+          "scrollWidth": 1440,
+          "clientWidth": 1440,
+          "hasHorizontalOverflow": false
+        },
+        "desktopChecks": {
+          "sidebarVisible": true,
+          "bottomNavHidden": true,
+          "drawerHidden": true
+        }
+      },
+      "tradesLog": {
+        "fileName": "desktop_trades_log_1440.png",
+        "metrics": {
+          "scrollWidth": 1440,
+          "clientWidth": 1440,
+          "hasHorizontalOverflow": false
+        }
+      },
+      "analytics": {
+        "fileName": "desktop_analytics_1440.png",
+        "metrics": {
+          "scrollWidth": 1440,
+          "clientWidth": 1440,
+          "hasHorizontalOverflow": false
+        }
+      },
+      "workspace": {
+        "fileName": "desktop_workspace_1440.png",
+        "metrics": {
+          "scrollWidth": 1440,
+          "clientWidth": 1440,
+          "hasHorizontalOverflow": false
+        }
+      }
+    },
+    "desktop_1886": {
+      "dashboard": {
+        "fileName": "desktop_dashboard_1886.png",
+        "metrics": {
+          "scrollWidth": 1886,
+          "clientWidth": 1886,
+          "hasHorizontalOverflow": false
+        },
+        "desktopChecks": {
+          "sidebarVisible": true,
+          "bottomNavHidden": true,
+          "drawerHidden": true
+        }
+      },
+      "tradesLog": {
+        "fileName": "desktop_trades_log_1886.png",
+        "metrics": {
+          "scrollWidth": 1886,
+          "clientWidth": 1886,
+          "hasHorizontalOverflow": false
+        }
+      },
+      "analytics": {
+        "fileName": "desktop_analytics_1886.png",
+        "metrics": {
+          "scrollWidth": 1886,
+          "clientWidth": 1886,
+          "hasHorizontalOverflow": false
+        }
+      },
+      "workspace": {
+        "fileName": "desktop_workspace_1886.png",
+        "metrics": {
+          "scrollWidth": 1886,
+          "clientWidth": 1886,
+          "hasHorizontalOverflow": false
+        }
+      }
+    }
+  },
+  "mobile": {
+    "mobile_320": {
+      "dashboard": {
+        "fileName": "mobile_dashboard_320.png",
+        "metrics": {
+          "scrollWidth": 320,
+          "clientWidth": 320,
+          "hasHorizontalOverflow": false
+        }
+      },
+      "tradesLog": {
+        "fileName": "mobile_trades_log_320.png",
+        "metrics": {
+          "scrollWidth": 320,
+          "clientWidth": 320,
+          "hasHorizontalOverflow": false
+        }
+      },
+      "calendar": {
+        "fileName": "mobile_calendar_320.png",
+        "metrics": {
+          "scrollWidth": 320,
+          "clientWidth": 320,
+          "hasHorizontalOverflow": false
+        }
+      },
+      "analytics": {
+        "fileName": "mobile_analytics_320.png",
+        "metrics": {
+          "scrollWidth": 320,
+          "clientWidth": 320,
+          "hasHorizontalOverflow": false
+        }
+      },
+      "riskCalculator": {
+        "fileName": "mobile_risk_calculator_320.png",
+        "metrics": {
+          "scrollWidth": 320,
+          "clientWidth": 320,
+          "hasHorizontalOverflow": false
+        }
+      },
+      "tradingTodo": {
+        "fileName": "mobile_trading_todo_320.png",
+        "metrics": {
+          "scrollWidth": 320,
+          "clientWidth": 320,
+          "hasHorizontalOverflow": false
+        }
+      },
+      "settings": {
+        "fileName": "mobile_settings_menu_320.png",
+        "metrics": {
+          "scrollWidth": 320,
+          "clientWidth": 320,
+          "hasHorizontalOverflow": false
+        }
+      },
+      "profile": {
+        "fileName": "mobile_profile_tab_320.png",
+        "metrics": {
+          "scrollWidth": 320,
+          "clientWidth": 320,
+          "hasHorizontalOverflow": false
+        }
+      },
+      "accounts": {
+        "fileName": "mobile_accounts_320.png",
+        "metrics": {
+          "scrollWidth": 320,
+          "clientWidth": 320,
+          "hasHorizontalOverflow": false
+        }
+      },
+      "propChallenges": {
+        "fileName": "mobile_prop_challenges_320.png",
+        "metrics": {
+          "scrollWidth": 320,
+          "clientWidth": 320,
+          "hasHorizontalOverflow": false
+        }
+      },
+      "tradeNew": {
+        "fileName": "mobile_trade_wizard_320.png",
+        "metrics": {
+          "scrollWidth": 320,
+          "clientWidth": 320,
+          "hasHorizontalOverflow": false
+        }
+      }
+    },
+    "mobile_360": {
+      "dashboard": {
+        "fileName": "mobile_dashboard_360.png",
+        "metrics": {
+          "scrollWidth": 360,
+          "clientWidth": 360,
+          "hasHorizontalOverflow": false
+        }
+      },
+      "tradesLog": {
+        "fileName": "mobile_trades_log_360.png",
+        "metrics": {
+          "scrollWidth": 360,
+          "clientWidth": 360,
+          "hasHorizontalOverflow": false
+        }
+      },
+      "calendar": {
+        "fileName": "mobile_calendar_360.png",
+        "metrics": {
+          "scrollWidth": 360,
+          "clientWidth": 360,
+          "hasHorizontalOverflow": false
+        }
+      },
+      "analytics": {
+        "fileName": "mobile_analytics_360.png",
+        "metrics": {
+          "scrollWidth": 360,
+          "clientWidth": 360,
+          "hasHorizontalOverflow": false
+        }
+      },
+      "riskCalculator": {
+        "fileName": "mobile_risk_calculator_360.png",
+        "metrics": {
+          "scrollWidth": 360,
+          "clientWidth": 360,
+          "hasHorizontalOverflow": false
+        }
+      },
+      "tradingTodo": {
+        "fileName": "mobile_trading_todo_360.png",
+        "metrics": {
+          "scrollWidth": 360,
+          "clientWidth": 360,
+          "hasHorizontalOverflow": false
+        }
+      },
+      "settings": {
+        "fileName": "mobile_settings_menu_360.png",
+        "metrics": {
+          "scrollWidth": 360,
+          "clientWidth": 360,
+          "hasHorizontalOverflow": false
+        }
+      },
+      "profile": {
+        "fileName": "mobile_profile_tab_360.png",
+        "metrics": {
+          "scrollWidth": 360,
+          "clientWidth": 360,
+          "hasHorizontalOverflow": false
+        }
+      },
+      "accounts": {
+        "fileName": "mobile_accounts_360.png",
+        "metrics": {
+          "scrollWidth": 360,
+          "clientWidth": 360,
+          "hasHorizontalOverflow": false
+        }
+      },
+      "propChallenges": {
+        "fileName": "mobile_prop_challenges_360.png",
+        "metrics": {
+          "scrollWidth": 360,
+          "clientWidth": 360,
+          "hasHorizontalOverflow": false
+        }
+      },
+      "tradeNew": {
+        "fileName": "mobile_trade_wizard_360.png",
+        "metrics": {
+          "scrollWidth": 360,
+          "clientWidth": 360,
+          "hasHorizontalOverflow": false
+        }
+      }
+    },
+    "mobile_375": {
+      "dashboard": {
+        "fileName": "mobile_dashboard_375.png",
+        "metrics": {
+          "scrollWidth": 375,
+          "clientWidth": 375,
+          "hasHorizontalOverflow": false
+        }
+      },
+      "tradesLog": {
+        "fileName": "mobile_trades_log_375.png",
+        "metrics": {
+          "scrollWidth": 375,
+          "clientWidth": 375,
+          "hasHorizontalOverflow": false
+        }
+      },
+      "calendar": {
+        "fileName": "mobile_calendar_375.png",
+        "metrics": {
+          "scrollWidth": 375,
+          "clientWidth": 375,
+          "hasHorizontalOverflow": false
+        }
+      },
+      "analytics": {
+        "fileName": "mobile_analytics_375.png",
+        "metrics": {
+          "scrollWidth": 375,
+          "clientWidth": 375,
+          "hasHorizontalOverflow": false
+        }
+      },
+      "riskCalculator": {
+        "fileName": "mobile_risk_calculator_375.png",
+        "metrics": {
+          "scrollWidth": 375,
+          "clientWidth": 375,
+          "hasHorizontalOverflow": false
+        }
+      },
+      "tradingTodo": {
+        "fileName": "mobile_trading_todo_375.png",
+        "metrics": {
+          "scrollWidth": 375,
+          "clientWidth": 375,
+          "hasHorizontalOverflow": false
+        }
+      },
+      "settings": {
+        "fileName": "mobile_settings_menu_375.png",
+        "metrics": {
+          "scrollWidth": 375,
+          "clientWidth": 375,
+          "hasHorizontalOverflow": false
+        }
+      },
+      "profile": {
+        "fileName": "mobile_profile_tab_375.png",
+        "metrics": {
+          "scrollWidth": 375,
+          "clientWidth": 375,
+          "hasHorizontalOverflow": false
+        }
+      },
+      "accounts": {
+        "fileName": "mobile_accounts_375.png",
+        "metrics": {
+          "scrollWidth": 375,
+          "clientWidth": 375,
+          "hasHorizontalOverflow": false
+        }
+      },
+      "propChallenges": {
+        "fileName": "mobile_prop_challenges_375.png",
+        "metrics": {
+          "scrollWidth": 375,
+          "clientWidth": 375,
+          "hasHorizontalOverflow": false
+        }
+      },
+      "tradeNew": {
+        "fileName": "mobile_trade_wizard_375.png",
+        "metrics": {
+          "scrollWidth": 375,
+          "clientWidth": 375,
+          "hasHorizontalOverflow": false
+        }
+      }
+    },
+    "mobile_390": {
+      "dashboard": {
+        "fileName": "mobile_dashboard_390.png",
+        "metrics": {
+          "scrollWidth": 390,
+          "clientWidth": 390,
+          "hasHorizontalOverflow": false
+        }
+      },
+      "tradesLog": {
+        "fileName": "mobile_trades_log_390.png",
+        "metrics": {
+          "scrollWidth": 390,
+          "clientWidth": 390,
+          "hasHorizontalOverflow": false
+        }
+      },
+      "calendar": {
+        "fileName": "mobile_calendar_390.png",
+        "metrics": {
+          "scrollWidth": 390,
+          "clientWidth": 390,
+          "hasHorizontalOverflow": false
+        }
+      },
+      "analytics": {
+        "fileName": "mobile_analytics_390.png",
+        "metrics": {
+          "scrollWidth": 390,
+          "clientWidth": 390,
+          "hasHorizontalOverflow": false
+        }
+      },
+      "riskCalculator": {
+        "fileName": "mobile_risk_calculator_390.png",
+        "metrics": {
+          "scrollWidth": 390,
+          "clientWidth": 390,
+          "hasHorizontalOverflow": false
+        }
+      },
+      "tradingTodo": {
+        "fileName": "mobile_trading_todo_390.png",
+        "metrics": {
+          "scrollWidth": 390,
+          "clientWidth": 390,
+          "hasHorizontalOverflow": false
+        }
+      },
+      "settings": {
+        "fileName": "mobile_settings_menu_390.png",
+        "metrics": {
+          "scrollWidth": 390,
+          "clientWidth": 390,
+          "hasHorizontalOverflow": false
+        }
+      },
+      "profile": {
+        "fileName": "mobile_profile_tab_390.png",
+        "metrics": {
+          "scrollWidth": 390,
+          "clientWidth": 390,
+          "hasHorizontalOverflow": false
+        }
+      },
+      "accounts": {
+        "fileName": "mobile_accounts_390.png",
+        "metrics": {
+          "scrollWidth": 390,
+          "clientWidth": 390,
+          "hasHorizontalOverflow": false
+        }
+      },
+      "propChallenges": {
+        "fileName": "mobile_prop_challenges_390.png",
+        "metrics": {
+          "scrollWidth": 390,
+          "clientWidth": 390,
+          "hasHorizontalOverflow": false
+        }
+      },
+      "tradeNew": {
+        "fileName": "mobile_trade_wizard_390.png",
+        "metrics": {
+          "scrollWidth": 390,
+          "clientWidth": 390,
+          "hasHorizontalOverflow": false
+        }
+      }
+    },
+    "mobile_414": {
+      "dashboard": {
+        "fileName": "mobile_dashboard_414.png",
+        "metrics": {
+          "scrollWidth": 414,
+          "clientWidth": 414,
+          "hasHorizontalOverflow": false
+        }
+      },
+      "tradesLog": {
+        "fileName": "mobile_trades_log_414.png",
+        "metrics": {
+          "scrollWidth": 414,
+          "clientWidth": 414,
+          "hasHorizontalOverflow": false
+        }
+      },
+      "calendar": {
+        "fileName": "mobile_calendar_414.png",
+        "metrics": {
+          "scrollWidth": 414,
+          "clientWidth": 414,
+          "hasHorizontalOverflow": false
+        }
+      },
+      "analytics": {
+        "fileName": "mobile_analytics_414.png",
+        "metrics": {
+          "scrollWidth": 414,
+          "clientWidth": 414,
+          "hasHorizontalOverflow": false
+        }
+      },
+      "riskCalculator": {
+        "fileName": "mobile_risk_calculator_414.png",
+        "metrics": {
+          "scrollWidth": 414,
+          "clientWidth": 414,
+          "hasHorizontalOverflow": false
+        }
+      },
+      "tradingTodo": {
+        "fileName": "mobile_trading_todo_414.png",
+        "metrics": {
+          "scrollWidth": 414,
+          "clientWidth": 414,
+          "hasHorizontalOverflow": false
+        }
+      },
+      "settings": {
+        "fileName": "mobile_settings_menu_414.png",
+        "metrics": {
+          "scrollWidth": 414,
+          "clientWidth": 414,
+          "hasHorizontalOverflow": false
+        }
+      },
+      "profile": {
+        "fileName": "mobile_profile_tab_414.png",
+        "metrics": {
+          "scrollWidth": 414,
+          "clientWidth": 414,
+          "hasHorizontalOverflow": false
+        }
+      },
+      "accounts": {
+        "fileName": "mobile_accounts_414.png",
+        "metrics": {
+          "scrollWidth": 414,
+          "clientWidth": 414,
+          "hasHorizontalOverflow": false
+        }
+      },
+      "propChallenges": {
+        "fileName": "mobile_prop_challenges_414.png",
+        "metrics": {
+          "scrollWidth": 414,
+          "clientWidth": 414,
+          "hasHorizontalOverflow": false
+        }
+      },
+      "tradeNew": {
+        "fileName": "mobile_trade_wizard_414.png",
+        "metrics": {
+          "scrollWidth": 414,
+          "clientWidth": 414,
+          "hasHorizontalOverflow": false
+        }
+      }
+    },
+    "mobile_430": {
+      "dashboard": {
+        "fileName": "mobile_dashboard_430.png",
+        "metrics": {
+          "scrollWidth": 430,
+          "clientWidth": 430,
+          "hasHorizontalOverflow": false
+        }
+      },
+      "tradesLog": {
+        "fileName": "mobile_trades_log_430.png",
+        "metrics": {
+          "scrollWidth": 430,
+          "clientWidth": 430,
+          "hasHorizontalOverflow": false
+        }
+      },
+      "calendar": {
+        "fileName": "mobile_calendar_430.png",
+        "metrics": {
+          "scrollWidth": 430,
+          "clientWidth": 430,
+          "hasHorizontalOverflow": false
+        }
+      },
+      "analytics": {
+        "fileName": "mobile_analytics_430.png",
+        "metrics": {
+          "scrollWidth": 430,
+          "clientWidth": 430,
+          "hasHorizontalOverflow": false
+        }
+      },
+      "riskCalculator": {
+        "fileName": "mobile_risk_calculator_430.png",
+        "metrics": {
+          "scrollWidth": 430,
+          "clientWidth": 430,
+          "hasHorizontalOverflow": false
+        }
+      },
+      "tradingTodo": {
+        "fileName": "mobile_trading_todo_430.png",
+        "metrics": {
+          "scrollWidth": 430,
+          "clientWidth": 430,
+          "hasHorizontalOverflow": false
+        }
+      },
+      "settings": {
+        "fileName": "mobile_settings_menu_430.png",
+        "metrics": {
+          "scrollWidth": 430,
+          "clientWidth": 430,
+          "hasHorizontalOverflow": false
+        }
+      },
+      "profile": {
+        "fileName": "mobile_profile_tab_430.png",
+        "metrics": {
+          "scrollWidth": 430,
+          "clientWidth": 430,
+          "hasHorizontalOverflow": false
+        }
+      },
+      "accounts": {
+        "fileName": "mobile_accounts_430.png",
+        "metrics": {
+          "scrollWidth": 430,
+          "clientWidth": 430,
+          "hasHorizontalOverflow": false
+        }
+      },
+      "propChallenges": {
+        "fileName": "mobile_prop_challenges_430.png",
+        "metrics": {
+          "scrollWidth": 430,
+          "clientWidth": 430,
+          "hasHorizontalOverflow": false
+        }
+      },
+      "tradeNew": {
+        "fileName": "mobile_trade_wizard_430.png",
+        "metrics": {
+          "scrollWidth": 430,
+          "clientWidth": 430,
+          "hasHorizontalOverflow": false
+        }
+      }
+    },
+    "mobile_488": {
+      "dashboard": {
+        "fileName": "mobile_dashboard_488.png",
+        "metrics": {
+          "scrollWidth": 488,
+          "clientWidth": 488,
+          "hasHorizontalOverflow": false
+        }
+      },
+      "tradesLog": {
+        "fileName": "mobile_trades_log_488.png",
+        "metrics": {
+          "scrollWidth": 488,
+          "clientWidth": 488,
+          "hasHorizontalOverflow": false
+        }
+      },
+      "calendar": {
+        "fileName": "mobile_calendar_488.png",
+        "metrics": {
+          "scrollWidth": 488,
+          "clientWidth": 488,
+          "hasHorizontalOverflow": false
+        }
+      },
+      "analytics": {
+        "fileName": "mobile_analytics_488.png",
+        "metrics": {
+          "scrollWidth": 488,
+          "clientWidth": 488,
+          "hasHorizontalOverflow": false
+        }
+      },
+      "riskCalculator": {
+        "fileName": "mobile_risk_calculator_488.png",
+        "metrics": {
+          "scrollWidth": 488,
+          "clientWidth": 488,
+          "hasHorizontalOverflow": false
+        }
+      },
+      "tradingTodo": {
+        "fileName": "mobile_trading_todo_488.png",
+        "metrics": {
+          "scrollWidth": 488,
+          "clientWidth": 488,
+          "hasHorizontalOverflow": false
+        }
+      },
+      "settings": {
+        "fileName": "mobile_settings_menu_488.png",
+        "metrics": {
+          "scrollWidth": 488,
+          "clientWidth": 488,
+          "hasHorizontalOverflow": false
+        }
+      },
+      "profile": {
+        "fileName": "mobile_profile_tab_488.png",
+        "metrics": {
+          "scrollWidth": 488,
+          "clientWidth": 488,
+          "hasHorizontalOverflow": false
+        }
+      },
+      "accounts": {
+        "fileName": "mobile_accounts_488.png",
+        "metrics": {
+          "scrollWidth": 488,
+          "clientWidth": 488,
+          "hasHorizontalOverflow": false
+        }
+      },
+      "propChallenges": {
+        "fileName": "mobile_prop_challenges_488.png",
+        "metrics": {
+          "scrollWidth": 488,
+          "clientWidth": 488,
+          "hasHorizontalOverflow": false
+        }
+      },
+      "tradeNew": {
+        "fileName": "mobile_trade_wizard_488.png",
+        "metrics": {
+          "scrollWidth": 488,
+          "clientWidth": 488,
+          "hasHorizontalOverflow": false
+        }
+      }
+    },
+    "tablet_768": {
+      "dashboard": {
+        "fileName": "mobile_dashboard_768.png",
+        "metrics": {
+          "scrollWidth": 768,
+          "clientWidth": 768,
+          "hasHorizontalOverflow": false
+        }
+      },
+      "tradesLog": {
+        "fileName": "mobile_trades_log_768.png",
+        "metrics": {
+          "scrollWidth": 768,
+          "clientWidth": 768,
+          "hasHorizontalOverflow": false
+        }
+      },
+      "calendar": {
+        "fileName": "mobile_calendar_768.png",
+        "metrics": {
+          "scrollWidth": 768,
+          "clientWidth": 768,
+          "hasHorizontalOverflow": false
+        }
+      },
+      "analytics": {
+        "fileName": "mobile_analytics_768.png",
+        "metrics": {
+          "scrollWidth": 768,
+          "clientWidth": 768,
+          "hasHorizontalOverflow": false
+        }
+      },
+      "riskCalculator": {
+        "fileName": "mobile_risk_calculator_768.png",
+        "metrics": {
+          "scrollWidth": 768,
+          "clientWidth": 768,
+          "hasHorizontalOverflow": false
+        }
+      },
+      "tradingTodo": {
+        "fileName": "mobile_trading_todo_768.png",
+        "metrics": {
+          "scrollWidth": 768,
+          "clientWidth": 768,
+          "hasHorizontalOverflow": false
+        }
+      },
+      "settings": {
+        "fileName": "mobile_settings_menu_768.png",
+        "metrics": {
+          "scrollWidth": 768,
+          "clientWidth": 768,
+          "hasHorizontalOverflow": false
+        }
+      },
+      "profile": {
+        "fileName": "mobile_profile_tab_768.png",
+        "metrics": {
+          "scrollWidth": 768,
+          "clientWidth": 768,
+          "hasHorizontalOverflow": false
+        }
+      },
+      "accounts": {
+        "fileName": "mobile_accounts_768.png",
+        "metrics": {
+          "scrollWidth": 768,
+          "clientWidth": 768,
+          "hasHorizontalOverflow": false
+        }
+      },
+      "propChallenges": {
+        "fileName": "mobile_prop_challenges_768.png",
+        "metrics": {
+          "scrollWidth": 768,
+          "clientWidth": 768,
+          "hasHorizontalOverflow": false
+        }
+      },
+      "tradeNew": {
+        "fileName": "mobile_trade_wizard_768.png",
+        "metrics": {
+          "scrollWidth": 768,
+          "clientWidth": 768,
+          "hasHorizontalOverflow": false
+        }
+      }
+    }
+  },
+  "overflowIssues": [],
+  "drawerOpen": {
+    "fileName": "mobile_drawer_open_390.png",
+    "metrics": {
+      "scrollWidth": 390,
+      "clientWidth": 390,
+      "hasHorizontalOverflow": false
+    }
+  },
+  "drawerAudit": {
+    "found": true,
+    "hasOverview": true,
+    "hasJournal": true,
+    "hasAnalyze": true,
+    "hasRisk": true,
+    "hasTasks": true,
+    "hasManage": true,
+    "hasSignOut": true,
+    "hasDuplicateProfileNavButton": false
+  },
+  "highlightingResults": {
+    "dashboard": {
+      "isProfileHighlighted": false
+    },
+    "tradesLog": {
+      "isProfileHighlighted": false
+    },
+    "calendar": {
+      "isProfileHighlighted": false
+    },
+    "analytics": {
+      "isProfileHighlighted": false
+    },
+    "setups": {
+      "isProfileHighlighted": false
+    },
+    "accounts": {
+      "isProfileHighlighted": false
+    },
+    "propChallenges": {
+      "isProfileHighlighted": false
+    },
+    "riskCalculator": {
+      "isProfileHighlighted": false
+    },
+    "tradingTodo": {
+      "isProfileHighlighted": false
+    },
+    "settings?tab=profile": {
+      "isProfileHighlighted": true
+    }
+  }
+}

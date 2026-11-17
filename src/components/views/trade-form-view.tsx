@@ -155,6 +155,14 @@ const ACCEPTED_MEDIA =
 const STEP_ORDER = ["trade-info", "checklist", "risk", "exits", "review"] as const;
 type StepKey = (typeof STEP_ORDER)[number];
 
+const STEP_META: Record<StepKey, { index: number; label: string; short: string }> = {
+  "trade-info": { index: 1, label: "Trade Details", short: "Details" },
+  "checklist": { index: 2, label: "Strategy & Checklist", short: "Strategy" },
+  "risk": { index: 3, label: "Risk & Sizing", short: "Sizing" },
+  "exits": { index: 4, label: "Partial Exits", short: "Exits" },
+  "review": { index: 5, label: "Confirm & Save", short: "Confirm" },
+};
+
 /* ------------------------------------------------------------------ */
 /* Helpers                                                             */
 /* ------------------------------------------------------------------ */
@@ -1793,46 +1801,96 @@ export function TradeFormView() {
 
       {/* Restored Draft Banner */}
       {restoredDraftInfo && !editingId && (
-        <div className="flex items-center justify-between p-3 rounded-lg bg-amber-500/10 border border-amber-500/20 text-xs text-amber-700 dark:text-amber-400">
-          <div className="flex items-center gap-2">
-            <RotateCcw className="h-4 w-4 shrink-0" />
-            <span>
-              Restored an unsaved trade draft {restoredDraftInfo.timestamp ? `saved at ${restoredDraftInfo.timestamp}` : ""}.
-            </span>
+        <div className="rounded-lg bg-amber-500/10 border border-amber-500/20 text-xs text-amber-700 dark:text-amber-400 p-3">
+          {/* Desktop Layout */}
+          <div className="hidden sm:flex items-center justify-between gap-3">
+            <div className="flex items-center gap-2">
+              <RotateCcw className="h-4 w-4 shrink-0" />
+              <span>
+                Restored an unsaved trade draft {restoredDraftInfo.timestamp ? `saved at ${restoredDraftInfo.timestamp}` : ""}.
+              </span>
+            </div>
+            <div className="flex items-center gap-2 shrink-0">
+              <Button
+                type="button"
+                variant="default"
+                size="sm"
+                className="h-7 text-xs bg-amber-600 hover:bg-amber-700 text-white font-medium"
+                onClick={() => setRestoredDraftInfo(null)}
+                title="Keep restored draft and continue"
+              >
+                Resume Draft
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="h-7 text-xs bg-background hover:bg-muted"
+                onClick={() => {
+                  if (window.confirm("Are you sure you want to discard this unsaved draft and start fresh? All draft progress will be cleared.")) {
+                    discardDraft();
+                  }
+                }}
+              >
+                Discard &amp; Start Fresh
+              </Button>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="h-7 w-7 p-0"
+                onClick={() => setRestoredDraftInfo(null)}
+                title="Dismiss notice"
+              >
+                <X className="h-3.5 w-3.5" />
+              </Button>
+            </div>
           </div>
-          <div className="flex items-center gap-2">
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              className="h-7 text-xs bg-background hover:bg-muted"
-              onClick={() => {
-                if (window.confirm("Are you sure you want to discard this unsaved draft and start fresh? All draft progress will be cleared.")) {
-                  discardDraft();
-                }
-              }}
-            >
-              Discard &amp; Start Fresh
-            </Button>
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              className="h-7 text-xs px-2"
-              onClick={() => setRestoredDraftInfo(null)}
-              title="Keep restored draft and dismiss notice"
-            >
-              Resume Draft
-            </Button>
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              className="h-7 w-7 p-0"
-              onClick={() => setRestoredDraftInfo(null)}
-            >
-              <X className="h-3.5 w-3.5" />
-            </Button>
+
+          {/* Mobile Layout */}
+          <div className="sm:hidden flex flex-col gap-2.5">
+            <div className="flex items-start justify-between gap-2">
+              <div className="flex items-start gap-2">
+                <RotateCcw className="h-4 w-4 shrink-0 mt-0.5 text-amber-600 dark:text-amber-400" />
+                <span className="font-medium text-foreground leading-snug">
+                  Restored an unsaved trade draft {restoredDraftInfo.timestamp ? `saved at ${restoredDraftInfo.timestamp}` : ""}.
+                </span>
+              </div>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="h-6 w-6 p-0 shrink-0 text-muted-foreground hover:text-foreground"
+                onClick={() => setRestoredDraftInfo(null)}
+                title="Dismiss notice"
+              >
+                <X className="h-3.5 w-3.5" />
+              </Button>
+            </div>
+            <div className="flex items-center gap-2 pt-1">
+              <Button
+                type="button"
+                variant="default"
+                size="sm"
+                className="flex-1 h-8 text-xs bg-amber-600 hover:bg-amber-700 text-white font-medium"
+                onClick={() => setRestoredDraftInfo(null)}
+              >
+                Resume Draft
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="flex-1 h-8 text-xs bg-background hover:bg-muted"
+                onClick={() => {
+                  if (window.confirm("Are you sure you want to discard this unsaved draft and start fresh? All draft progress will be cleared.")) {
+                    discardDraft();
+                  }
+                }}
+              >
+                Discard &amp; Start Fresh
+              </Button>
+            </div>
           </div>
         </div>
       )}
@@ -2137,26 +2195,62 @@ export function TradeFormView() {
       ) : (
         <>
           <Tabs value={activeStep} onValueChange={(v) => setActiveStep(v as StepKey)} className="w-full">
-            <TabsList className="w-full justify-start overflow-x-auto no-scrollbar h-auto">
-              <TabsTrigger value="trade-info" className="text-xs sm:text-sm px-2.5 py-1.5 whitespace-nowrap">
-                <span className="sm:hidden">1. Details</span>
-                <span className="hidden sm:inline">1. Trade Details</span>
+            {/* Mobile Step Header */}
+            <div className="sm:hidden flex items-center justify-between p-2.5 rounded-lg border border-border bg-card/70 mb-3 shadow-xs">
+              <div className="flex items-center gap-2.5 min-w-0">
+                <div className="flex items-center justify-center w-7 h-7 rounded-full bg-primary/10 text-primary font-mono text-xs font-semibold shrink-0">
+                  {STEP_META[activeStep]?.index ?? 1}
+                </div>
+                <div className="min-w-0">
+                  <div className="text-[11px] font-mono text-muted-foreground uppercase tracking-wider leading-none mb-0.5">
+                    Step {STEP_META[activeStep]?.index ?? 1} of {STEP_ORDER.length}
+                  </div>
+                  <div className="text-sm font-medium text-foreground truncate leading-tight">
+                    {STEP_META[activeStep]?.label ?? "Trade Details"}
+                  </div>
+                </div>
+              </div>
+
+              {/* Progress step indicators */}
+              <div className="flex items-center gap-1 shrink-0">
+                {STEP_ORDER.map((step, idx) => {
+                  const isCurrent = step === activeStep;
+                  const isPast = STEP_ORDER.indexOf(activeStep) > idx;
+                  return (
+                    <button
+                      key={step}
+                      type="button"
+                      onClick={() => setActiveStep(step)}
+                      className={`h-2 rounded-full transition-all ${
+                        isCurrent
+                          ? "w-5 bg-primary"
+                          : isPast
+                          ? "w-2.5 bg-primary/50"
+                          : "w-2.5 bg-muted-foreground/30 hover:bg-muted-foreground/50"
+                      }`}
+                      aria-label={`Jump to Step ${idx + 1}: ${STEP_META[step].label}`}
+                    />
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Desktop Tabs List */}
+            <TabsList className="hidden sm:flex w-full justify-start overflow-x-auto no-scrollbar h-auto">
+              <TabsTrigger value="trade-info" className="text-sm px-3 py-1.5 whitespace-nowrap">
+                1. Trade Details
               </TabsTrigger>
-              <TabsTrigger value="checklist" className="text-xs sm:text-sm px-2.5 py-1.5 whitespace-nowrap">
-                <span className="sm:hidden">2. Strategy</span>
-                <span className="hidden sm:inline">2. Strategy &amp; Checklist</span>
+              <TabsTrigger value="checklist" className="text-sm px-3 py-1.5 whitespace-nowrap">
+                2. Strategy &amp; Checklist
               </TabsTrigger>
-              <TabsTrigger value="risk" className="text-xs sm:text-sm px-2.5 py-1.5 whitespace-nowrap">
-                <span className="sm:hidden">3. Sizing</span>
-                <span className="hidden sm:inline">3. Risk &amp; Sizing</span>
+              <TabsTrigger value="risk" className="text-sm px-3 py-1.5 whitespace-nowrap">
+                3. Risk &amp; Sizing
               </TabsTrigger>
-              <TabsTrigger value="exits" className="text-xs sm:text-sm px-2.5 py-1.5 whitespace-nowrap">
-                <span className="sm:hidden">4. Exits</span>
-                <span className="hidden sm:inline">4. Partial Exits</span>
+              <TabsTrigger value="exits" className="text-sm px-3 py-1.5 whitespace-nowrap">
+                4. Partial Exits
               </TabsTrigger>
-              <TabsTrigger value="review" className="text-xs sm:text-sm px-2.5 py-1.5 whitespace-nowrap">
-                <span className="sm:hidden">5. Confirm</span>
-                <span className="hidden sm:inline">5. Confirm &amp; Save</span>
+              <TabsTrigger value="review" className="text-sm px-3 py-1.5 whitespace-nowrap">
+                5. Confirm &amp; Save
               </TabsTrigger>
             </TabsList>
 
@@ -4025,31 +4119,51 @@ export function TradeFormView() {
       </Tabs>
 
       {/* Navigation bar */}
-      <div className="sticky bottom-16 md:bottom-0 left-0 right-0 z-20 flex gap-2 justify-between items-center bg-background/95 backdrop-blur p-3 border-t border-border md:rounded-md md:border shadow-lg md:shadow-none">
+      <div className="sticky bottom-[calc(4rem+env(safe-area-inset-bottom))] md:bottom-0 left-0 right-0 z-30 flex gap-2 justify-between items-center bg-background/95 backdrop-blur p-3 border-t border-border md:rounded-md md:border shadow-lg md:shadow-none">
         <Button
+          type="button"
           variant="outline"
+          size="sm"
           onClick={goPrev}
           disabled={activeStep === STEP_ORDER[0]}
+          className="text-xs sm:text-sm h-9 px-3 shrink-0"
         >
-          <ArrowLeft className="h-4 w-4" /> Previous Step
+          <ArrowLeft className="h-4 w-4 mr-1 shrink-0" />
+          <span className="hidden xs:inline">Previous</span>
+          <span className="xs:hidden">Back</span>
         </Button>
         {activeStep !== STEP_ORDER[STEP_ORDER.length - 1] ? (
-          <Button onClick={goNext}>
-            Next Step <ArrowRight className="h-4 w-4" />
+          <Button
+            type="button"
+            size="sm"
+            onClick={goNext}
+            className="text-xs sm:text-sm h-9 px-3 shrink-0"
+          >
+            <span>Next</span>
+            <ArrowRight className="h-4 w-4 ml-1 shrink-0" />
           </Button>
         ) : (
           <div className="flex gap-2">
-            <Button variant="outline" onClick={() => submit(true)} disabled={saving}>
-              {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
-              Save as Draft
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => submit(true)}
+              disabled={saving}
+              className="text-xs sm:text-sm h-9 px-2.5 sm:px-3"
+            >
+              {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1" /> : <Save className="h-3.5 w-3.5 mr-1" />}
+              <span className="hidden sm:inline">Save</span> Draft
             </Button>
             <Button
+              type="button"
+              size="sm"
               onClick={() => submit(false)}
               disabled={saving || (stopDistance !== null && stopDistance <= 0)}
-              className="bg-primary text-primary-foreground font-semibold"
+              className="bg-primary text-primary-foreground font-semibold text-xs sm:text-sm h-9 px-3"
             >
-              {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
-              Confirm &amp; Save Trade
+              {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1" /> : <Sparkles className="h-3.5 w-3.5 mr-1" />}
+              <span>Save Trade</span>
             </Button>
           </div>
         )}

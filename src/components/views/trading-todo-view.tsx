@@ -544,11 +544,11 @@ export function TradingTodoView() {
       </div>
 
       {/* Templates Row */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+      <div className="flex overflow-x-auto no-scrollbar gap-2.5 pb-1 sm:grid sm:grid-cols-3 sm:gap-3">
         <button
           type="button"
           onClick={() => handleOpenCreate("market_bias")}
-          className="p-3 text-left rounded-xl border border-border bg-card hover:border-primary/50 transition-colors shadow-sm space-y-1 group"
+          className="shrink-0 w-64 sm:w-auto p-3 text-left rounded-xl border border-border bg-card hover:border-primary/50 transition-colors shadow-xs space-y-1 group"
         >
           <div className="flex items-center justify-between">
             <span className="text-xs font-semibold text-foreground group-hover:text-primary">
@@ -564,7 +564,7 @@ export function TradingTodoView() {
         <button
           type="button"
           onClick={() => handleOpenCreate("watchlist")}
-          className="p-3 text-left rounded-xl border border-border bg-card hover:border-primary/50 transition-colors shadow-sm space-y-1 group"
+          className="shrink-0 w-64 sm:w-auto p-3 text-left rounded-xl border border-border bg-card hover:border-primary/50 transition-colors shadow-xs space-y-1 group"
         >
           <div className="flex items-center justify-between">
             <span className="text-xs font-semibold text-foreground group-hover:text-primary">
@@ -580,7 +580,7 @@ export function TradingTodoView() {
         <button
           type="button"
           onClick={() => handleOpenCreate("potential_setup")}
-          className="p-3 text-left rounded-xl border border-border bg-card hover:border-primary/50 transition-colors shadow-sm space-y-1 group"
+          className="shrink-0 w-64 sm:w-auto p-3 text-left rounded-xl border border-border bg-card hover:border-primary/50 transition-colors shadow-xs space-y-1 group"
         >
           <div className="flex items-center justify-between">
             <span className="text-xs font-semibold text-foreground group-hover:text-primary">
@@ -604,25 +604,25 @@ export function TradingTodoView() {
             className="h-10 text-xs pl-3 pr-8"
           />
         </div>
-        <Button type="submit" disabled={!quickTitle.trim()} className="h-10 px-4 text-xs font-medium">
+        <Button type="submit" disabled={!quickTitle.trim()} className="h-10 px-4 text-xs font-medium shrink-0">
           Add
         </Button>
       </form>
 
       {/* Filter Tabs & Controls */}
-      <div className="bg-card rounded-xl border border-border p-3 space-y-3 shadow-sm">
-        <div className="flex flex-wrap items-center justify-between gap-3">
+      <div className="bg-card rounded-xl border border-border p-3 space-y-3 shadow-xs">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           {/* List category tabs */}
-          <div className="flex flex-wrap items-center gap-1">
+          <div className="flex items-center gap-1 overflow-x-auto no-scrollbar pb-1 sm:pb-0">
             {["all", ...allListOptions].map((l) => (
               <button
                 key={l}
                 type="button"
                 onClick={() => setSelectedList(l)}
                 className={cn(
-                  "px-3 py-1 rounded-md text-xs font-medium transition-colors",
+                  "px-3 py-1 rounded-md text-xs font-medium whitespace-nowrap shrink-0 transition-colors",
                   selectedList === l
-                    ? "bg-primary text-primary-foreground"
+                    ? "bg-primary text-primary-foreground font-semibold shadow-xs"
                     : "text-muted-foreground hover:bg-muted hover:text-foreground",
                 )}
               >
@@ -632,7 +632,7 @@ export function TradingTodoView() {
             <button
               type="button"
               onClick={() => setNewListModalOpen(true)}
-              className="px-2 py-1 rounded-md text-xs font-medium border border-dashed border-border hover:border-primary text-muted-foreground hover:text-foreground flex items-center gap-1 transition-colors"
+              className="px-2 py-1 rounded-md text-xs font-medium border border-dashed border-border hover:border-primary text-muted-foreground hover:text-foreground flex items-center gap-1 transition-colors whitespace-nowrap shrink-0"
               title="Create custom list"
             >
               <Plus className="h-3 w-3" /> New List

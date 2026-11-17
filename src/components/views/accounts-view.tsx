@@ -244,7 +244,15 @@ export function AccountsView() {
       <div className="flex items-center gap-2.5 p-3 rounded-lg border border-border/70 bg-muted/20 text-xs text-muted-foreground">
         <Info className="h-4 w-4 text-primary shrink-0" />
         <span>
-          <strong className="text-foreground">Source Disclosure:</strong> Account balances reflect initial capital plus realized net P&amp;L from closed trade executions. Floating equity and open position mark-to-market reflect active trades or broker sync.
+          <strong className="text-foreground">Capital &amp; Trades:</strong> Account balances reflect initial capital plus realized net P&amp;L from closed executions. To monitor evaluation phases, profit targets, and drawdown thresholds, visit{" "}
+          <button
+            type="button"
+            onClick={() => navigate("propChallenges")}
+            className="text-primary hover:underline font-medium cursor-pointer"
+          >
+            Prop Challenges
+          </button>
+          .
         </span>
       </div>
 

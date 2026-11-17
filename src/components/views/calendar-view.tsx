@@ -19,7 +19,7 @@
  */
 
 import { useQuery } from "@tanstack/react-query";
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { Card } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
@@ -119,6 +119,12 @@ export function CalendarView() {
   const [month, setMonth] = useState(now.getMonth() + 1); // 1..12
   const [viewMode, setViewMode] = useState<"month" | "week" | "list">("month");
   const [selectedDay, setSelectedDay] = useState<CalendarDay | null>(null);
+
+  useEffect(() => {
+    if (typeof window !== "undefined" && window.innerWidth < 768) {
+      setViewMode("list");
+    }
+  }, []);
   const { navigate, params, selectedAccountId } = useNav();
   const accountId = selectedAccountId || params.accountId || undefined;
 

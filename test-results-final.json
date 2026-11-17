@@ -1,5 +1,5 @@
 {
-  "timestamp": "2026-11-16T18:57:53.179Z",
+  "timestamp": "2026-11-17T05:32:36.865Z",
   "totalSuites": 22,
   "passedSuites": 22,
   "failedSuites": 0,
@@ -13,7 +13,7 @@
       "passCount": 10,
       "failCount": 0,
       "expectCount": 39,
-      "durationMs": 76
+      "durationMs": 63
     },
     {
       "file": "src/lib/broker-csv-mappings.test.ts",
@@ -21,7 +21,7 @@
       "passCount": 35,
       "failCount": 0,
       "expectCount": 146,
-      "durationMs": 60
+      "durationMs": 48
     },
     {
       "file": "src/lib/checklist-adherence.test.ts",
@@ -29,7 +29,7 @@
       "passCount": 5,
       "failCount": 0,
       "expectCount": 34,
-      "durationMs": 39
+      "durationMs": 37
     },
     {
       "file": "src/lib/duration-analytics.test.ts",
@@ -37,7 +37,7 @@
       "passCount": 5,
       "failCount": 0,
       "expectCount": 29,
-      "durationMs": 48
+      "durationMs": 43
     },
     {
       "file": "src/lib/filter-presets.test.ts",
@@ -45,7 +45,7 @@
       "passCount": 4,
       "failCount": 0,
       "expectCount": 16,
-      "durationMs": 35
+      "durationMs": 31
     },
     {
       "file": "src/lib/financial-engine.test.ts",
@@ -53,7 +53,7 @@
       "passCount": 60,
       "failCount": 0,
       "expectCount": 135,
-      "durationMs": 42
+      "durationMs": 47
     },
     {
       "file": "src/lib/global-search-domains.test.ts",
@@ -61,7 +61,7 @@
       "passCount": 9,
       "failCount": 0,
       "expectCount": 28,
-      "durationMs": 31
+      "durationMs": 32
     },
     {
       "file": "src/lib/instrument-catalog.test.ts",
@@ -69,7 +69,7 @@
       "passCount": 10,
       "failCount": 0,
       "expectCount": 87,
-      "durationMs": 46
+      "durationMs": 42
     },
     {
       "file": "src/lib/multi-user-isolation.test.ts",
@@ -77,7 +77,7 @@
       "passCount": 2,
       "failCount": 0,
       "expectCount": 13,
-      "durationMs": 31906
+      "durationMs": 12624
     },
     {
       "file": "src/lib/phase1-4-acceptance-deep.test.ts",
@@ -85,7 +85,7 @@
       "passCount": 11,
       "failCount": 0,
       "expectCount": 51,
-      "durationMs": 64
+      "durationMs": 84
     },
     {
       "file": "src/lib/phase1-hardening.test.ts",
@@ -93,7 +93,7 @@
       "passCount": 12,
       "failCount": 0,
       "expectCount": 57,
-      "durationMs": 89
+      "durationMs": 62
     },
     {
       "file": "src/lib/phase2-workflow.test.ts",
@@ -101,7 +101,7 @@
       "passCount": 17,
       "failCount": 0,
       "expectCount": 85,
-      "durationMs": 83
+      "durationMs": 49
     },
     {
       "file": "src/lib/phase3-analytics.test.ts",
@@ -109,7 +109,7 @@
       "passCount": 10,
       "failCount": 0,
       "expectCount": 153,
-      "durationMs": 61
+      "durationMs": 65
     },
     {
       "file": "src/lib/phase4-secondary-workflows.test.ts",
@@ -117,7 +117,7 @@
       "passCount": 12,
       "failCount": 0,
       "expectCount": 51,
-      "durationMs": 51
+      "durationMs": 76
     },
     {
       "file": "src/lib/phase5-workspace-widgets.test.ts",
@@ -125,7 +125,7 @@
       "passCount": 10,
       "failCount": 0,
       "expectCount": 128,
-      "durationMs": 72
+      "durationMs": 93
     },
     {
       "file": "src/lib/population.test.ts",
@@ -133,7 +133,7 @@
       "passCount": 12,
       "failCount": 0,
       "expectCount": 49,
-      "durationMs": 63
+      "durationMs": 73
     },
     {
       "file": "src/lib/prop-firm-engine.test.ts",
@@ -141,7 +141,7 @@
       "passCount": 8,
       "failCount": 0,
       "expectCount": 30,
-      "durationMs": 72
+      "durationMs": 65
     },
     {
       "file": "src/lib/strategy-comparison.test.ts",
@@ -149,7 +149,7 @@
       "passCount": 5,
       "failCount": 0,
       "expectCount": 22,
-      "durationMs": 30
+      "durationMs": 48
     },
     {
       "file": "src/lib/strategy-management.test.ts",
@@ -157,7 +157,7 @@
       "passCount": 4,
       "failCount": 0,
       "expectCount": 24,
-      "durationMs": 39
+      "durationMs": 62
     },
     {
       "file": "src/lib/trade-idempotency.test.ts",
@@ -165,7 +165,7 @@
       "passCount": 8,
       "failCount": 0,
       "expectCount": 30,
-      "durationMs": 83935
+      "durationMs": 47138
     },
     {
       "file": "src/lib/trades-filtering.test.ts",
@@ -173,7 +173,7 @@
       "passCount": 6,
       "failCount": 0,
       "expectCount": 13,
-      "durationMs": 55
+      "durationMs": 66
     },
     {
       "file": "src/lib/trades-pagination-search.test.ts",
@@ -181,7 +181,7 @@
       "passCount": 5,
       "failCount": 0,
       "expectCount": 26,
-      "durationMs": 48
+      "durationMs": 42
     }
   ]
 }

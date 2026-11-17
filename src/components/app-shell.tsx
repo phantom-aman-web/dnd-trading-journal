@@ -5,6 +5,7 @@ import { useNav, type ViewKey } from "@/lib/nav-store";
 import { useAuth } from "@/lib/auth-store";
 import { Sidebar } from "@/components/sidebar";
 import { MobileNav } from "@/components/mobile-nav";
+import { MobileDrawer } from "@/components/mobile-drawer";
 import { TopBar } from "@/components/top-bar";
 import { CommandPalette } from "@/components/command-palette";
 import { DashboardView } from "@/components/views/dashboard-view";
@@ -127,14 +128,7 @@ export function AppShell() {
         <Sidebar />
       </div>
 
-      {mobileNavOpen && (
-        <div className="md:hidden fixed inset-0 z-50 flex">
-          <div className="absolute inset-0 bg-black/50" onClick={() => setMobileNavOpen(false)} />
-          <div className="relative z-10">
-            <Sidebar onNavigate={() => setMobileNavOpen(false)} />
-          </div>
-        </div>
-      )}
+      <MobileDrawer open={mobileNavOpen} onClose={() => setMobileNavOpen(false)} />
 
       <div className="flex-1 flex flex-col min-w-0 h-screen">
         <TopBar

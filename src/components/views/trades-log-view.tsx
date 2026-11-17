@@ -35,7 +35,15 @@ import {
   ArrowUp,
   ArrowDown,
   ArrowUpDown,
+  SlidersHorizontal,
 } from "lucide-react";
+import {
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+  SheetTrigger,
+} from "@/components/ui/sheet";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -233,6 +241,7 @@ export function TradesLogView() {
   const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
   const [closeTradeId, setCloseTradeId] = useState<string | null>(null);
   const [executeTradeId, setExecuteTradeId] = useState<string | null>(null);
+  const [mobileFiltersOpen, setMobileFiltersOpen] = useState<boolean>(false);
 
   function toggleSort(col: string) {
     if (sortBy === col) {
@@ -465,6 +474,64 @@ export function TradesLogView() {
   const availableAccountIds = useMemo(() => accounts.map((a) => a.id), [accounts]);
   const availableStrategyIds = useMemo(() => strategies.map((s) => s.id), [strategies]);
 
+  const activeFilters = useMemo(() => {
+    const list: { key: string; labelPrefix: string; label: string; onClear: () => void }[] = [];
+    if (debouncedSearch) {
+      list.push({
+        key: "search",
+        labelPrefix: "Search: ",
+        label: `"${debouncedSearch}"`,
+        onClear: () => setSearch(""),
+      });
+    }
+    if (accountFilter !== "all") {
+      const acc = accounts.find((a) => a.id === accountFilter);
+      list.push({
+        key: "account",
+        labelPrefix: "Account: ",
+        label: acc ? acc.name : "Account",
+        onClear: () => setAccountFilter("all"),
+      });
+    }
+    if (setupFilter !== "all") {
+      const st = strategies.find((s) => s.id === setupFilter);
+      list.push({
+        key: "setup",
+        labelPrefix: "Setup: ",
+        label: st ? st.name : "Setup",
+        onClear: () => {
+          setSetupFilter("all");
+          setPage(1);
+        },
+      });
+    }
+    if (directionFilter !== "all") {
+      list.push({
+        key: "direction",
+        labelPrefix: "Direction: ",
+        label: directionFilter.toUpperCase(),
+        onClear: () => {
+          setDirectionFilter("all");
+          setPage(1);
+        },
+      });
+    }
+    if (outcomeFilter !== "all") {
+      list.push({
+        key: "outcome",
+        labelPrefix: "Outcome: ",
+        label: outcomeFilter.charAt(0).toUpperCase() + outcomeFilter.slice(1),
+        onClear: () => {
+          setOutcomeFilter("all");
+          setPage(1);
+        },
+      });
+    }
+    return list;
+  }, [debouncedSearch, accountFilter, setupFilter, directionFilter, outcomeFilter, accounts, strategies]);
+
+  const activeFilterCount = activeFilters.length;
+
   const startTradeIndex = effectiveTotal === 0 ? 0 : (page - 1) * pageSize + 1;
   const endTradeIndex = Math.min(page * pageSize, effectiveTotal);
 
@@ -478,7 +545,7 @@ export function TradesLogView() {
             Every trade and market observation, unified in chronological order.
           </p>
         </div>
-        <div className="sm:ml-auto flex items-center gap-2">
+        <div className="hidden sm:flex sm:ml-auto items-center gap-2">
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button className="bg-primary text-primary-foreground font-semibold shadow-xs gap-1.5 cursor-pointer">
@@ -525,7 +592,7 @@ export function TradesLogView() {
       </div>
 
       {/* Segment Tabs: All Entries, Executed Trades, Observations, Favorite Trades */}
-      <div className="flex items-center gap-1.5 sm:gap-2 border-b border-border pb-2 overflow-x-auto scroll-thin">
+      <div className="flex items-center gap-1.5 sm:gap-2 border-b border-border pb-2 overflow-x-auto no-scrollbar">
         <button
           type="button"
           onClick={() => {
@@ -541,7 +608,9 @@ export function TradesLogView() {
         >
           <BookOpen className="h-3.5 w-3.5" />
           <span>All Entries</span>
-          <span className="text-[10px] font-mono opacity-80">({totalTrades + totalObservations})</span>
+          <span className="text-[10px] font-mono opacity-80">
+            ({tradesLoading || noTradesLoading ? "—" : totalTrades + totalObservations})
+          </span>
         </button>
 
         <button
@@ -558,7 +627,9 @@ export function TradesLogView() {
           )}
         >
           <span>Executed Trades</span>
-          <span className="text-[10px] font-mono opacity-80">({totalTrades})</span>
+          <span className="text-[10px] font-mono opacity-80">
+            ({tradesLoading ? "—" : totalTrades})
+          </span>
         </button>
 
         <button
@@ -582,7 +653,7 @@ export function TradesLogView() {
               entryTab === "observations" ? "bg-white/20 text-white font-bold" : "bg-amber-500/15 text-amber-600 dark:text-amber-400 font-bold"
             )}
           >
-            {totalObservations}
+            {noTradesLoading ? "—" : totalObservations}
           </span>
         </button>
 
@@ -614,126 +685,342 @@ export function TradesLogView() {
 
       {/* Filter bar */}
       <div className="bg-card rounded-xl border border-border shadow-sm p-3 md:p-4 space-y-3">
-        <SavedFilterPresets
-          targetView="tradesLog"
-          currentFilters={currentFilterState}
-          onApplyFilters={handleApplyPresetFilters}
-          availableAccountIds={availableAccountIds}
-          availableStrategyIds={availableStrategyIds}
-        />
-
-        <div className="flex flex-col gap-3">
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground/70 z-10" />
-            <Input
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="Search symbol, notes, strategy, tags, account, direction, outcome..."
-              className="h-9 pl-9 pr-14 border-input rounded-lg bg-card text-sm"
-            />
-            <div className="absolute right-2.5 top-1/2 -translate-y-1/2 flex items-center gap-1.5">
-              {tradesFetching && (
-                <Loader2 className="h-3.5 w-3.5 text-primary animate-spin" />
-              )}
-              {search && (
-                <button
-                  type="button"
-                  onClick={() => setSearch("")}
-                  className="text-muted-foreground hover:text-foreground"
-                  aria-label="Clear search"
-                >
-                  <X className="h-4 w-4" />
-                </button>
-              )}
+        {/* Mobile Filter UI */}
+        <div className="md:hidden space-y-2.5">
+          <div className="flex items-center gap-2">
+            <div className="relative flex-1">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground/70 z-10" />
+              <Input
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="Search symbol, notes, strategy..."
+                className="h-9 pl-9 pr-14 border-input rounded-lg bg-card text-xs sm:text-sm"
+              />
+              <div className="absolute right-2.5 top-1/2 -translate-y-1/2 flex items-center gap-1.5">
+                {tradesFetching && (
+                  <Loader2 className="h-3.5 w-3.5 text-primary animate-spin" />
+                )}
+                {search && (
+                  <button
+                    type="button"
+                    onClick={() => setSearch("")}
+                    className="text-muted-foreground hover:text-foreground"
+                    aria-label="Clear search"
+                  >
+                    <X className="h-4 w-4" />
+                  </button>
+                )}
+              </div>
             </div>
+
+            <Sheet open={mobileFiltersOpen} onOpenChange={setMobileFiltersOpen}>
+              <SheetTrigger asChild>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className={cn(
+                    "h-9 px-3 gap-1.5 shrink-0 border-input",
+                    activeFilterCount > 0 && "border-primary/60 bg-primary/10 text-primary font-medium"
+                  )}
+                >
+                  <SlidersHorizontal className="h-4 w-4" />
+                  <span className="text-xs">Filters</span>
+                  {activeFilterCount > 0 && (
+                    <Badge variant="default" className="h-4 px-1 text-[10px] min-w-[16px] flex items-center justify-center font-mono">
+                      {activeFilterCount}
+                    </Badge>
+                  )}
+                </Button>
+              </SheetTrigger>
+              <SheetContent side="bottom" className="max-h-[85vh] rounded-t-2xl p-4 overflow-y-auto">
+                <SheetHeader className="pb-3 border-b border-border">
+                  <div className="flex items-center justify-between">
+                    <SheetTitle className="text-base font-semibold">Filter Trades &amp; Observations</SheetTitle>
+                    {hasActiveFilters && (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={clearFilters}
+                        className="text-xs text-muted-foreground hover:text-foreground h-7 px-2"
+                      >
+                        Reset All
+                      </Button>
+                    )}
+                  </div>
+                </SheetHeader>
+                <div className="py-4 space-y-4">
+                  <SavedFilterPresets
+                    targetView="tradesLog"
+                    currentFilters={currentFilterState}
+                    onApplyFilters={handleApplyPresetFilters}
+                    availableAccountIds={availableAccountIds}
+                    availableStrategyIds={availableStrategyIds}
+                  />
+
+                  <div className="space-y-3">
+                    <div className="space-y-1.5">
+                      <label className="text-xs font-medium text-muted-foreground">Account</label>
+                      <Select value={accountFilter} onValueChange={setAccountFilter}>
+                        <SelectTrigger className="h-9 w-full border-input rounded-lg">
+                          <SelectValue placeholder="All Accounts" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="all">All Accounts ({accounts.length})</SelectItem>
+                          {accounts.map((a) => {
+                            const isDuplicateName = accounts.filter((other) => other.name === a.name).length > 1;
+                            const secondary = isDuplicateName
+                              ? ` (${a.broker || a.accountType || a.currency || a.id.slice(-4)})`
+                              : "";
+                            return (
+                              <SelectItem key={a.id} value={a.id}>
+                                {a.name}{secondary}
+                              </SelectItem>
+                            );
+                          })}
+                        </SelectContent>
+                      </Select>
+                    </div>
+
+                    <div className="space-y-1.5">
+                      <label className="text-xs font-medium text-muted-foreground">Setup / Strategy</label>
+                      <Select
+                        value={setupFilter}
+                        onValueChange={(v) => {
+                          setSetupFilter(v);
+                          setPage(1);
+                        }}
+                      >
+                        <SelectTrigger className="h-9 w-full border-input rounded-lg">
+                          <SelectValue placeholder="All Setups" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="all">All Setups ({strategies.length})</SelectItem>
+                          {strategies.map((s) => (
+                            <SelectItem key={s.id} value={s.id}>
+                              {s.name}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-2">
+                      <div className="space-y-1.5">
+                        <label className="text-xs font-medium text-muted-foreground">Direction</label>
+                        <Select
+                          value={directionFilter}
+                          onValueChange={(v) => {
+                            setDirectionFilter(v);
+                            setPage(1);
+                          }}
+                        >
+                          <SelectTrigger className="h-9 w-full border-input rounded-lg">
+                            <SelectValue placeholder="All Directions" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="all">All Directions</SelectItem>
+                            <SelectItem value="long">Long</SelectItem>
+                            <SelectItem value="short">Short</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+
+                      <div className="space-y-1.5">
+                        <label className="text-xs font-medium text-muted-foreground">Outcome</label>
+                        <Select
+                          value={outcomeFilter}
+                          onValueChange={(v) => {
+                            setOutcomeFilter(v);
+                            setPage(1);
+                          }}
+                        >
+                          <SelectTrigger className="h-9 w-full border-input rounded-lg">
+                            <SelectValue placeholder="All Outcomes" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="all">All Outcomes</SelectItem>
+                            <SelectItem value="win">Win</SelectItem>
+                            <SelectItem value="loss">Loss</SelectItem>
+                            <SelectItem value="breakeven">Breakeven</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+                <div className="pt-3 border-t border-border">
+                  <Button className="w-full" onClick={() => setMobileFiltersOpen(false)}>
+                    Show Results ({effectiveTotal})
+                  </Button>
+                </div>
+              </SheetContent>
+            </Sheet>
           </div>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
-            <Select value={accountFilter} onValueChange={setAccountFilter}>
-              <SelectTrigger className="h-9 w-full border-input rounded-lg">
-                <SelectValue placeholder="All Accounts" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Accounts ({accounts.length})</SelectItem>
-                {accounts.map((a) => {
-                  const isDuplicateName = accounts.filter((other) => other.name === a.name).length > 1;
-                  const secondary = isDuplicateName
-                    ? ` (${a.broker || a.accountType || a.currency || a.id.slice(-4)})`
-                    : "";
-                  return (
-                    <SelectItem key={a.id} value={a.id}>
-                      {a.name}{secondary}
+
+          {/* Active Filter Chips */}
+          {activeFilters.length > 0 && (
+            <div className="flex flex-wrap items-center gap-1.5 pt-1">
+              {activeFilters.map((f) => (
+                <Badge
+                  key={f.key}
+                  variant="secondary"
+                  className="text-[11px] font-normal pl-2 pr-1 py-0.5 flex items-center gap-1 bg-muted/80 text-foreground border border-border"
+                >
+                  <span className="text-muted-foreground">{f.labelPrefix}</span>
+                  <span className="font-medium">{f.label}</span>
+                  <button
+                    type="button"
+                    onClick={f.onClear}
+                    className="hover:text-foreground text-muted-foreground p-0.5 rounded-full"
+                    aria-label={`Remove filter ${f.label}`}
+                  >
+                    <X className="h-3 w-3" />
+                  </button>
+                </Badge>
+              ))}
+              <button
+                type="button"
+                onClick={clearFilters}
+                className="text-[11px] text-muted-foreground hover:text-foreground underline ml-1"
+              >
+                Clear all
+              </button>
+            </div>
+          )}
+        </div>
+
+        {/* Desktop Filter UI */}
+        <div className="hidden md:block space-y-3">
+          <SavedFilterPresets
+            targetView="tradesLog"
+            currentFilters={currentFilterState}
+            onApplyFilters={handleApplyPresetFilters}
+            availableAccountIds={availableAccountIds}
+            availableStrategyIds={availableStrategyIds}
+          />
+
+          <div className="flex flex-col gap-3">
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground/70 z-10" />
+              <Input
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="Search symbol, notes, strategy, tags, account, direction, outcome..."
+                className="h-9 pl-9 pr-14 border-input rounded-lg bg-card text-sm"
+              />
+              <div className="absolute right-2.5 top-1/2 -translate-y-1/2 flex items-center gap-1.5">
+                {tradesFetching && (
+                  <Loader2 className="h-3.5 w-3.5 text-primary animate-spin" />
+                )}
+                {search && (
+                  <button
+                    type="button"
+                    onClick={() => setSearch("")}
+                    className="text-muted-foreground hover:text-foreground"
+                    aria-label="Clear search"
+                  >
+                    <X className="h-4 w-4" />
+                  </button>
+                )}
+              </div>
+            </div>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+              <Select value={accountFilter} onValueChange={setAccountFilter}>
+                <SelectTrigger className="h-9 w-full border-input rounded-lg">
+                  <SelectValue placeholder="All Accounts" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Accounts ({accounts.length})</SelectItem>
+                  {accounts.map((a) => {
+                    const isDuplicateName = accounts.filter((other) => other.name === a.name).length > 1;
+                    const secondary = isDuplicateName
+                      ? ` (${a.broker || a.accountType || a.currency || a.id.slice(-4)})`
+                      : "";
+                    return (
+                      <SelectItem key={a.id} value={a.id}>
+                        {a.name}{secondary}
+                      </SelectItem>
+                    );
+                  })}
+                </SelectContent>
+              </Select>
+
+              <Select
+                value={setupFilter}
+                onValueChange={(v) => {
+                  setSetupFilter(v);
+                  setPage(1);
+                }}
+              >
+                <SelectTrigger className="h-9 w-full border-input rounded-lg">
+                  <SelectValue placeholder="All Setups" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Setups ({strategies.length})</SelectItem>
+                  {strategies.map((s) => (
+                    <SelectItem key={s.id} value={s.id}>
+                      {s.name}
                     </SelectItem>
-                  );
-                })}
-              </SelectContent>
-            </Select>
+                  ))}
+                </SelectContent>
+              </Select>
 
-            <Select
-              value={setupFilter}
-              onValueChange={(v) => {
-                setSetupFilter(v);
-                setPage(1);
-              }}
-            >
-              <SelectTrigger className="h-9 w-full border-input rounded-lg">
-                <SelectValue placeholder="All Setups" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Setups ({strategies.length})</SelectItem>
-                {strategies.map((s) => (
-                  <SelectItem key={s.id} value={s.id}>
-                    {s.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+              <Select
+                value={directionFilter}
+                onValueChange={(v) => {
+                  setDirectionFilter(v);
+                  setPage(1);
+                }}
+              >
+                <SelectTrigger className="h-9 w-full border-input rounded-lg">
+                  <SelectValue placeholder="All Directions" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Directions</SelectItem>
+                  <SelectItem value="long">Long</SelectItem>
+                  <SelectItem value="short">Short</SelectItem>
+                </SelectContent>
+              </Select>
 
-            <Select
-              value={directionFilter}
-              onValueChange={(v) => {
-                setDirectionFilter(v);
-                setPage(1);
-              }}
-            >
-              <SelectTrigger className="h-9 w-full border-input rounded-lg">
-                <SelectValue placeholder="All Directions" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Directions</SelectItem>
-                <SelectItem value="long">Long</SelectItem>
-                <SelectItem value="short">Short</SelectItem>
-              </SelectContent>
-            </Select>
-
-            <Select
-              value={outcomeFilter}
-              onValueChange={(v) => {
-                setOutcomeFilter(v);
-                setPage(1);
-              }}
-            >
-              <SelectTrigger className="h-9 w-full border-input rounded-lg">
-                <SelectValue placeholder="All Outcomes" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Outcomes</SelectItem>
-                <SelectItem value="win">Win</SelectItem>
-                <SelectItem value="loss">Loss</SelectItem>
-                <SelectItem value="breakeven">Breakeven</SelectItem>
-              </SelectContent>
-            </Select>
+              <Select
+                value={outcomeFilter}
+                onValueChange={(v) => {
+                  setOutcomeFilter(v);
+                  setPage(1);
+                }}
+              >
+                <SelectTrigger className="h-9 w-full border-input rounded-lg">
+                  <SelectValue placeholder="All Outcomes" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Outcomes</SelectItem>
+                  <SelectItem value="win">Win</SelectItem>
+                  <SelectItem value="loss">Loss</SelectItem>
+                  <SelectItem value="breakeven">Breakeven</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
           </div>
         </div>
 
         {/* Count + clear */}
         <div className="flex items-center justify-between mt-3 pt-3 border-t border-border">
-          <p className="text-sm text-muted-foreground">
-            Showing{" "}
-            <span className="font-semibold text-foreground tabular-nums">{startTradeIndex}–{endTradeIndex}</span>{" "}
-            of{" "}
-            <span className="font-semibold text-foreground tabular-nums">{effectiveTotal}</span>{" "}
-            {entryTab === "observations" ? "observations" : "entries"}
-          </p>
+          <div className="text-sm text-muted-foreground">
+            {tradesLoading || (entryTab === "all" && noTradesLoading) ? (
+              <span className="flex items-center gap-2">
+                <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground" />
+                <span>Loading entries...</span>
+              </span>
+            ) : (
+              <p>
+                Showing{" "}
+                <span className="font-semibold text-foreground tabular-nums">{startTradeIndex}–{endTradeIndex}</span>{" "}
+                of{" "}
+                <span className="font-semibold text-foreground tabular-nums">{effectiveTotal}</span>{" "}
+                {entryTab === "observations" ? "observations" : "entries"}
+              </p>
+            )}
+          </div>
           {hasActiveFilters && (
             <button
               onClick={clearFilters}

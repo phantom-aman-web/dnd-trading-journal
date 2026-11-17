@@ -89,7 +89,7 @@ export function TopBar({ onOpenMobileNav, onOpenShortcuts }: TopBarProps) {
   }
 
   return (
-    <header className="sticky top-0 z-30 h-14 border-b border-border bg-card flex items-center gap-2 px-4">
+    <header className="sticky top-0 z-30 h-14 border-b border-border bg-card/95 backdrop-blur-md flex items-center gap-1.5 sm:gap-2 px-3 sm:px-4 pt-safe">
       <button
         className="md:hidden p-1 text-muted-foreground"
         onClick={onOpenMobileNav}
@@ -99,7 +99,7 @@ export function TopBar({ onOpenMobileNav, onOpenShortcuts }: TopBarProps) {
       </button>
 
       <Select value={accountFilter} onValueChange={setAccountFilter}>
-        <SelectTrigger className="flex w-auto max-w-[130px] sm:max-w-none sm:min-w-[160px] h-9 text-xs sm:text-sm font-medium border-input bg-card shrink-0">
+        <SelectTrigger className="flex w-auto max-w-[110px] sm:max-w-none sm:min-w-[160px] h-9 text-xs sm:text-sm font-medium border-input bg-card shrink-0">
           <SelectValue placeholder="All Accounts" />
         </SelectTrigger>
         <SelectContent>
@@ -114,20 +114,20 @@ export function TopBar({ onOpenMobileNav, onOpenShortcuts }: TopBarProps) {
 
       <button
         onClick={() => setCommandOpen(true)}
-        className="flex items-center justify-between h-9 px-3 rounded-md border border-input bg-muted/50 text-sm text-muted-foreground hover:bg-muted w-full max-w-md group"
+        className="flex items-center justify-between h-9 px-3 rounded-md border border-input bg-muted/50 text-sm text-muted-foreground hover:bg-muted min-w-0 flex-1 max-w-md group shrink"
         title="Open Command Palette (⌘K or /)"
       >
         <div className="flex items-center gap-2 truncate">
           <Search className="h-4 w-4 shrink-0" />
           <span className="hidden sm:inline truncate">Search trades, observations, setups, tasks, notes...</span>
-          <span className="sm:hidden">Search</span>
+          <span className="sm:hidden truncate">Search</span>
         </div>
         <kbd className="hidden sm:inline-flex items-center gap-0.5 text-[10px] font-mono px-1.5 py-0.5 rounded bg-muted text-muted-foreground border border-border group-hover:border-foreground/30">
           ⌘K
         </kbd>
       </button>
 
-      <div className="ml-auto flex items-center gap-1.5 sm:gap-2">
+      <div className="ml-auto flex items-center gap-1 sm:gap-2 shrink-0">
         {/* Real-time New York Market Clock — automatic DST, no manual offset */}
         <MarketClock />
 
@@ -157,7 +157,7 @@ export function TopBar({ onOpenMobileNav, onOpenShortcuts }: TopBarProps) {
           size="icon"
           onClick={toggleFloatingManager}
           aria-label="Floating Widgets"
-          className="h-8 w-8 text-muted-foreground hover:bg-muted"
+          className="h-8 w-8 text-muted-foreground hover:bg-muted hidden sm:inline-flex"
           title="Floating Mini Widgets Manager"
         >
           <Sliders className="h-4 w-4" />

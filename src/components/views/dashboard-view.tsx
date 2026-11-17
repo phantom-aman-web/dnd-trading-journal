@@ -25,6 +25,13 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { MetricCard } from "@/components/common/metric-card";
 import { EquityCurveChart } from "@/components/charts/equity-curve-chart";
 import { DailyPnlChart } from "@/components/charts/daily-pnl-chart";
@@ -819,10 +826,28 @@ function DashboardHeader({
               className="h-8 gap-1.5 text-xs bg-card border-border text-foreground hover:bg-muted/50"
             >
               <SlidersHorizontal className="h-3.5 w-3.5" />
-              <span>Customize</span>
+              <span className="hidden xs:inline">Customize</span>
             </Button>
           )}
-          <div className="flex flex-wrap gap-1.5">
+
+          {/* Mobile Period Selector */}
+          <div className="sm:hidden flex items-center">
+            <Select value={preset} onValueChange={setPreset}>
+              <SelectTrigger className="h-8 text-xs w-[130px] bg-card border-border">
+                <SelectValue placeholder="Period" />
+              </SelectTrigger>
+              <SelectContent>
+                {PRESETS.map((p) => (
+                  <SelectItem key={p.key} value={p.key} className="text-xs">
+                    {p.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          {/* Desktop Period Buttons */}
+          <div className="hidden sm:flex flex-wrap gap-1.5">
             {PRESETS.map((p) => {
               const active = preset === p.key;
               return (
@@ -833,7 +858,7 @@ function DashboardHeader({
                   className={cn(
                     "h-8 px-3 rounded-md text-xs font-medium border transition-colors cursor-pointer",
                     active
-                      ? "bg-slate-900 text-primary-foreground border-primary"
+                      ? "bg-slate-900 dark:bg-slate-100 text-white dark:text-slate-900 border-primary font-semibold shadow-xs"
                       : "bg-card text-muted-foreground border-border hover:bg-muted/50 hover:text-foreground",
                   )}
                 >

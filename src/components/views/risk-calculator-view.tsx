@@ -482,6 +482,29 @@ export function RiskCalculatorView() {
       <div className="grid grid-cols-1 xl:grid-cols-12 gap-6">
         {/* Inputs Form */}
         <div className="xl:col-span-7 space-y-5">
+          {/* Mobile Instant Results Banner */}
+          {calculation && (
+            <div className="xl:hidden p-3.5 rounded-xl bg-primary/10 border border-primary/25 flex items-center justify-between shadow-xs">
+              <div>
+                <div className="text-[10px] uppercase font-mono tracking-wider text-muted-foreground">
+                  Recommended Size
+                </div>
+                <div className="text-2xl font-black font-mono text-primary leading-tight">
+                  {calculation.roundedLots}{" "}
+                  <span className="text-xs font-normal text-muted-foreground">{calculation.quantityUnit}</span>
+                </div>
+              </div>
+              <div className="text-right">
+                <div className="text-[10px] uppercase font-mono tracking-wider text-muted-foreground">
+                  Monetary Risk
+                </div>
+                <div className="text-sm font-bold font-mono text-foreground">
+                  ${calculation.totalRiskAccountDollars.toFixed(2)} <span className="text-xs text-muted-foreground">({riskPct}%)</span>
+                </div>
+              </div>
+            </div>
+          )}
+
           {/* Account & Capital Selection */}
           <div className="bg-card rounded-xl border border-border p-4 md:p-5 space-y-4 shadow-sm">
             <h2 className="text-sm font-semibold text-foreground flex items-center gap-2">
@@ -763,6 +786,7 @@ export function RiskCalculatorView() {
                 <Input
                   type="number"
                   step="any"
+                  inputMode="decimal"
                   value={entryPrice}
                   onChange={(e) => setEntryPrice(e.target.value)}
                   className="h-9 text-xs font-mono"
@@ -780,6 +804,7 @@ export function RiskCalculatorView() {
                 <Input
                   type="number"
                   step="any"
+                  inputMode="decimal"
                   value={stopPrice}
                   onChange={(e) => setStopPrice(e.target.value)}
                   className={cn(
@@ -800,6 +825,7 @@ export function RiskCalculatorView() {
                 <Input
                   type="number"
                   step="any"
+                  inputMode="decimal"
                   value={takeProfitPrice}
                   onChange={(e) => setTakeProfitPrice(e.target.value)}
                   className="h-9 text-xs font-mono"

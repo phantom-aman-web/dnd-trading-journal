@@ -38,7 +38,15 @@ import {
   Star,
   Archive,
   BookOpen,
+  MoreHorizontal,
 } from "lucide-react";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { useState, useMemo } from "react";
@@ -203,7 +211,127 @@ export function TradeDetailView({ tradeId, onBack }: { tradeId?: string; onBack?
       </div>
 
       {/* Actions */}
-      <div className="flex flex-wrap gap-2">
+      {/* Mobile Action Bar */}
+      <div className="flex sm:hidden items-center justify-between gap-1.5 w-full">
+        <div className="flex items-center gap-1.5 flex-wrap">
+          <Button
+            variant={isFav ? "default" : "outline"}
+            size="sm"
+            onClick={() => id && toggleFavorite(id, trade.instrumentSymbol)}
+            className={cn(
+              "h-8 px-2.5 text-xs",
+              isFav ? "bg-amber-500 hover:bg-amber-600 text-white border-amber-600" : "text-muted-foreground"
+            )}
+            title="Toggle Favorite"
+          >
+            <Star className={cn("h-3.5 w-3.5 mr-1", isFav && "fill-current")} />
+            <span>{isFav ? "Favorited" : "Favorite"}</span>
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => navigate("tradeNew", { id })}
+            className="h-8 px-2.5 text-xs"
+          >
+            <Edit className="h-3.5 w-3.5 mr-1" />
+            <span>Edit</span>
+          </Button>
+          {trade.status === "planned" && !trade.isDraft && (
+            <Button
+              variant="default"
+              size="sm"
+              onClick={() => setExecuteTradeOpen(true)}
+              className="h-8 px-2.5 text-xs bg-primary"
+            >
+              <Play className="h-3.5 w-3.5 mr-1" /> Start
+            </Button>
+          )}
+          {trade.status === "open" && !trade.isDraft && (
+            <Button
+              variant="default"
+              size="sm"
+              onClick={() => setCloseTradeOpen(true)}
+              className="h-8 px-2.5 text-xs bg-primary"
+            >
+              <Lock className="h-3.5 w-3.5 mr-1" /> Close
+            </Button>
+          )}
+        </div>
+
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button variant="outline" size="sm" className="h-8 w-8 p-0 shrink-0">
+              <MoreHorizontal className="h-4 w-4" />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="w-48 bg-card border-border shadow-lg">
+            <DropdownMenuItem
+              onClick={async () => {
+                const res = await fetch(`/api/trades/${id}/duplicate`, { method: "POST" });
+                if (res.ok) {
+                  toast.success("Trade duplicated as draft.");
+                  qc.invalidateQueries({ queryKey: ["trades"] });
+                } else {
+                  toast.error("Failed to duplicate.");
+                }
+              }}
+              className="cursor-pointer text-xs py-2"
+            >
+              <Copy className="h-3.5 w-3.5 mr-2" />
+              <span>Duplicate as Draft</span>
+            </DropdownMenuItem>
+            {trade.strategyId && (
+              <DropdownMenuItem
+                onClick={() => navigate("setups", { id: trade.strategyId })}
+                className="cursor-pointer text-xs py-2"
+              >
+                <BookOpen className="h-3.5 w-3.5 mr-2" />
+                <span>Setup Dictionary</span>
+              </DropdownMenuItem>
+            )}
+            <DropdownMenuItem
+              onClick={async () => {
+                const res = await fetch("/api/archive", {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({ entityType: "trade", id, action: "archive" }),
+                });
+                if (res.ok) {
+                  toast.success("Trade archived safely. You can restore it anytime in Archived Records.");
+                  qc.invalidateQueries({ queryKey: ["trades"] });
+                  navigate("tradesLog");
+                } else {
+                  toast.error("Failed to archive trade.");
+                }
+              }}
+              className="cursor-pointer text-xs py-2 text-muted-foreground hover:text-amber-500"
+            >
+              <Archive className="h-3.5 w-3.5 mr-2" />
+              <span>Archive Record</span>
+            </DropdownMenuItem>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem
+              onClick={async () => {
+                if (!confirm("Delete this trade? This cannot be undone.")) return;
+                const res = await fetch(`/api/trades/${id}`, { method: "DELETE" });
+                if (res.ok) {
+                  toast.success("Trade deleted.");
+                  navigate("tradesLog");
+                } else {
+                  toast.error("Failed to delete.");
+                }
+              }}
+              className="cursor-pointer text-xs py-2 text-loss focus:text-loss"
+            >
+              <Trash2 className="h-3.5 w-3.5 mr-2" />
+              <span>Delete Trade</span>
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+      </div>
+
+      {/* Desktop Actions */}
+      <div className="hidden sm:flex flex-wrap gap-2">
         <Button
           variant={isFav ? "default" : "outline"}
           size="sm"
@@ -340,13 +468,13 @@ export function TradeDetailView({ tradeId, onBack }: { tradeId?: string; onBack?
 
       {/* Tabs */}
       <Tabs defaultValue="overview" className="w-full">
-        <TabsList className="w-full justify-start overflow-x-auto">
-          <TabsTrigger value="overview">Overview</TabsTrigger>
-          <TabsTrigger value="setup">Setup</TabsTrigger>
-          <TabsTrigger value="execution">Execution</TabsTrigger>
-          <TabsTrigger value="replay">Replay</TabsTrigger>
-          <TabsTrigger value="psychology">Psychology</TabsTrigger>
-          <TabsTrigger value="evidence">Evidence</TabsTrigger>
+        <TabsList className="w-full justify-start overflow-x-auto no-scrollbar h-auto py-1 gap-1">
+          <TabsTrigger value="overview" className="text-xs sm:text-sm px-2.5 sm:px-3 py-1.5 shrink-0">Overview</TabsTrigger>
+          <TabsTrigger value="setup" className="text-xs sm:text-sm px-2.5 sm:px-3 py-1.5 shrink-0">Setup</TabsTrigger>
+          <TabsTrigger value="execution" className="text-xs sm:text-sm px-2.5 sm:px-3 py-1.5 shrink-0">Execution</TabsTrigger>
+          <TabsTrigger value="replay" className="text-xs sm:text-sm px-2.5 sm:px-3 py-1.5 shrink-0">Replay</TabsTrigger>
+          <TabsTrigger value="psychology" className="text-xs sm:text-sm px-2.5 sm:px-3 py-1.5 shrink-0">Psychology</TabsTrigger>
+          <TabsTrigger value="evidence" className="text-xs sm:text-sm px-2.5 sm:px-3 py-1.5 shrink-0">Evidence</TabsTrigger>
         </TabsList>
 
         <TabsContent value="overview" className="space-y-4 mt-3">

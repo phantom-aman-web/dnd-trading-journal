@@ -77,6 +77,8 @@ import {
   X,
   Trash2,
   UserX,
+  ArrowLeft,
+  ChevronRight,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { FieldLabel } from "@/components/common/field-label";
@@ -140,16 +142,19 @@ export function SettingsView() {
       ? "preferences"
       : params.tab;
   const [activeTab, setActiveTab] = useState<string>(initialTab);
+  const [mobileTab, setMobileTab] = useState<string | null>(params.tab ?? null);
 
   useEffect(() => {
     if (params.tab) {
-      setActiveTab(
+      const resolved =
         params.tab === "appearance" || params.tab === "preferences"
           ? "preferences"
-          : params.tab
-      );
+          : params.tab;
+      setActiveTab(resolved);
+      setMobileTab(resolved);
     } else {
       setActiveTab("preferences");
+      setMobileTab(null);
     }
   }, [params.tab]);
 
@@ -333,8 +338,126 @@ export function SettingsView() {
           </p>
         </div>
 
-        <Tabs value={activeTab} onValueChange={setActiveTab}>
-          <div className="border-b border-border overflow-x-auto">
+        {/* Mobile Settings Category Index (when no sub-tab is chosen) */}
+        {mobileTab === null && (
+          <div className="md:hidden space-y-4">
+            <div className="divide-y divide-border rounded-xl border border-border bg-card overflow-hidden shadow-xs">
+              <button
+                type="button"
+                onClick={() => {
+                  setMobileTab("profile");
+                  setActiveTab("profile");
+                }}
+                className="w-full flex items-center justify-between p-4 hover:bg-muted/50 active:bg-muted text-left transition-colors"
+              >
+                <div className="flex items-center gap-3">
+                  <div className="p-2 rounded-lg bg-primary/10 text-primary">
+                    <User className="h-5 w-5" />
+                  </div>
+                  <div>
+                    <div className="text-sm font-semibold text-foreground">Profile &amp; Regional</div>
+                    <div className="text-xs text-muted-foreground mt-0.5">Display name, email, timezone, date &amp; time formatting</div>
+                  </div>
+                </div>
+                <ChevronRight className="h-4 w-4 text-muted-foreground shrink-0" />
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setMobileTab("trading");
+                  setActiveTab("trading");
+                }}
+                className="w-full flex items-center justify-between p-4 hover:bg-muted/50 active:bg-muted text-left transition-colors"
+              >
+                <div className="flex items-center gap-3">
+                  <div className="p-2 rounded-lg bg-primary/10 text-primary">
+                    <Sliders className="h-5 w-5" />
+                  </div>
+                  <div>
+                    <div className="text-sm font-semibold text-foreground">Trading Defaults &amp; Risk</div>
+                    <div className="text-xs text-muted-foreground mt-0.5">Default account, position risk, daily limits, instruments</div>
+                  </div>
+                </div>
+                <ChevronRight className="h-4 w-4 text-muted-foreground shrink-0" />
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setMobileTab("preferences");
+                  setActiveTab("preferences");
+                }}
+                className="w-full flex items-center justify-between p-4 hover:bg-muted/50 active:bg-muted text-left transition-colors"
+              >
+                <div className="flex items-center gap-3">
+                  <div className="p-2 rounded-lg bg-primary/10 text-primary">
+                    <SlidersHorizontal className="h-5 w-5" />
+                  </div>
+                  <div>
+                    <div className="text-sm font-semibold text-foreground">Preferences Center</div>
+                    <div className="text-xs text-muted-foreground mt-0.5">Theme (Nordic, Terminal, Slate Contrast), typography &amp; density</div>
+                  </div>
+                </div>
+                <ChevronRight className="h-4 w-4 text-muted-foreground shrink-0" />
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setMobileTab("legal");
+                  setActiveTab("legal");
+                }}
+                className="w-full flex items-center justify-between p-4 hover:bg-muted/50 active:bg-muted text-left transition-colors"
+              >
+                <div className="flex items-center gap-3">
+                  <div className="p-2 rounded-lg bg-primary/10 text-primary">
+                    <Shield className="h-5 w-5" />
+                  </div>
+                  <div>
+                    <div className="text-sm font-semibold text-foreground">Legal &amp; Compliance</div>
+                    <div className="text-xs text-muted-foreground mt-0.5">Terms of Service, Privacy Policy, Risk Disclosures</div>
+                  </div>
+                </div>
+                <ChevronRight className="h-4 w-4 text-muted-foreground shrink-0" />
+              </button>
+            </div>
+
+            <div className="pt-2">
+              <Button
+                variant="outline"
+                onClick={signOut}
+                className="w-full text-xs h-10 text-loss border-loss/30 hover:bg-loss/10"
+              >
+                <LogOut className="h-4 w-4 mr-2" /> Sign Out
+              </Button>
+            </div>
+          </div>
+        )}
+
+        {/* Mobile Back Button (when inside a drill-down tab) */}
+        {mobileTab !== null && (
+          <div className="md:hidden">
+            <button
+              type="button"
+              onClick={() => setMobileTab(null)}
+              className="inline-flex items-center gap-1.5 text-xs font-medium text-primary hover:underline py-1 px-1 -ml-1 rounded transition-colors"
+            >
+              <ArrowLeft className="h-4 w-4" />
+              <span>Back to Settings</span>
+            </button>
+          </div>
+        )}
+
+        <Tabs
+          value={mobileTab ?? activeTab}
+          onValueChange={(v) => {
+            setActiveTab(v);
+            setMobileTab(v);
+          }}
+          className={cn(mobileTab === null && "hidden md:block")}
+        >
+          <div className="hidden md:block border-b border-border overflow-x-auto">
             <TabsList className="bg-transparent h-auto p-0 rounded-none gap-0 w-auto">
               <SettingsTabTrigger value="profile" icon={User}>Profile</SettingsTabTrigger>
               <SettingsTabTrigger value="trading" icon={Sliders}>Trading</SettingsTabTrigger>

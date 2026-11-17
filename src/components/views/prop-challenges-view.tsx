@@ -4,6 +4,8 @@ import { useQuery } from "@tanstack/react-query";
 import { Trophy } from "lucide-react";
 import { PropChallengesSection } from "@/components/accounts/prop-challenges-section";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Badge } from "@/components/ui/badge";
+import { useNav } from "@/lib/nav-store";
 
 interface TradingAccount {
   id: string;
@@ -15,6 +17,7 @@ interface TradingAccount {
 }
 
 export function PropChallengesView() {
+  const { navigate } = useNav();
   const { data: accounts = [], isLoading } = useQuery<TradingAccount[]>({
     queryKey: ["accounts"],
     queryFn: async () => {
@@ -41,6 +44,26 @@ export function PropChallengesView() {
           <p className="text-xs md:text-sm text-muted-foreground mt-1">
             Monitor evaluation rules, profit targets, daily loss limits with custom reset hours, drawdown, and consistency requirements.
           </p>
+        </div>
+      </div>
+
+      {/* Scope distinction banner */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 p-3 rounded-xl border border-border/70 bg-card/60 text-xs">
+        <div className="flex items-center gap-2 text-muted-foreground">
+          <Badge variant="outline" className="text-[10px] font-mono uppercase bg-primary/10 text-primary border-primary/20 shrink-0">
+            Rules Engine
+          </Badge>
+          <span>
+            Tracks evaluation phases, profit targets, and drawdown thresholds. Capital balances and trade executions are managed in{" "}
+            <button
+              type="button"
+              onClick={() => navigate("accounts")}
+              className="text-primary hover:underline font-medium cursor-pointer"
+            >
+              Accounts
+            </button>
+            .
+          </span>
         </div>
       </div>
 
