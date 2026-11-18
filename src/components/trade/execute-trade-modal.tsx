@@ -122,6 +122,7 @@ export function ExecuteTradeModal({ tradeId, onClose }: ExecuteTradeModalProps) 
       qc.invalidateQueries({ queryKey: ["dashboard"] });
       qc.invalidateQueries({ queryKey: ["analytics"] });
       qc.invalidateQueries({ queryKey: ["calendar"] });
+      qc.invalidateQueries({ queryKey: ["prop-challenges"] });
       qc.invalidateQueries({ queryKey: ["trade", trade.id] });
 
       onClose();

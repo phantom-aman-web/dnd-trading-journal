@@ -60,6 +60,7 @@ import { SavedFilterPresets, type FilterState } from "@/components/trades/saved-
 import { useWorkspaceStore } from "@/lib/workspace-store";
 import { usePrivacyStore, maskSignedCents } from "@/lib/privacy-store";
 import { ObservationDetailDialog } from "@/components/no-trades/observation-detail-dialog";
+import { isSyntheticSampleTrade } from "@/lib/prop-firm-engine";
 
 /* ------------------------------------------------------------------ */
 /* Data fetching                                                       */
@@ -84,6 +85,9 @@ interface TradeRow {
   strategyVersion?: { id: string; versionLabel: string; strategyId?: string } | null;
   account?: { id: string; name: string } | null;
   planAdherenceJson: string | null;
+  tagsJson?: string | null;
+  notes?: string | null;
+  isDemoSample?: boolean;
 }
 
 interface TradesResponse {
@@ -222,6 +226,13 @@ export function TradesLogView() {
     setSelectedAccountId(v === "all" ? "" : v);
     setPage(1);
   }
+
+  // Sync navigation params accountId if passed
+  useEffect(() => {
+    if (params.accountId && params.accountId !== selectedAccountId) {
+      setSelectedAccountId(params.accountId);
+    }
+  }, [params.accountId, selectedAccountId, setSelectedAccountId]);
   const { isFavorite, toggleFavorite, favoriteCount } = useFavorites();
   const isPrivate = usePrivacyStore((s) => s.isPrivate);
   const [entryTab, setEntryTab] = useState<"all" | "trades" | "observations" | "favorites">(
@@ -441,6 +452,15 @@ export function TradesLogView() {
     setOutcomeFilter("all");
     setSearch("");
     setPage(1);
+    if (params.propChallengeId || params.propChallengeName || params.propFirm || params.phase || params.accountId) {
+      const nextParams = { ...params };
+      delete nextParams.accountId;
+      delete nextParams.propChallengeId;
+      delete nextParams.propChallengeName;
+      delete nextParams.propFirm;
+      delete nextParams.phase;
+      setParams(nextParams);
+    }
   }
 
   function handleApplyPresetFilters(filters: FilterState) {
@@ -486,11 +506,27 @@ export function TradesLogView() {
     }
     if (accountFilter !== "all") {
       const acc = accounts.find((a) => a.id === accountFilter);
+      const isProp = Boolean(params.propChallengeId || params.propChallengeName || params.propFirm);
+      const propLabel = isProp
+        ? `${params.propFirm ? `${params.propFirm} — ` : ""}${params.propChallengeName || acc?.name || "Challenge"}${params.phase ? ` (${params.phase})` : ""}`
+        : (acc ? acc.name : "Account");
+
       list.push({
         key: "account",
-        labelPrefix: "Account: ",
-        label: acc ? acc.name : "Account",
-        onClear: () => setAccountFilter("all"),
+        labelPrefix: isProp ? "Prop Account: " : "Account: ",
+        label: propLabel,
+        onClear: () => {
+          setAccountFilter("all");
+          if (isProp) {
+            const nextParams = { ...params };
+            delete nextParams.accountId;
+            delete nextParams.propChallengeId;
+            delete nextParams.propChallengeName;
+            delete nextParams.propFirm;
+            delete nextParams.phase;
+            setParams(nextParams);
+          }
+        },
       });
     }
     if (setupFilter !== "all") {
@@ -528,7 +564,7 @@ export function TradesLogView() {
       });
     }
     return list;
-  }, [debouncedSearch, accountFilter, setupFilter, directionFilter, outcomeFilter, accounts, strategies]);
+  }, [debouncedSearch, accountFilter, setupFilter, directionFilter, outcomeFilter, accounts, strategies, params]);
 
   const activeFilterCount = activeFilters.length;
 
@@ -1178,6 +1214,11 @@ export function TradesLogView() {
                         >
                           {st.label}
                         </span>
+                        {isSyntheticSampleTrade(t) && (
+                          <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold bg-amber-500/10 text-amber-500 border border-amber-500/30">
+                            DEMO RECORD
+                          </span>
+                        )}
                       </div>
                       <div
                         className={cn(
@@ -1377,7 +1418,14 @@ export function TradesLogView() {
                             : "—"}
                         </td>
                         <td className="px-4 py-3 font-semibold text-foreground whitespace-nowrap">
-                          {t.instrumentSymbol}
+                          <div className="flex items-center gap-1.5">
+                            <span>{t.instrumentSymbol}</span>
+                            {isSyntheticSampleTrade(t) && (
+                              <span className="inline-flex items-center px-1.5 py-0.2 rounded text-[10px] font-semibold bg-amber-500/10 text-amber-500 border border-amber-500/30">
+                                DEMO
+                              </span>
+                            )}
+                          </div>
                         </td>
                         <td className="px-4 py-3">
                           <DirectionBadge direction={t.direction} />

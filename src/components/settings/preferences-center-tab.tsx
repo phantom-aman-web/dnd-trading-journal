@@ -267,6 +267,7 @@ export function PreferencesCenterTab() {
               onClick={() => setSelectedSubSection(cat.id)}
               className={cn(
                 "flex items-center gap-1.5 px-3 py-1.5 rounded-lg font-medium whitespace-nowrap transition-colors shrink-0",
+                cat.id === "shortcuts" && "hidden sm:flex",
                 isSelected
                   ? "bg-primary text-primary-foreground font-semibold shadow-xs"
                   : "bg-muted/40 hover:bg-muted text-muted-foreground hover:text-foreground"
@@ -977,9 +978,9 @@ export function PreferencesCenterTab() {
         </div>
       )}
 
-      {/* 7. Keyboard Shortcuts Management */}
+      {/* 7. Keyboard Shortcuts Management (Desktop only per mobile ergonomics) */}
       {(selectedSubSection === "all" || selectedSubSection === "shortcuts") && (
-        <div className="bg-card rounded-xl border border-border p-6 shadow-sm space-y-4">
+        <div className="hidden sm:block bg-card rounded-xl border border-border p-6 shadow-sm space-y-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
               <Keyboard className="h-4 w-4 text-primary" />

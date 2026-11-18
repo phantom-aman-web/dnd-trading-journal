@@ -4,6 +4,7 @@ import { requireUser } from "@/lib/auth";
 import { ok, bad, notFound, toApiError, parseJson } from "@/lib/api";
 import { audit } from "@/lib/audit";
 import { computeAggregateMetrics, type TradeMetricRow, type TradeOutcome } from "@/lib/financial-engine";
+import { isSyntheticSampleTrade } from "@/lib/prop-firm-engine";
 
 function computeAdherencePct(planAdherenceJson: string | null | undefined): number | null {
   if (!planAdherenceJson) return null;
@@ -62,8 +63,8 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string 
   });
   if (!strat) return notFound("Strategy not found");
 
-  // Fetch all trades historically attributed to this strategy or any of its versions
-  const trades = await db.trade.findMany({
+  // Fetch all trades historically attributed to this strategy or any of its versions (excluding synthetic demo records)
+  const rawTrades = await db.trade.findMany({
     where: {
       userId: user.id,
       OR: [
@@ -74,6 +75,7 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string 
     },
     orderBy: { entryTime: "asc" },
   });
+  const trades = rawTrades.filter((t) => !isSyntheticSampleTrade(t));
 
   // Authoritative aggregate metrics for the strategy as a whole
   const aggregate = computeAggregateMetrics(trades.map(mapToTradeMetricRow), null);
@@ -195,6 +197,57 @@ export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: strin
       ...(body.checklistConfigId !== undefined ? { checklistConfigId: body.checklistConfigId || null } : {}),
     },
   });
+
+  // If in-place version editing is requested, update the current version record without incrementing version
+  if (body.updateCurrentVersion === true) {
+    const latestVersion = await db.strategyVersion.findFirst({
+      where: { strategyId: id },
+      orderBy: { effectiveDate: "desc" },
+    });
+    if (latestVersion) {
+      if (body.expectedVersionId && latestVersion.id !== body.expectedVersionId) {
+        return bad("Version conflict: The strategy version has been updated by another session.");
+      }
+      if (body.expectedUpdatedAt && new Date(latestVersion.createdAt).toISOString() !== new Date(body.expectedUpdatedAt).toISOString()) {
+        return bad("Concurrent update conflict: This strategy version was modified by another session.");
+      }
+      const cleanRulesList = Array.isArray(body.rules)
+        ? body.rules
+        : (body.rules?.rules ?? body.rules?.items ?? []);
+      const cleanFieldsList = Array.isArray(body.customFields)
+        ? body.customFields
+        : (body.rules && typeof body.rules === "object" && Array.isArray((body.rules as any).customFields)
+          ? (body.rules as any).customFields
+          : []);
+
+      const rulesData = {
+        rules: cleanRulesList,
+        items: cleanRulesList,
+        customFields: cleanFieldsList,
+      };
+
+      await db.strategyVersion.update({
+        where: { id: latestVersion.id },
+        data: {
+          ...(body.rules !== undefined || body.customFields !== undefined
+            ? { rulesJson: JSON.stringify(rulesData) }
+            : {}),
+          ...(body.changeReason !== undefined ? { changeReason: body.changeReason } : {}),
+          ...(body.changeSummary !== undefined ? { changeSummary: body.changeSummary } : {}),
+          ...(body.expectedImpact !== undefined ? { expectedImpact: body.expectedImpact } : {}),
+          ...(body.checklist !== undefined
+            ? { checklistJson: body.checklist ? JSON.stringify(body.checklist) : null }
+            : {}),
+        },
+      });
+      await audit("strategy.version_edited", "strategy_version", latestVersion.id, {
+        strategyId: id,
+        versionLabel: latestVersion.versionLabel,
+        inPlace: true,
+      });
+    }
+  }
+
   return ok(updated);
 }
 

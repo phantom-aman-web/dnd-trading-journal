@@ -1686,6 +1686,7 @@ export function TradeFormView() {
         qc.invalidateQueries({ queryKey: ["dashboard"] }),
         qc.invalidateQueries({ queryKey: ["analytics"] }),
         qc.invalidateQueries({ queryKey: ["calendar"] }),
+        qc.invalidateQueries({ queryKey: ["prop-challenges"] }),
         qc.invalidateQueries({ queryKey: ["me"] }),
       ]);
       if (editingId) {

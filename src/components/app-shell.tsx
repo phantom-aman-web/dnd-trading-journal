@@ -7,6 +7,7 @@ import { Sidebar } from "@/components/sidebar";
 import { MobileNav } from "@/components/mobile-nav";
 import { MobileDrawer } from "@/components/mobile-drawer";
 import { TopBar } from "@/components/top-bar";
+import { GlobalBreadcrumbs } from "@/components/navigation/global-breadcrumbs";
 import { CommandPalette } from "@/components/command-palette";
 import { DashboardView } from "@/components/views/dashboard-view";
 import { TradesLogView } from "@/components/views/trades-log-view";
@@ -135,6 +136,7 @@ export function AppShell() {
           onOpenMobileNav={() => setMobileNavOpen(true)}
           onOpenShortcuts={() => setShortcutsOpen(true)}
         />
+        <GlobalBreadcrumbs />
         <main
           ref={mainRef}
           className="flex-1 overflow-y-auto overflow-x-hidden pb-20 md:pb-0 scroll-thin bg-background relative"

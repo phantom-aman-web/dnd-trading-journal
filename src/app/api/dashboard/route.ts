@@ -13,6 +13,7 @@ import {
   generateInsights,
   safeParsePsychTags,
 } from "@/lib/financial-engine";
+import { isSyntheticSampleTrade } from "@/lib/prop-firm-engine";
 
 async function loadTrades(userId: string, from?: Date, to?: Date, accountId?: string) {
   const where: any = { userId, isArchived: false };
@@ -32,10 +33,11 @@ async function loadTrades(userId: string, from?: Date, to?: Date, accountId?: st
       where.exitTime.lt = endExclusive;
     }
   }
-  const trades = await db.trade.findMany({
+  const rawTrades = await db.trade.findMany({
     where,
     orderBy: { exitTime: "asc" },
   });
+  const trades = rawTrades.filter((t) => !isSyntheticSampleTrade(t));
   return trades.map((t): TradeMetricRow => ({
     id: t.id,
     netPnlCents: t.netPnlCents,
@@ -137,9 +139,11 @@ export async function GET(req: NextRequest) {
     if (accountId) priorWhere.accountId = accountId;
     const priorTrades = await db.trade.findMany({
       where: priorWhere,
-      select: { netPnlCents: true },
+      select: { netPnlCents: true, tagsJson: true, notes: true },
     });
-    priorRealizedPnlCents = priorTrades.reduce((s, t) => s + (t.netPnlCents || 0), 0);
+    priorRealizedPnlCents = priorTrades
+      .filter((t) => !isSyntheticSampleTrade(t))
+      .reduce((s, t) => s + (t.netPnlCents || 0), 0);
   }
 
   // Multi-currency check for All Accounts:

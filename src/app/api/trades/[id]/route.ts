@@ -103,7 +103,20 @@ export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: strin
     }
   }
   if ("tags" in body) allowed.tagsJson = JSON.stringify(body.tags ?? []);
-  if ("setup" in body) allowed.setupJson = body.setup ? JSON.stringify(body.setup) : null;
+  if ("setup" in body) {
+    let existingSnapshot: any = null;
+    if (trade.setupJson) {
+      try {
+        const parsed = JSON.parse(trade.setupJson);
+        if (parsed?.strategySnapshot) existingSnapshot = parsed.strategySnapshot;
+      } catch {}
+    }
+    const mergedSetup = body.setup ? {
+      ...body.setup,
+      ...(existingSnapshot && !body.setup.strategySnapshot ? { strategySnapshot: existingSnapshot } : {}),
+    } : null;
+    allowed.setupJson = mergedSetup ? JSON.stringify(mergedSetup) : null;
+  }
   if ("thesis" in body) allowed.thesisJson = body.thesis ? JSON.stringify(body.thesis) : null;
   if ("planAdherence" in body) allowed.planAdherenceJson = body.planAdherence ? JSON.stringify(body.planAdherence) : null;
   if ("psychBefore" in body) allowed.psychBeforeJson = body.psychBefore ? JSON.stringify(body.psychBefore) : null;
@@ -310,7 +323,7 @@ export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: strin
           await db.tradeChecklistEvaluation.update({
             where: { id: existingEval.id },
             data: {
-              rawAnswersJson: serializeAnswers(answers),
+              rawAnswersJson: serializeAnswers(answers, items),
               weightedScore: String(result.score),
               finalGrade: result.grade,
               evaluatedAt: new Date(),
@@ -323,7 +336,7 @@ export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: strin
               tradeId: id,
               checklistVersionId: evalChecklistVersionId,
               strategyVersionId: evalStrategyVersionId,
-              rawAnswersJson: serializeAnswers(answers),
+              rawAnswersJson: serializeAnswers(answers, items),
               weightedScore: String(result.score),
               finalGrade: result.grade,
             },

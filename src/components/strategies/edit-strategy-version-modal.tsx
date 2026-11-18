@@ -176,13 +176,13 @@ export function EditStrategyVersionModal({
     });
   }
 
-  async function handleSubmit() {
+  async function handleSubmit(isUpgrade: boolean) {
     if (!name.trim()) {
       toast.error("Strategy name is required");
       return;
     }
-    if (!versionLabel.trim()) {
-      toast.error("Version label is required");
+    if (isUpgrade && !versionLabel.trim()) {
+      toast.error("Version label is required for upgrading");
       return;
     }
 
@@ -211,47 +211,75 @@ export function EditStrategyVersionModal({
 
     setIsSubmitting(true);
     try {
-      // 1. Update Strategy metadata (name, market, description)
-      const patchRes = await fetch(`/api/strategies/${strategy.id}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          name: name.trim(),
-          market,
-          description: description.trim() || null,
-        }),
-      });
+      if (!isUpgrade) {
+        // Save in-place to current version without bumping version number
+        const patchRes = await fetch(`/api/strategies/${strategy.id}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            name: name.trim(),
+            market,
+            description: description.trim() || null,
+            updateCurrentVersion: true,
+            expectedVersionId: latestVersion?.id,
+            expectedUpdatedAt: (latestVersion as any)?.createdAt ? new Date((latestVersion as any).createdAt).toISOString() : undefined,
+            rules: cleanRules,
+            customFields: cleanCustomFields,
+            changeReason: changeReason.trim() || "Updated current version",
+            changeSummary: changeSummary.trim() || `Saved in-place edits to v${latestLabel}`,
+          }),
+        });
 
-      if (!patchRes.ok) {
-        const err = await patchRes.json().catch(() => null);
-        throw new Error(err?.error || "Failed to update strategy metadata");
+        if (!patchRes.ok) {
+          const err = await patchRes.json().catch(() => null);
+          throw new Error(err?.error || "Failed to update strategy");
+        }
+
+        toast.success(`Saved changes to current version v${latestLabel}`);
+      } else {
+        // 1. Update Strategy metadata (name, market, description)
+        const patchRes = await fetch(`/api/strategies/${strategy.id}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            name: name.trim(),
+            market,
+            description: description.trim() || null,
+          }),
+        });
+
+        if (!patchRes.ok) {
+          const err = await patchRes.json().catch(() => null);
+          throw new Error(err?.error || "Failed to update strategy metadata");
+        }
+
+        // 2. Create new immutable version record (PUT)
+        const putRes = await fetch(`/api/strategies/${strategy.id}`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            versionLabel: versionLabel.trim(),
+            changeReason: changeReason.trim() || "Strategy update",
+            changeSummary: changeSummary.trim() || `Created version ${versionLabel.trim()}`,
+            rules: cleanRules,
+            customFields: cleanCustomFields,
+          }),
+        });
+
+        if (!putRes.ok) {
+          const err = await putRes.json().catch(() => null);
+          throw new Error(err?.error || "Failed to create strategy version");
+        }
+
+        toast.success(`Created version v${versionLabel.trim()} (v${latestLabel} preserved)`);
       }
 
-      // 2. Create new immutable version record (PUT)
-      const putRes = await fetch(`/api/strategies/${strategy.id}`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          versionLabel: versionLabel.trim(),
-          changeReason: changeReason.trim() || "Strategy update",
-          changeSummary: changeSummary.trim() || `Created version ${versionLabel.trim()}`,
-          rules: cleanRules,
-          customFields: cleanCustomFields,
-        }),
-      });
-
-      if (!putRes.ok) {
-        const err = await putRes.json().catch(() => null);
-        throw new Error(err?.error || "Failed to create strategy version");
-      }
-
-      toast.success(`Created version v${versionLabel.trim()} (v${latestLabel} preserved)`);
       await qc.invalidateQueries({ queryKey: ["strategies"] });
       await qc.invalidateQueries({ queryKey: ["strategy", strategy.id] });
       onSaved();
       onOpenChange(false);
     } catch (e: any) {
-      toast.error(e.message || "Failed to save strategy version");
+      toast.error(e.message || "Failed to save strategy");
     } finally {
       setIsSubmitting(false);
     }
@@ -576,7 +604,7 @@ export function EditStrategyVersionModal({
           </div>
         </div>
 
-        <DialogFooter className="gap-2">
+        <DialogFooter className="flex flex-col sm:flex-row gap-2">
           <Button
             type="button"
             variant="outline"
@@ -585,9 +613,26 @@ export function EditStrategyVersionModal({
           >
             Cancel
           </Button>
-          <Button type="button" onClick={handleSubmit} disabled={isSubmitting} className="gap-1.5">
+          <Button
+            type="button"
+            variant="secondary"
+            onClick={() => handleSubmit(false)}
+            disabled={isSubmitting}
+            className="gap-1.5 font-medium cursor-pointer"
+          >
             {isSubmitting && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
-            Save as Version v{versionLabel}
+            <ShieldCheck className="h-3.5 w-3.5 text-primary" />
+            Save Changes to Current Version (v{latestLabel})
+          </Button>
+          <Button
+            type="button"
+            onClick={() => handleSubmit(true)}
+            disabled={isSubmitting}
+            className="gap-1.5 bg-primary text-primary-foreground font-semibold cursor-pointer"
+          >
+            {isSubmitting && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+            <GitBranch className="h-3.5 w-3.5" />
+            Upgrade to New Version (v{versionLabel})
           </Button>
         </DialogFooter>
       </DialogContent>

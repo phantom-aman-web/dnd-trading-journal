@@ -6,6 +6,429 @@ import { ok, bad, toApiError } from "@/lib/api";
 import { invalidateCache } from "@/lib/server-cache";
 import { audit } from "@/lib/audit";
 
+// ---------------------------------------------------------------------------
+// Account Archetypes
+// ---------------------------------------------------------------------------
+
+interface AccountArchetype {
+  nameTemplate: string;
+  broker: string;
+  accountType: "prop" | "funded" | "personal" | "demo";
+  currency: string;
+  startingBalanceCents: number;
+  // Prop challenge specific (if prop or funded)
+  hasChallenge: boolean;
+  propFirm?: string;
+  stage?: "phase1" | "phase2" | "funded";
+  profitTargetPct?: number | null;
+  dailyLossLimitPct?: number;
+  maxDrawdownPct?: number;
+  drawdownType?: "static" | "trailing";
+  resetHour?: number;
+}
+
+const ACCOUNT_ARCHETYPES: AccountArchetype[] = [
+  // 1. FundingPips 50K Evaluation
+  {
+    nameTemplate: "FundingPips $50K 2-Phase Evaluation",
+    broker: "FundingPips",
+    accountType: "prop",
+    currency: "USD",
+    startingBalanceCents: 5_000_000, // $50,000
+    hasChallenge: true,
+    propFirm: "FundingPips",
+    stage: "phase1",
+    profitTargetPct: 8,
+    dailyLossLimitPct: 5,
+    maxDrawdownPct: 10,
+    drawdownType: "static",
+    resetHour: 17,
+  },
+  // 2. Apex 50K Trailing Combine
+  {
+    nameTemplate: "Apex 50K Trailing Combine",
+    broker: "Apex Trader Funding",
+    accountType: "prop",
+    currency: "USD",
+    startingBalanceCents: 5_000_000, // $50,000
+    hasChallenge: true,
+    propFirm: "Apex Trader Funding",
+    stage: "phase1",
+    profitTargetPct: 6,
+    dailyLossLimitPct: 4,
+    maxDrawdownPct: 5,
+    drawdownType: "trailing",
+    resetHour: 17,
+  },
+  // 3. Topstep $150K Futures Combine
+  {
+    nameTemplate: "Topstep $150K Futures Combine",
+    broker: "Topstep",
+    accountType: "prop",
+    currency: "USD",
+    startingBalanceCents: 15_000_000, // $150,000
+    hasChallenge: true,
+    propFirm: "Topstep",
+    stage: "phase1",
+    profitTargetPct: 6,
+    dailyLossLimitPct: 3,
+    maxDrawdownPct: 4.5,
+    drawdownType: "trailing",
+    resetHour: 17,
+  },
+  // 4. FTMO $100K Stage 2 Verification
+  {
+    nameTemplate: "FTMO $100K Stage 2 Verification",
+    broker: "FTMO",
+    accountType: "prop",
+    currency: "USD",
+    startingBalanceCents: 10_000_000, // $100,000
+    hasChallenge: true,
+    propFirm: "FTMO",
+    stage: "phase2",
+    profitTargetPct: 5,
+    dailyLossLimitPct: 5,
+    maxDrawdownPct: 10,
+    drawdownType: "static",
+    resetHour: 0,
+  },
+  // 5. FundedNext $200K Stellar Challenge
+  {
+    nameTemplate: "FundedNext $200K Stellar Challenge",
+    broker: "FundedNext",
+    accountType: "prop",
+    currency: "USD",
+    startingBalanceCents: 20_000_000, // $200,000
+    hasChallenge: true,
+    propFirm: "FundedNext",
+    stage: "phase1",
+    profitTargetPct: 8,
+    dailyLossLimitPct: 5,
+    maxDrawdownPct: 10,
+    drawdownType: "static",
+    resetHour: 0,
+  },
+  // 6. The5ers €60K Hyper Growth
+  {
+    nameTemplate: "The5ers €60K Hyper Growth",
+    broker: "The5ers",
+    accountType: "prop",
+    currency: "EUR",
+    startingBalanceCents: 6_000_000, // €60,000
+    hasChallenge: true,
+    propFirm: "The5ers",
+    stage: "phase1",
+    profitTargetPct: 10,
+    dailyLossLimitPct: 4,
+    maxDrawdownPct: 8,
+    drawdownType: "static",
+    resetHour: 0,
+  },
+  // 7. Alpha Capital £100K Pro Qualifier
+  {
+    nameTemplate: "Alpha Capital £100K Pro Qualifier",
+    broker: "Alpha Capital",
+    accountType: "prop",
+    currency: "GBP",
+    startingBalanceCents: 10_000_000, // £100,000
+    hasChallenge: true,
+    propFirm: "Alpha Capital",
+    stage: "phase1",
+    profitTargetPct: 8,
+    dailyLossLimitPct: 5,
+    maxDrawdownPct: 10,
+    drawdownType: "static",
+    resetHour: 17,
+  },
+  // 8. Topstep $50K Express Funded Account
+  {
+    nameTemplate: "Topstep $50K Express Funded",
+    broker: "Topstep",
+    accountType: "funded",
+    currency: "USD",
+    startingBalanceCents: 5_000_000, // $50,000
+    hasChallenge: true,
+    propFirm: "Topstep",
+    stage: "funded",
+    profitTargetPct: null,
+    dailyLossLimitPct: 3,
+    maxDrawdownPct: 4,
+    drawdownType: "trailing",
+    resetHour: 17,
+  },
+  // 9. FTMO $100K Master Funded Account
+  {
+    nameTemplate: "FTMO $100K Master Funded",
+    broker: "FTMO",
+    accountType: "funded",
+    currency: "USD",
+    startingBalanceCents: 10_000_000, // $100,000
+    hasChallenge: true,
+    propFirm: "FTMO",
+    stage: "funded",
+    profitTargetPct: null,
+    dailyLossLimitPct: 5,
+    maxDrawdownPct: 10,
+    drawdownType: "static",
+    resetHour: 0,
+  },
+  // 10. Interactive Brokers Prime Margin (Personal)
+  {
+    nameTemplate: "Interactive Brokers Prime Margin",
+    broker: "Interactive Brokers",
+    accountType: "personal",
+    currency: "USD",
+    startingBalanceCents: 3_500_000, // $35,000
+    hasChallenge: false,
+    dailyLossLimitPct: 3,
+    maxDrawdownPct: 8,
+  },
+  // 11. Pepperstone Razor Swing Live (Personal)
+  {
+    nameTemplate: "Pepperstone Razor Swing Live",
+    broker: "Pepperstone",
+    accountType: "personal",
+    currency: "USD",
+    startingBalanceCents: 7_500_000, // $75,000
+    hasChallenge: false,
+    dailyLossLimitPct: 3,
+    maxDrawdownPct: 10,
+  },
+  // 12. OANDA FX Alpha Portfolio (Personal EUR)
+  {
+    nameTemplate: "OANDA FX Alpha Portfolio",
+    broker: "OANDA",
+    accountType: "personal",
+    currency: "EUR",
+    startingBalanceCents: 2_500_000, // €25,000
+    hasChallenge: false,
+    dailyLossLimitPct: 2.5,
+    maxDrawdownPct: 7,
+  },
+  // 13. TradeStation Micro Futures Direct (Personal)
+  {
+    nameTemplate: "TradeStation Micro Futures Direct",
+    broker: "TradeStation",
+    accountType: "personal",
+    currency: "USD",
+    startingBalanceCents: 5_000_000, // $50,000
+    hasChallenge: false,
+    dailyLossLimitPct: 3,
+    maxDrawdownPct: 8,
+  },
+];
+
+// ---------------------------------------------------------------------------
+// Strategy Library
+// ---------------------------------------------------------------------------
+
+interface StrategyBlueprint {
+  name: string;
+  market: string;
+  purpose: string;
+  description: string;
+  instruments: string;
+  timeframe: string;
+  session: string;
+  rules: { title: string; required: boolean; description: string }[];
+}
+
+const STRATEGY_LIBRARY: StrategyBlueprint[] = [
+  {
+    name: "ICT Silver Bullet",
+    market: "gold",
+    purpose: "High probability session reversal and continuation model targeting opposing liquidity pools.",
+    description: "15m liquidity sweep followed by 5m displacement and fair value gap entry during New York AM / London sessions.",
+    instruments: "XAUUSD, EURUSD",
+    timeframe: "5m - 15m",
+    session: "ny_am",
+    rules: [
+      { title: "Higher timeframe liquidity taken", required: true, description: "Sweep of prior day high/low or Asian session high/low." },
+      { title: "Market structure shift (MSS) with displacement", required: true, description: "Strong energetic break with fair value gap creation." },
+      { title: "Entry at 5m Fair Value Gap", required: true, description: "Limit order placed inside the discount/premium FVG." },
+      { title: "Stop placed beyond swing point", required: true, description: "Protected structural invalidation level." },
+      { title: "Target opposing liquidity pool", required: false, description: "Unmitigated old high/low or equal highs/lows." },
+    ],
+  },
+  {
+    name: "London Judas Swing",
+    market: "forex",
+    purpose: "Capture the primary daily trend expansion during London session after trapping breakout traders.",
+    description: "False breakout of Asian range boundaries between 02:00 - 04:00 NY time to trap retail breakout traders.",
+    instruments: "EURUSD, GBPUSD",
+    timeframe: "15m",
+    session: "london",
+    rules: [
+      { title: "Clear Asian range consolidation", required: true, description: "Tight Asian range established between 00:00 - 06:00 UTC." },
+      { title: "Judas swing extension", required: true, description: "Fake push 10-25 pips beyond Asian high or low." },
+      { title: "Rapid rejection back inside range", required: true, description: "Failure to hold beyond the extreme; impulse back inside." },
+      { title: "Minimum 2:1 RR target", required: false, description: "Target Asian range opposite boundary or daily target." },
+    ],
+  },
+  {
+    name: "Nasdaq Opening Range Breakout",
+    market: "indices",
+    purpose: "Ride high-beta index momentum during peak NY morning volume.",
+    description: "Trend continuation following 9:30 AM NY Open opening range breakout and retest of order block.",
+    instruments: "NQ, ES",
+    timeframe: "5m",
+    session: "ny_am",
+    rules: [
+      { title: "Opening 15m range high/low formed", required: true, description: "Wait for initial 15-minute price discovery window." },
+      { title: "Displacement break of opening range", required: true, description: "High volume breakout candle closing outside opening range." },
+      { title: "Retest of opening range order block", required: true, description: "Clean mitigation of breaker or order block." },
+      { title: "Target next key psychological level", required: false, description: "Major round number or prior day extreme." },
+    ],
+  },
+  {
+    name: "S&P 500 VWAP Mean Reversion",
+    market: "indices",
+    purpose: "Exploit statistical exhaustion and return to daily VWAP equilibrium.",
+    description: "Reversion trade taken when ES extends > 2 standard deviations from session VWAP into structural demand/supply.",
+    instruments: "ES",
+    timeframe: "15m",
+    session: "ny_pm",
+    rules: [
+      { title: "Price extended > 2 standard deviations from VWAP", required: true, description: "Clear statistical band extension." },
+      { title: "NYSE TICK divergence", required: true, description: "TICK extreme exhaustion (< -800 or > +800)." },
+      { title: "Absorption volume candle printed", required: true, description: "High volume wick rejecting new low/high." },
+      { title: "Target session VWAP baseline", required: true, description: "Full exit at central VWAP mean." },
+    ],
+  },
+  {
+    name: "Crypto Liquidation Reversal",
+    market: "crypto",
+    purpose: "Exploit aggressive retail liquidation cascades on high-leverage crypto perpetuals.",
+    description: "Extreme statistical deviation from 20-period VWAP/Bollinger bands on BTC with volume exhaustion.",
+    instruments: "BTCUSD, SOLUSD",
+    timeframe: "15m - 1h",
+    session: "ny_pm",
+    rules: [
+      { title: "Price extended > 2.5 standard deviations", required: true, description: "Statistical extreme on 15m/1h bands." },
+      { title: "Volume exhaustion wick", required: true, description: "Long rejection tail with declining follow-through volume." },
+      { title: "Open Interest drop / CVD divergence", required: false, description: "Cascading stop hunt absorption confirmed." },
+      { title: "Target VWAP / 20 EMA mean", required: true, description: "Exit completely at mean reversion equilibrium." },
+    ],
+  },
+  {
+    name: "Asian Range Liquidity Sweep",
+    market: "forex",
+    purpose: "Capitalize on early London session sweep of overnight Asian range highs and lows.",
+    description: "Sweep of Asian extremes followed by rapid market structure shift targeting opposite liquidity pools.",
+    instruments: "GBPUSD, USDJPY, EURUSD",
+    timeframe: "15m",
+    session: "london",
+    rules: [
+      { title: "Defined Asian consolidation range", required: true, description: "Range established prior to London Open." },
+      { title: "Clean liquidity sweep into key higher-timeframe zone", required: true, description: "10-20 pip sweep." },
+      { title: "5m displacement candle closing inside range", required: true, description: "Energetic reversal confirmation." },
+      { title: "Target opposing Asian boundary", required: false, description: "Minimum 2.5R objective." },
+    ],
+  },
+  {
+    name: "Daily Bias Fair Value Gap Retest",
+    market: "gold",
+    purpose: "Align with higher timeframe institutional flow by trading clean FVG retracements.",
+    description: "4H trend continuation model executing on 15m Fair Value Gap mitigations during peak volume.",
+    instruments: "XAUUSD, EURUSD",
+    timeframe: "15m",
+    session: "ny_am",
+    rules: [
+      { title: "4H directional bias clear", required: true, description: "Unbroken 4H market structure." },
+      { title: "15m displacement candle creates virgin FVG", required: true, description: "Imbalance gap between candle 1 wick and candle 3 wick." },
+      { title: "Clean touch of FVG 50% equilibrium", required: true, description: "Limit order fill at midpoint." },
+      { title: "Target 4H swing high/low", required: false, description: "Run into major institutional liquidity." },
+    ],
+  },
+  {
+    name: "High-Beta Momentum Trend",
+    market: "indices",
+    purpose: "Capture multi-leg intraday trend continuation during trending market regimes.",
+    description: "Fast EMA pullbacks on NQ during sustained institutional trending sessions.",
+    instruments: "NQ",
+    timeframe: "5m",
+    session: "ny_am",
+    rules: [
+      { title: "20 EMA stacked above 50 EMA on 15m & 5m", required: true, description: "Clear directional slope." },
+      { title: "Pullback to 20 EMA on declining volume", required: true, description: "Corrective retracement." },
+      { title: "Engulfing candle continuation signal", required: true, description: "Buyers immediately step back in." },
+      { title: "Trail stop under 5m swing lows", required: false, description: "Ride the trend until market structure breaks." },
+    ],
+  },
+];
+
+// ---------------------------------------------------------------------------
+// Market Specifications
+// ---------------------------------------------------------------------------
+
+interface MarketSpec {
+  symbol: string;
+  market: string;
+  basePrice: number;
+  priceDecimals: number;
+  contractMultiplier: number; // dollars per 1.0 unit move for 1 lot/contract
+  typicalRiskStopPts: number;
+}
+
+const MARKET_SPECS: Record<string, MarketSpec> = {
+  XAUUSD: {
+    symbol: "XAUUSD",
+    market: "gold",
+    basePrice: 2360.00,
+    priceDecimals: 2,
+    contractMultiplier: 100, // 100 oz per standard lot -> $1.00 move = $100
+    typicalRiskStopPts: 5.0,
+  },
+  EURUSD: {
+    symbol: "EURUSD",
+    market: "forex",
+    basePrice: 1.08500,
+    priceDecimals: 5,
+    contractMultiplier: 100000, // 100,000 units -> 0.0001 (1 pip) = $10
+    typicalRiskStopPts: 0.0025, // 25 pips
+  },
+  GBPUSD: {
+    symbol: "GBPUSD",
+    market: "forex",
+    basePrice: 1.27500,
+    priceDecimals: 5,
+    contractMultiplier: 100000,
+    typicalRiskStopPts: 0.0030, // 30 pips
+  },
+  USDJPY: {
+    symbol: "USDJPY",
+    market: "forex",
+    basePrice: 154.50,
+    priceDecimals: 3,
+    contractMultiplier: 1000, // $10 approx per pip for standard lot
+    typicalRiskStopPts: 0.35, // 35 pips
+  },
+  NQ: {
+    symbol: "NQ",
+    market: "indices",
+    basePrice: 20100.00,
+    priceDecimals: 2,
+    contractMultiplier: 20, // $20 per full point
+    typicalRiskStopPts: 30.0,
+  },
+  ES: {
+    symbol: "ES",
+    market: "indices",
+    basePrice: 5520.00,
+    priceDecimals: 2,
+    contractMultiplier: 50, // $50 per full point
+    typicalRiskStopPts: 12.0,
+  },
+  BTCUSD: {
+    symbol: "BTCUSD",
+    market: "crypto",
+    basePrice: 65400.00,
+    priceDecimals: 2,
+    contractMultiplier: 1, // $1 per $1 move for 1 BTC
+    typicalRiskStopPts: 600.0,
+  },
+};
+
 export async function POST(req: NextRequest) {
   let user;
   try {
@@ -15,97 +438,76 @@ export async function POST(req: NextRequest) {
   }
 
   try {
-    // 1. Create a primary high-tier Prop Account
-    // If the user has accounts, set others isDefault=false
+    // 1. Select a diverse, randomized account archetype
+    // We pick randomly from the rich archetype library
+    const archetype = ACCOUNT_ARCHETYPES[Math.floor(Math.random() * ACCOUNT_ARCHETYPES.length)];
+
+    // Unset isDefault on prior accounts without modifying or deleting user data
     await db.tradingAccount.updateMany({
       where: { userId: user.id },
       data: { isDefault: false },
     });
 
+    // Create the new demo account
     const account = await db.tradingAccount.create({
       data: {
         userId: user.id,
-        name: "FTMO $100k Prop Challenge",
-        broker: "FTMO",
-        accountType: "prop",
-        currency: "USD",
-        startingBalanceCents: 10_000_000, // $100,000.00
-        currentBalanceCents: 10_438_000, // $104,380.00 (+4.38% profit)
-        consistencyRate: 88,
-        dailyLossLimitPct: 5,
-        maxDrawdownPct: 10,
+        name: `${archetype.nameTemplate} #${Math.floor(1000 + Math.random() * 9000)}`,
+        broker: archetype.broker,
+        accountType: archetype.accountType,
+        currency: archetype.currency,
+        startingBalanceCents: archetype.startingBalanceCents,
+        currentBalanceCents: archetype.startingBalanceCents, // Will be updated dynamically after trades
+        consistencyRate: Math.floor(82 + Math.random() * 12),
+        dailyLossLimitPct: archetype.dailyLossLimitPct ?? 5,
+        maxDrawdownPct: archetype.maxDrawdownPct ?? 10,
         isDefault: true,
       },
     });
 
-    // 2. Create 4 Distinct Trading Models (Strategies + v1.0 Versions)
-    const strategyConfigs = [
-      {
-        name: "ICT Silver Bullet",
-        market: "gold",
-        purpose: "High probability session reversal and continuation model targeting opposing liquidity pools.",
-        description: "15m liquidity sweep followed by 5m displacement and fair value gap entry during New York AM / London sessions.",
-        instruments: "XAUUSD, EURUSD",
-        timeframe: "5m - 15m",
-        session: "ny_am",
-        rules: [
-          { title: "Higher timeframe liquidity taken", required: true, description: "Sweep of prior day high/low or Asian session high/low." },
-          { title: "Market structure shift (MSS) with displacement", required: true, description: "Strong energetic break with fair value gap creation." },
-          { title: "Entry at 5m Fair Value Gap", required: true, description: "Limit order placed inside the discount/premium FVG." },
-          { title: "Stop placed beyond swing point", required: true, description: "Protected structural invalidation level." },
-          { title: "Target opposing liquidity pool", required: false, description: "Unmitigated old high/low or equal highs/lows." },
-        ],
-      },
-      {
-        name: "London Judas Swing",
-        market: "forex",
-        purpose: "Capture the primary daily trend expansion during London session after trapping breakout traders.",
-        description: "False breakout of Asian range boundaries between 02:00 - 04:00 NY time to trap retail breakout traders.",
-        instruments: "EURUSD, GBPUSD",
-        timeframe: "15m",
-        session: "london",
-        rules: [
-          { title: "Clear Asian range consolidation", required: true, description: "Tight Asian range established between 00:00 - 06:00 UTC." },
-          { title: "Judas swing extension", required: true, description: "Fake push 10-25 pips beyond Asian high or low." },
-          { title: "Rapid rejection back inside range", required: true, description: "Failure to hold beyond the extreme; impulse back inside." },
-          { title: "Minimum 2:1 RR target", required: false, description: "Target Asian range opposite boundary or daily target." },
-        ],
-      },
-      {
-        name: "Nasdaq Momentum Continuation",
-        market: "indices",
-        purpose: "Ride high-beta index momentum during peak NY morning volume.",
-        description: "Trend continuation following 9:30 AM NY Open opening range breakout and retest of order block.",
-        instruments: "NQ, ES",
-        timeframe: "5m",
-        session: "ny_am",
-        rules: [
-          { title: "Opening 15m range high/low formed", required: true, description: "Wait for initial 15-minute price discovery window." },
-          { title: "Displacement break of opening range", required: true, description: "High volume breakout candle closing outside opening range." },
-          { title: "Retest of opening range order block", required: true, description: "Clean mitigation of breaker or order block." },
-          { title: "Target next key psychological level", required: false, description: "Major round number or prior day extreme." },
-        ],
-      },
-      {
-        name: "Crypto Mean Reversion",
-        market: "crypto",
-        purpose: "Exploit liquidity over-extensions and aggressive liquidation cascades.",
-        description: "Extreme statistical deviation from 20-period VWAP/Bollinger bands on BTC with volume exhaustion.",
-        instruments: "BTCUSD, SOLUSD",
-        timeframe: "15m - 1h",
-        session: "ny_pm",
-        rules: [
-          { title: "Price extended > 2.5 standard deviations", required: true, description: "Statistical extreme on 15m/1h bands." },
-          { title: "Volume exhaustion wick", required: true, description: "Long rejection tail with declining follow-through volume." },
-          { title: "RSI divergence confirmed", required: false, description: "Momentum divergence against price extreme." },
-          { title: "Target VWAP / 20 EMA mean", required: true, description: "Exit completely at mean reversion equilibrium." },
-        ],
-      },
-    ];
+    // 2. If prop or funded, create the linked PropChallenge record
+    let challenge: any = null;
+    if (archetype.hasChallenge && archetype.propFirm) {
+      const targetCents = archetype.profitTargetPct
+        ? Math.round(archetype.startingBalanceCents * (archetype.profitTargetPct / 100))
+        : null;
+      const dailyCents = archetype.dailyLossLimitPct
+        ? Math.round(archetype.startingBalanceCents * (archetype.dailyLossLimitPct / 100))
+        : null;
+      const maxDDCents = archetype.maxDrawdownPct
+        ? Math.round(archetype.startingBalanceCents * (archetype.maxDrawdownPct / 100))
+        : null;
 
-    const createdStrategies: Array<{ id: string; name: string; versionId: string }> = [];
+      challenge = await db.propChallenge.create({
+        data: {
+          userId: user.id,
+          accountId: account.id,
+          name: `${archetype.propFirm} ${archetype.stage?.toUpperCase()} Tracker`,
+          propFirm: archetype.propFirm,
+          stage: archetype.stage ?? "phase1",
+          status: "active",
+          startingBalanceCents: archetype.startingBalanceCents,
+          profitTargetCents: targetCents,
+          dailyLossLimitCents: dailyCents,
+          dailyLossLimitPct: archetype.dailyLossLimitPct ?? 5,
+          maxDrawdownCents: maxDDCents,
+          maxDrawdownPct: archetype.maxDrawdownPct ?? 10,
+          drawdownType: archetype.drawdownType ?? "static",
+          trailingHighWaterMarkCents: archetype.startingBalanceCents,
+          minTradingDays: 4,
+          maxTradingDays: archetype.stage === "funded" ? null : 60,
+          resetTimezone: "America/New_York",
+          resetHour: archetype.resetHour ?? 17,
+        },
+      });
+    }
 
-    for (const sc of strategyConfigs) {
+    // 3. Select 3 to 4 diverse strategies from the library
+    const shuffledStrategies = [...STRATEGY_LIBRARY].sort(() => 0.5 - Math.random());
+    const selectedStrategyBlueprints = shuffledStrategies.slice(0, Math.floor(3 + Math.random() * 2)); // 3 or 4
+    const createdStrategies: Array<{ id: string; name: string; versionId: string; blueprint: StrategyBlueprint }> = [];
+
+    for (const sc of selectedStrategyBlueprints) {
       const s = await db.strategy.create({
         data: {
           userId: user.id,
@@ -119,8 +521,8 @@ export async function POST(req: NextRequest) {
           versions: {
             create: {
               versionLabel: "1.0",
-              changeReason: "Initial baseline version",
-              changeSummary: "Standard playbook rules for institutional execution.",
+              changeReason: "Baseline institutional trading rules",
+              changeSummary: "Standard playbook rules with disciplined risk parameters.",
               rulesJson: JSON.stringify(sc.rules),
               effectiveDate: new Date(),
             },
@@ -129,499 +531,34 @@ export async function POST(req: NextRequest) {
         include: { versions: true },
       });
 
-      createdStrategies.push({ id: s.id, name: s.name, versionId: s.versions[0].id });
+      createdStrategies.push({
+        id: s.id,
+        name: s.name,
+        versionId: s.versions[0].id,
+        blueprint: sc,
+      });
     }
 
-    // Map helpers
-    const silverBullet = createdStrategies[0];
-    const judasSwing = createdStrategies[1];
-    const nqMomentum = createdStrategies[2];
-    const cryptoMean = createdStrategies[3];
-
-    // 3. Generate 17 Realistic Trades (10 Wins, 5 Losses, 2 Breakevens)
-    // Spread across the past 14 days
+    // 4. Generate randomized, realistic trades across the past 25 to 55 days
+    const tradeCount = Math.floor(20 + Math.random() * 12); // 20 to 31 trades
+    const daysSpan = Math.floor(30 + Math.random() * 25); // 30 to 54 days back
     const now = Date.now();
     const dayMs = 24 * 60 * 60 * 1000;
 
-    interface DemoTradeDef {
-      daysAgo: number;
-      hour: number;
-      symbol: string;
-      market: string;
-      direction: "long" | "short";
-      session: string;
-      strategy: typeof silverBullet;
-      status: "win" | "loss" | "breakeven";
-      setupGrade: string;
-      setupScore: string;
-      entryPrice: string;
-      stopPrice: string;
-      targetPrice: string;
-      exitPrice: string;
-      quantity: string;
-      netPnlCents: number;
-      actualR: string;
-      plannedRR: string;
-      riskCents: number;
-      behaviorFlags: string[];
-      notes: string;
-      thesis: string;
+    // Distribute trade dates skipping weekends
+    const availableDates: Date[] = [];
+    for (let d = daysSpan; d >= 0; d--) {
+      const candidate = new Date(now - d * dayMs);
+      const dayOfWeek = candidate.getUTCDay(); // 0 is Sun, 6 is Sat
+      if (dayOfWeek !== 0 && dayOfWeek !== 6) {
+        availableDates.push(candidate);
+      }
     }
 
-    const tradeBlueprints: DemoTradeDef[] = [
-      // Day 14 (Winner)
-      {
-        daysAgo: 14,
-        hour: 9,
-        symbol: "XAUUSD",
-        market: "gold",
-        direction: "long",
-        session: "london",
-        strategy: silverBullet,
-        status: "win",
-        setupGrade: "A+",
-        setupScore: "0.95",
-        entryPrice: "2350.50",
-        stopPrice: "2346.50",
-        targetPrice: "2359.00",
-        exitPrice: "2359.00",
-        quantity: "1.0",
-        netPnlCents: 85000, // +$850.00
-        actualR: "2.13",
-        plannedRR: "2.13",
-        riskCents: 40000, // $400 risk
-        behaviorFlags: [],
-        notes: "Flawless Silver Bullet sweep of Asia low, energetic 5m displacement and clean FVG retest.",
-        thesis: "Asian low swept during London Open. Clean displacement candle printed leaving 5m FVG.",
-      },
-      // Day 13 (Winner)
-      {
-        daysAgo: 13,
-        hour: 14,
-        symbol: "NQ",
-        market: "indices",
-        direction: "long",
-        session: "ny_am",
-        strategy: nqMomentum,
-        status: "win",
-        setupGrade: "A+",
-        setupScore: "0.92",
-        entryPrice: "19850.00",
-        stopPrice: "19830.00",
-        targetPrice: "19920.00",
-        exitPrice: "19920.00",
-        quantity: "1",
-        netPnlCents: 140000, // +$1,400.00 (70 pts * $20)
-        actualR: "3.50",
-        plannedRR: "3.50",
-        riskCents: 40000,
-        behaviorFlags: [],
-        notes: "Opening range breakout with massive volume. Retested top of opening range order block perfectly.",
-        thesis: "Bullish 4H bias. 15m opening range broke high, retested breaker with decreasing volume.",
-      },
-      // Day 12 (Loss)
-      {
-        daysAgo: 12,
-        hour: 10,
-        symbol: "EURUSD",
-        market: "forex",
-        direction: "short",
-        session: "london",
-        strategy: judasSwing,
-        status: "loss",
-        setupGrade: "B",
-        setupScore: "0.65",
-        entryPrice: "1.08500",
-        stopPrice: "1.08850",
-        targetPrice: "1.07800",
-        exitPrice: "1.08860",
-        quantity: "1.0",
-        netPnlCents: -36000, // -$360.00 (-36 pips)
-        actualR: "-1.03",
-        plannedRR: "2.00",
-        riskCents: 35000,
-        behaviorFlags: ["entered_early"],
-        notes: "Jumped in before 15m candle close confirmed the Judas fakeout. Momentum continued higher.",
-        thesis: "Expected sweep of Asian high, but UK CPI release pushed strong continuous trend.",
-      },
-      // Day 11 (Winner)
-      {
-        daysAgo: 11,
-        hour: 15,
-        symbol: "BTCUSD",
-        market: "crypto",
-        direction: "long",
-        session: "ny_pm",
-        strategy: cryptoMean,
-        status: "win",
-        setupGrade: "A",
-        setupScore: "0.85",
-        entryPrice: "64200.00",
-        stopPrice: "63700.00",
-        targetPrice: "65300.00",
-        exitPrice: "65300.00",
-        quantity: "1.0",
-        netPnlCents: 110000, // +$1,100.00
-        actualR: "2.20",
-        plannedRR: "2.20",
-        riskCents: 50000,
-        behaviorFlags: [],
-        notes: "Violent 4% wick down liquidated late longs. Bought the climax into 4H VWAP mean.",
-        thesis: "2.8 standard deviations below 1H VWAP with massive buy volume absorption.",
-      },
-      // Day 10 (Winner)
-      {
-        daysAgo: 10,
-        hour: 9,
-        symbol: "GBPUSD",
-        market: "forex",
-        direction: "long",
-        session: "london",
-        strategy: judasSwing,
-        status: "win",
-        setupGrade: "A+",
-        setupScore: "0.94",
-        entryPrice: "1.27200",
-        stopPrice: "1.26900",
-        targetPrice: "1.27950",
-        exitPrice: "1.27950",
-        quantity: "1.0",
-        netPnlCents: 75000, // +$750.00 (75 pips)
-        actualR: "2.50",
-        plannedRR: "2.50",
-        riskCents: 30000,
-        behaviorFlags: [],
-        notes: "Classic Judas swing lower during London open, wicked into demand and exploded higher.",
-        thesis: "Sweep of Asian low by 18 pips followed by immediate bullish displacement candle.",
-      },
-      // Day 9 (Loss)
-      {
-        daysAgo: 9,
-        hour: 14,
-        symbol: "NQ",
-        market: "indices",
-        direction: "long",
-        session: "ny_am",
-        strategy: nqMomentum,
-        status: "loss",
-        setupGrade: "C",
-        setupScore: "0.48",
-        entryPrice: "20100.00",
-        stopPrice: "20075.00",
-        targetPrice: "20175.00",
-        exitPrice: "20074.00",
-        quantity: "1",
-        netPnlCents: -52000, // -$520.00 (26 pts * $20)
-        actualR: "-1.04",
-        plannedRR: "3.00",
-        riskCents: 50000,
-        behaviorFlags: ["chased_price", "fomo"],
-        notes: "Chased price at the highs without waiting for pullback to order block. Instantly flushed.",
-        thesis: "Felt FOMO after missing initial move, bought top of range without proper risk model.",
-      },
-      // Day 8 (Winner)
-      {
-        daysAgo: 8,
-        hour: 13,
-        symbol: "XAUUSD",
-        market: "gold",
-        direction: "short",
-        session: "ny_am",
-        strategy: silverBullet,
-        status: "win",
-        setupGrade: "A",
-        setupScore: "0.88",
-        entryPrice: "2380.00",
-        stopPrice: "2384.00",
-        targetPrice: "2370.50",
-        exitPrice: "2370.50",
-        quantity: "1.0",
-        netPnlCents: 95000, // +$950.00
-        actualR: "2.38",
-        plannedRR: "2.38",
-        riskCents: 40000,
-        behaviorFlags: [],
-        notes: "US PPI spike took out early London highs, sharp rejection, sold 5m FVG down to Asia low.",
-        thesis: "High timeframe resistance mitigated, clean MSS printed on 5m right at 10:00 AM NY time.",
-      },
-      // Day 7 (Breakeven)
-      {
-        daysAgo: 7,
-        hour: 9,
-        symbol: "XAUUSD",
-        market: "gold",
-        direction: "long",
-        session: "london",
-        strategy: silverBullet,
-        status: "breakeven",
-        setupGrade: "A",
-        setupScore: "0.82",
-        entryPrice: "2365.00",
-        stopPrice: "2361.00",
-        targetPrice: "2375.00",
-        exitPrice: "2365.00",
-        quantity: "1.0",
-        netPnlCents: 0,
-        actualR: "0.00",
-        plannedRR: "2.50",
-        riskCents: 40000,
-        behaviorFlags: [],
-        notes: "Hit +1.4R, moved stop loss to breakeven according to management rules. Price came back and tapped entry.",
-        thesis: "Tested discount level, partial momentum slowed down ahead of NY open.",
-      },
-      // Day 6 (Winner)
-      {
-        daysAgo: 6,
-        hour: 14,
-        symbol: "ES",
-        market: "indices",
-        direction: "long",
-        session: "ny_am",
-        strategy: nqMomentum,
-        status: "win",
-        setupGrade: "A",
-        setupScore: "0.86",
-        entryPrice: "5500.00",
-        stopPrice: "5492.00",
-        targetPrice: "5516.00",
-        exitPrice: "5516.00",
-        quantity: "2",
-        netPnlCents: 160000, // +$1,600.00 (16 pts * $50 * 2 contracts)
-        actualR: "2.00",
-        plannedRR: "2.00",
-        riskCents: 80000,
-        behaviorFlags: [],
-        notes: "S&P 500 order block test held like a rock. Clean 16-point surge right to daily target.",
-        thesis: "NYSE tick reading +1000, strong breadth across all sectors.",
-      },
-      // Day 5 (Loss)
-      {
-        daysAgo: 5,
-        hour: 10,
-        symbol: "XAUUSD",
-        market: "gold",
-        direction: "long",
-        session: "ny_am",
-        strategy: silverBullet,
-        status: "loss",
-        setupGrade: "B",
-        setupScore: "0.58",
-        entryPrice: "2372.00",
-        stopPrice: "2368.00",
-        targetPrice: "2382.00",
-        exitPrice: "2367.80",
-        quantity: "1.0",
-        netPnlCents: -42000, // -$420.00
-        actualR: "-1.05",
-        plannedRR: "2.50",
-        riskCents: 40000,
-        behaviorFlags: ["entered_early"],
-        notes: "Anticipated market structure shift before candle closed. Trend continued lower and stopped me out.",
-        thesis: "Believed support would hold, but institutional selling overwhelmed bids.",
-      },
-      // Day 4 (Winner)
-      {
-        daysAgo: 4,
-        hour: 10,
-        symbol: "EURUSD",
-        market: "forex",
-        direction: "short",
-        session: "london",
-        strategy: judasSwing,
-        status: "win",
-        setupGrade: "A+",
-        setupScore: "0.96",
-        entryPrice: "1.09100",
-        stopPrice: "1.09350",
-        targetPrice: "1.08450",
-        exitPrice: "1.08450",
-        quantity: "1.0",
-        netPnlCents: 65000, // +$650.00 (65 pips)
-        actualR: "2.60",
-        plannedRR: "2.60",
-        riskCents: 25000,
-        behaviorFlags: [],
-        notes: "Picture perfect Judas swing at European Central Bank rate decision, swift drop to target.",
-        thesis: "Sweep of 4H equal highs right at 08:00 London time.",
-      },
-      // Day 3 (Winner)
-      {
-        daysAgo: 3,
-        hour: 15,
-        symbol: "BTCUSD",
-        market: "crypto",
-        direction: "short",
-        session: "ny_pm",
-        strategy: cryptoMean,
-        status: "win",
-        setupGrade: "A",
-        setupScore: "0.84",
-        entryPrice: "67800.00",
-        stopPrice: "68400.00",
-        targetPrice: "66500.00",
-        exitPrice: "66500.00",
-        quantity: "1.0",
-        netPnlCents: 130000, // +$1,300.00
-        actualR: "2.17",
-        plannedRR: "2.17",
-        riskCents: 60000,
-        behaviorFlags: [],
-        notes: "Funding rates reached +0.08%, extreme top deviation on 1H bands. Scalped clean mean reversion.",
-        thesis: "Open interest spiked at resistance while CVD showed aggressive retail market buying absorption.",
-      },
-      // Day 3 (Breakeven)
-      {
-        daysAgo: 3,
-        hour: 16,
-        symbol: "NQ",
-        market: "indices",
-        direction: "short",
-        session: "ny_pm",
-        strategy: nqMomentum,
-        status: "breakeven",
-        setupGrade: "A",
-        setupScore: "0.80",
-        entryPrice: "20250.00",
-        stopPrice: "20275.00",
-        targetPrice: "20180.00",
-        exitPrice: "20250.00",
-        quantity: "1",
-        netPnlCents: 0,
-        actualR: "0.00",
-        plannedRR: "2.80",
-        riskCents: 50000,
-        behaviorFlags: [],
-        notes: "Moved stop to entry after 1.5R favorable excursion. Market rallied back into close.",
-        thesis: "Afternoon continuation model, market ran out of steam before 4 PM close.",
-      },
-      // Day 2 (Loss)
-      {
-        daysAgo: 2,
-        hour: 8,
-        symbol: "GBPUSD",
-        market: "forex",
-        direction: "short",
-        session: "london",
-        strategy: judasSwing,
-        status: "loss",
-        setupGrade: "B",
-        setupScore: "0.62",
-        entryPrice: "1.28100",
-        stopPrice: "1.28400",
-        targetPrice: "1.27400",
-        exitPrice: "1.28410",
-        quantity: "1.0",
-        netPnlCents: -31000, // -$310.00
-        actualR: "-1.03",
-        plannedRR: "2.33",
-        riskCents: 30000,
-        behaviorFlags: ["moved_stop"],
-        notes: "Hesitated and adjusted stop by 5 pips. Respecting original stop is mandatory.",
-        thesis: "False move up did not reject cleanly, continued trending into European morning.",
-      },
-      // Day 2 (Winner)
-      {
-        daysAgo: 2,
-        hour: 14,
-        symbol: "XAUUSD",
-        market: "gold",
-        direction: "long",
-        session: "ny_am",
-        strategy: silverBullet,
-        status: "win",
-        setupGrade: "A+",
-        setupScore: "0.98",
-        entryPrice: "2390.00",
-        stopPrice: "2385.00",
-        targetPrice: "2405.00",
-        exitPrice: "2405.00",
-        quantity: "1.0",
-        netPnlCents: 150000, // +$1,500.00
-        actualR: "3.00",
-        plannedRR: "3.00",
-        riskCents: 50000,
-        behaviorFlags: [],
-        notes: "Trade of the week. Swept 2388 liquidity pool, expanded +$15 straight into 2405 target.",
-        thesis: "DXY broke down below key 104.00 support, Gold initiated massive institutional expansion.",
-      },
-      // Day 1 (Winner)
-      {
-        daysAgo: 1,
-        hour: 15,
-        symbol: "NQ",
-        market: "indices",
-        direction: "short",
-        session: "ny_am",
-        strategy: nqMomentum,
-        status: "win",
-        setupGrade: "A+",
-        setupScore: "0.91",
-        entryPrice: "20320.00",
-        stopPrice: "20345.00",
-        targetPrice: "20240.00",
-        exitPrice: "20240.00",
-        quantity: "1",
-        netPnlCents: 160000, // +$1,600.00 (80 pts * $20)
-        actualR: "3.20",
-        plannedRR: "3.20",
-        riskCents: 50000,
-        behaviorFlags: [],
-        notes: "Heavy tech earnings gap down and retest. Textbook short breakdown.",
-        thesis: "Daily trend turned bearish, 15m order block rejected on first touch.",
-      },
-      // Day 1 (Loss)
-      {
-        daysAgo: 1,
-        hour: 19,
-        symbol: "BTCUSD",
-        market: "crypto",
-        direction: "long",
-        session: "ny_pm",
-        strategy: cryptoMean,
-        status: "loss",
-        setupGrade: "Invalid",
-        setupScore: "0.35",
-        entryPrice: "65100.00",
-        stopPrice: "64700.00",
-        targetPrice: "66000.00",
-        exitPrice: "64680.00",
-        quantity: "1.0",
-        netPnlCents: -42000, // -$420.00
-        actualR: "-1.05",
-        plannedRR: "2.25",
-        riskCents: 40000,
-        behaviorFlags: ["broke_rules", "revenge_trading"],
-        notes: "Took trade out of boredom and frustration late in the day. Broke rules, immediate stop-out.",
-        thesis: "No valid edge. Attempted to force trade without technical setup confirmation.",
-      },
-      // Today (Winner)
-      {
-        daysAgo: 0,
-        hour: 10,
-        symbol: "EURUSD",
-        market: "forex",
-        direction: "long",
-        session: "london",
-        strategy: judasSwing,
-        status: "win",
-        setupGrade: "A+",
-        setupScore: "0.93",
-        entryPrice: "1.08200",
-        stopPrice: "1.07950",
-        targetPrice: "1.08800",
-        exitPrice: "1.08800",
-        quantity: "1.0",
-        netPnlCents: 60000, // +$600.00 (60 pips)
-        actualR: "2.40",
-        plannedRR: "2.40",
-        riskCents: 25000,
-        behaviorFlags: [],
-        notes: "Fresh London session sweep of Tokyo low. Disciplined entry, full take profit hit.",
-        thesis: "German GDP data beat estimates, immediate bullish structure shift on 5m chart.",
-      },
-    ];
+    // Available instruments matching created strategies
+    const availableSymbols = Object.keys(MARKET_SPECS);
 
-    let createdTradeCount = 0;
+    let totalNetPnlCents = 0;
     let winsCount = 0;
     let lossesCount = 0;
     let besCount = 0;
@@ -629,116 +566,427 @@ export async function POST(req: NextRequest) {
     const tradesToInsert: any[] = [];
     const executionsToInsert: any[] = [];
 
-    for (const b of tradeBlueprints) {
+    // Realistic target win rate between 56% and 65%
+    const targetWinRate = 0.56 + Math.random() * 0.09;
+    const targetBeRate = 0.10 + Math.random() * 0.04;
+
+    for (let i = 0; i < tradeCount; i++) {
       const tradeId = "t_" + crypto.randomUUID().replace(/-/g, "").slice(0, 24);
-      const entryDate = new Date(now - b.daysAgo * dayMs);
-      entryDate.setUTCHours(b.hour, Math.floor(Math.random() * 45), 0, 0);
 
-      // Exit 45 mins to 2 hours later
-      const exitDate = new Date(entryDate.getTime() + (45 + Math.floor(Math.random() * 75)) * 60 * 1000);
+      // Pick a random strategy from created ones
+      const strategy = createdStrategies[Math.floor(Math.random() * createdStrategies.length)];
 
-      const isWin = b.status === "win";
-      const isLoss = b.status === "loss";
-      if (isWin) winsCount++;
-      else if (isLoss) lossesCount++;
-      else besCount++;
+      // Pick symbol matching strategy or compatible
+      const strategySymbols = strategy.blueprint.instruments.split(",").map((s) => s.trim().toUpperCase());
+      const validSymbol = strategySymbols.find((s) => MARKET_SPECS[s]) || availableSymbols[Math.floor(Math.random() * availableSymbols.length)];
+      const spec = MARKET_SPECS[validSymbol] || MARKET_SPECS.EURUSD;
+
+      // Determine outcome
+      const outcomeRand = Math.random();
+      let status: "win" | "loss" | "breakeven";
+      if (outcomeRand < targetWinRate) {
+        status = "win";
+        winsCount++;
+      } else if (outcomeRand < targetWinRate + targetBeRate) {
+        status = "breakeven";
+        besCount++;
+      } else {
+        status = "loss";
+        lossesCount++;
+      }
+
+      // Pick date
+      const dateIndex = Math.floor((i / tradeCount) * (availableDates.length - 1));
+      const baseDate = new Date(availableDates[dateIndex] || now);
+
+      // Session and hour
+      let hour = 9;
+      let session = strategy.blueprint.session;
+      if (session === "london") hour = 8 + Math.floor(Math.random() * 3);
+      else if (session === "ny_am") hour = 13 + Math.floor(Math.random() * 3);
+      else if (session === "ny_pm") hour = 17 + Math.floor(Math.random() * 3);
+      else if (session === "asia") hour = 1 + Math.floor(Math.random() * 4);
+      else {
+        hour = 14;
+        session = "ny_am";
+      }
+
+      const entryTime = new Date(baseDate);
+      entryTime.setUTCHours(hour, Math.floor(Math.random() * 55), Math.floor(Math.random() * 60));
+      const durationMins = 30 + Math.floor(Math.random() * 120);
+      const exitTime = new Date(entryTime.getTime() + durationMins * 60 * 1000);
+
+      // Direction
+      const direction: "long" | "short" = Math.random() > 0.5 ? "long" : "short";
+
+      // Pricing math based on market spec
+      const priceVariation = (Math.random() - 0.5) * (spec.basePrice * 0.03);
+      const entryPriceNum = Number((spec.basePrice + priceVariation).toFixed(spec.priceDecimals));
+
+      // Risk between 0.5% and 1.2% of starting balance
+      const riskCents = Math.round(archetype.startingBalanceCents * (0.005 + Math.random() * 0.006));
+      const riskDollars = riskCents / 100;
+
+      // Stop distance in price units
+      const stopDistance = Number((spec.typicalRiskStopPts * (0.8 + Math.random() * 0.4)).toFixed(spec.priceDecimals));
+
+      // Position size: riskDollars / (stopDistance * contractMultiplier)
+      const rawUnits = riskDollars / (stopDistance * spec.contractMultiplier);
+      let positionSize = "1.0";
+      if (spec.market === "indices") {
+        positionSize = Math.max(1, Math.round(rawUnits)).toString();
+      } else if (spec.market === "crypto") {
+        positionSize = Math.max(0.1, Number(rawUnits.toFixed(2))).toString();
+      } else {
+        positionSize = Math.max(0.1, Number(rawUnits.toFixed(2))).toString();
+      }
+
+      const stopPriceNum = direction === "long"
+        ? Number((entryPriceNum - stopDistance).toFixed(spec.priceDecimals))
+        : Number((entryPriceNum + stopDistance).toFixed(spec.priceDecimals));
+
+      let plannedRR = "2.50";
+      let actualR = "0.00";
+      let netPnlCents = 0;
+      let exitPriceNum = entryPriceNum;
+      let targetPriceNum = entryPriceNum;
+      let hasPartialExit = false;
+
+      const feesCents = 150 + Math.floor(Math.random() * 100);
+      const commissionCents = 250 + Math.floor(Math.random() * 200);
+
+      if (status === "win") {
+        const rr = Number((1.8 + Math.random() * 2.2).toFixed(2)); // 1.8R to 4.0R
+        plannedRR = rr.toFixed(2);
+        actualR = rr.toFixed(2);
+        netPnlCents = Math.round(riskCents * rr);
+
+        targetPriceNum = direction === "long"
+          ? Number((entryPriceNum + stopDistance * rr).toFixed(spec.priceDecimals))
+          : Number((entryPriceNum - stopDistance * rr).toFixed(spec.priceDecimals));
+        exitPriceNum = targetPriceNum;
+
+        // ~30% of winners have partial exit
+        hasPartialExit = Math.random() < 0.35;
+      } else if (status === "loss") {
+        const plannedRrNum = Number((2.0 + Math.random() * 1.5).toFixed(2));
+        plannedRR = plannedRrNum.toFixed(2);
+
+        targetPriceNum = direction === "long"
+          ? Number((entryPriceNum + stopDistance * plannedRrNum).toFixed(spec.priceDecimals))
+          : Number((entryPriceNum - stopDistance * plannedRrNum).toFixed(spec.priceDecimals));
+
+        const lossR = Number((0.95 + Math.random() * 0.15).toFixed(2)); // -0.95R to -1.1R
+        actualR = `-${lossR}`;
+        netPnlCents = -Math.round(riskCents * lossR);
+        exitPriceNum = stopPriceNum;
+      } else {
+        // Breakeven
+        plannedRR = "2.50";
+        actualR = "0.00";
+        netPnlCents = 0;
+        targetPriceNum = direction === "long"
+          ? Number((entryPriceNum + stopDistance * 2.5).toFixed(spec.priceDecimals))
+          : Number((entryPriceNum - stopDistance * 2.5).toFixed(spec.priceDecimals));
+        exitPriceNum = entryPriceNum;
+      }
+
+      totalNetPnlCents += netPnlCents;
+
+      const isWin = status === "win";
+      const isLoss = status === "loss";
+      const setupGrade = isWin ? (Math.random() > 0.4 ? "A+" : "A") : isLoss ? (Math.random() > 0.5 ? "B" : "C") : "A";
+      const setupScore = isWin ? (0.85 + Math.random() * 0.13).toFixed(2) : (0.50 + Math.random() * 0.25).toFixed(2);
+
+      const behaviorFlags: string[] = [];
+      if (isLoss && Math.random() < 0.4) behaviorFlags.push("entered_early");
+      if (isLoss && Math.random() < 0.2) behaviorFlags.push("chased_price");
 
       tradesToInsert.push({
         id: tradeId,
         userId: user.id,
         accountId: account.id,
-        instrumentSymbol: b.symbol,
-        market: b.market,
-        direction: b.direction,
-        status: b.status,
-        session: b.session,
-        strategyId: b.strategy.id,
-        strategyVersionId: b.strategy.versionId,
-        setupGrade: b.setupGrade,
-        setupScore: b.setupScore,
-        tagsJson: JSON.stringify(["demo", b.strategy.name.toLowerCase().replace(/\s+/g, "-")]),
-        plannedEntryPrice: b.entryPrice,
-        plannedStopPrice: b.stopPrice,
-        plannedTargetPrice: b.targetPrice,
-        plannedRiskAmountCents: b.riskCents,
-        plannedRiskPct: "0.005",
-        plannedRR: b.plannedRR,
-        entryPriceAvg: b.entryPrice,
-        exitPriceAvg: b.exitPrice,
-        positionSize: b.quantity,
-        feesCents: 150,
-        commissionCents: 350,
+        instrumentSymbol: spec.symbol,
+        market: spec.market,
+        direction,
+        status,
+        session,
+        strategyId: strategy.id,
+        strategyVersionId: strategy.versionId,
+        setupGrade,
+        setupScore,
+        tagsJson: JSON.stringify(["demo", strategy.name.toLowerCase().replace(/\s+/g, "-")]),
+        plannedEntryPrice: entryPriceNum.toFixed(spec.priceDecimals),
+        plannedStopPrice: stopPriceNum.toFixed(spec.priceDecimals),
+        plannedTargetPrice: targetPriceNum.toFixed(spec.priceDecimals),
+        plannedRiskAmountCents: riskCents,
+        plannedRiskPct: (riskCents / archetype.startingBalanceCents).toFixed(4),
+        plannedRR,
+        entryPriceAvg: entryPriceNum.toFixed(spec.priceDecimals),
+        exitPriceAvg: exitPriceNum.toFixed(spec.priceDecimals),
+        positionSize,
+        feesCents,
+        commissionCents,
         swapCents: 0,
-        slippageCents: 0,
-        grossPnlCents: b.netPnlCents + 500,
-        netPnlCents: b.netPnlCents,
-        actualR: b.actualR,
-        entryTime: entryDate,
-        exitTime: exitDate,
+        slippageCents: isLoss ? 50 : 0,
+        grossPnlCents: netPnlCents + feesCents + commissionCents,
+        netPnlCents,
+        actualR,
+        entryTime,
+        exitTime,
         tradingTimezone: "UTC",
-        notes: b.notes,
+        notes: isWin
+          ? `High-quality ${strategy.name} model execution on ${spec.symbol}. All checklist requirements confirmed before entry.`
+          : isLoss
+          ? `Discipline maintained. Invalidation level breached according to plan on ${spec.symbol}. Stopped out safely.`
+          : `Target +1.5R excursion reached, trailed stop loss to breakeven according to trade management rules.`,
         thesisJson: JSON.stringify({
-          why: b.thesis,
-          narrative: `${b.strategy.name} setup execution on ${b.symbol} during ${b.session.toUpperCase()} session.`,
+          why: `Institutional ${strategy.name} setup on ${spec.symbol} during ${session.toUpperCase()} session.`,
+          narrative: `Identified clean market structure and liquidity imbalance. Order filled at planned entry price.`,
         }),
         lessons: isLoss
-          ? "Patience is non-negotiable. Only enter when all checklist rules are green."
-          : "Executions align with statistical edge when discipline is maintained.",
-        behaviorFlagsJson: JSON.stringify(b.behaviorFlags),
+          ? "Protecting capital with disciplined stops preserves edge over long-term cycles."
+          : "Executions align with statistical expectancy when entry patience is maintained.",
+        behaviorFlagsJson: JSON.stringify(behaviorFlags),
         psychBeforeJson: JSON.stringify({
           confidence: isWin ? 5 : 3,
           energy: 4,
-          moodTags: isWin ? ["focused", "calm"] : ["hesitant", "fatigued"],
+          moodTags: isWin ? ["focused", "disciplined"] : ["calm"],
         }),
         psychAfterJson: JSON.stringify({
-          confidence: isWin ? 5 : 2,
-          energy: isWin ? 4 : 2,
-          moodTags: isWin ? ["satisfied", "disciplined"] : ["frustrated", "regret"],
+          confidence: isWin ? 5 : 3,
+          energy: isWin ? 4 : 3,
+          moodTags: isWin ? ["satisfied", "consistent"] : isLoss ? ["objective"] : ["neutral"],
         }),
       });
 
-      executionsToInsert.push(
-        {
-          id: "ex_" + crypto.randomUUID().replace(/-/g, "").slice(0, 24),
-          tradeId: tradeId,
-          kind: "entry",
-          seq: 0,
-          price: b.entryPrice,
-          quantity: b.quantity,
-          timestamp: entryDate,
-          notes: "Initial market order fill",
-        },
-        {
-          id: "ex_" + crypto.randomUUID().replace(/-/g, "").slice(0, 24),
-          tradeId: tradeId,
-          kind: "exit",
-          seq: 1,
-          price: b.exitPrice,
-          quantity: b.quantity,
-          timestamp: exitDate,
-          notes: isWin ? "Take profit target reached" : isLoss ? "Stop loss hit" : "Breakeven exit",
-        },
-      );
+      // Trade executions: handle partial exit vs single exit
+      if (hasPartialExit) {
+        // Multi-execution: Entry -> TP1 (50% scale-out) -> Runner TP2 (50% exit)
+        const sizeNum = parseFloat(positionSize) || 1.0;
+        const halfSize = (sizeNum / 2).toFixed(spec.market === "indices" ? 0 : 2);
+        const midTime = new Date(entryTime.getTime() + (durationMins * 0.5) * 60 * 1000);
+        const tp1Price = Number((entryPriceNum + (exitPriceNum - entryPriceNum) * 0.6).toFixed(spec.priceDecimals));
+
+        executionsToInsert.push(
+          {
+            id: "ex_" + crypto.randomUUID().replace(/-/g, "").slice(0, 24),
+            tradeId,
+            kind: "entry",
+            seq: 0,
+            price: entryPriceNum.toFixed(spec.priceDecimals),
+            quantity: positionSize,
+            timestamp: entryTime,
+            notes: "Initial market order execution",
+          },
+          {
+            id: "ex_" + crypto.randomUUID().replace(/-/g, "").slice(0, 24),
+            tradeId,
+            kind: "exit",
+            seq: 1,
+            price: tp1Price.toFixed(spec.priceDecimals),
+            quantity: halfSize,
+            timestamp: midTime,
+            notes: "Partial exit (50% scale-out at TP1)",
+          },
+          {
+            id: "ex_" + crypto.randomUUID().replace(/-/g, "").slice(0, 24),
+            tradeId,
+            kind: "exit",
+            seq: 2,
+            price: exitPriceNum.toFixed(spec.priceDecimals),
+            quantity: halfSize,
+            timestamp: exitTime,
+            notes: "Runner exit at final take-profit objective",
+          },
+        );
+      } else {
+        // Standard single entry and single exit
+        executionsToInsert.push(
+          {
+            id: "ex_" + crypto.randomUUID().replace(/-/g, "").slice(0, 24),
+            tradeId,
+            kind: "entry",
+            seq: 0,
+            price: entryPriceNum.toFixed(spec.priceDecimals),
+            quantity: positionSize,
+            timestamp: entryTime,
+            notes: "Initial market order execution",
+          },
+          {
+            id: "ex_" + crypto.randomUUID().replace(/-/g, "").slice(0, 24),
+            tradeId,
+            kind: "exit",
+            seq: 1,
+            price: exitPriceNum.toFixed(spec.priceDecimals),
+            quantity: positionSize,
+            timestamp: exitTime,
+            notes: isWin ? "Take profit target reached" : isLoss ? "Stop loss invalidation hit" : "Breakeven tap",
+          },
+        );
+      }
     }
 
+    // Insert trades and executions
     await db.trade.createMany({ data: tradesToInsert });
     await db.tradeExecution.createMany({ data: executionsToInsert });
 
-    createdTradeCount = tradesToInsert.length;
+    // Update account balance to strictly reflect total net PnL
+    const finalBalanceCents = account.startingBalanceCents + totalNetPnlCents;
+    await db.tradingAccount.update({
+      where: { id: account.id },
+      data: { currentBalanceCents: finalBalanceCents },
+    });
 
-    // Invalidate all caches for this user
+    // If challenge exists, update high-water mark, start date, and status
+    if (challenge) {
+      const isPassed = challenge.profitTargetCents
+        ? finalBalanceCents >= challenge.startingBalanceCents + challenge.profitTargetCents
+        : false;
+      const isBreached = challenge.maxDrawdownCents
+        ? finalBalanceCents <= challenge.startingBalanceCents - challenge.maxDrawdownCents
+        : false;
+
+      const earliestTrade = tradesToInsert.length > 0
+        ? [...tradesToInsert].sort((a, b) => a.entryTime.getTime() - b.entryTime.getTime())[0]
+        : null;
+
+      await db.propChallenge.update({
+        where: { id: challenge.id },
+        data: {
+          trailingHighWaterMarkCents: Math.max(challenge.startingBalanceCents, finalBalanceCents),
+          status: isPassed ? "passed" : isBreached ? "breached" : "active",
+          startDate: earliestTrade?.entryTime ?? new Date(),
+        },
+      });
+    }
+
+    // 5. Generate 4 to 6 Realistic No-Trade Observations (NoTradeEntry)
+    const observationBlueprints = [
+      {
+        symbol: "EURUSD",
+        market: "forex",
+        session: "ny_am",
+        timeframe: "15m",
+        bias: "bearish",
+        title: "FOMC High-Impact News Hazard",
+        observation: "High-impact rate statement within 15 minutes. Spreads widening significantly across major pairs.",
+        reasonCategory: "news_risk",
+        reasonNotes: "Standard risk parameters forbid execution inside the 15-minute high-impact news window.",
+        conditionMissing: "Post-news price stability and volatility normalization.",
+        wouldHaveValidated: "Wait 20 minutes post-statement for volatility normalization and trade direction confirmation.",
+        invalidationReason: "Slippage risk exceeds acceptable safety thresholds.",
+      },
+      {
+        symbol: "XAUUSD",
+        market: "gold",
+        session: "asia",
+        timeframe: "5m",
+        bias: "neutral",
+        title: "Choppy Low-Volume Asian Range",
+        observation: "Gold oscillating inside a tight 3-point range with overlapping candles and no directional conviction.",
+        reasonCategory: "unclear_structure",
+        reasonNotes: "No clear liquidity pool swept; lack of institutional displacement.",
+        conditionMissing: "Energetic sweep of Asian high or low with displacement.",
+        wouldHaveValidated: "Clear London session breakout and retest of outer boundary.",
+        invalidationReason: "Inside day consolidation with low liquidity.",
+      },
+      {
+        symbol: "NQ",
+        market: "indices",
+        session: "ny_am",
+        timeframe: "5m",
+        bias: "bullish",
+        title: "Unfavorable Risk-Reward Ratio",
+        observation: "Breakout setup observed, but overhead 4H resistance only 18 points away. Required stop was 30 points (0.6R).",
+        reasonCategory: "poor_rr",
+        reasonNotes: "Model requires minimum 2.0R planned expectancy to execute.",
+        conditionMissing: "Deeper retracement into demand zone to achieve 2.5R minimum.",
+        wouldHaveValidated: "Pullback to 15m order block allowing tight invalidation.",
+        invalidationReason: "Risk-reward profile unfavorable for statistical edge.",
+      },
+      {
+        symbol: "GBPUSD",
+        market: "forex",
+        session: "london",
+        timeframe: "15m",
+        bias: "bullish",
+        title: "Missing 5m Displacement Confirmation",
+        observation: "Asian low swept by 6 pips, but subsequent candle closed as an indecisive doji without displacement.",
+        reasonCategory: "confirmation_missing",
+        reasonNotes: "Checklist rule #2 requires market structure shift candle with fair value gap.",
+        conditionMissing: "Institutional impulse candle closing with displacement.",
+        wouldHaveValidated: "Strong body close back inside the Asian range.",
+        invalidationReason: "Lack of buying momentum indicated possible continuation lower.",
+      },
+      {
+        symbol: "ES",
+        market: "indices",
+        session: "ny_pm",
+        timeframe: "15m",
+        bias: "bullish",
+        title: "Daily Profit Target Preserved",
+        observation: "Secondary VWAP setup formed at 2:30 PM NY. Day was already +2.4R profitable.",
+        reasonCategory: "limit_reached",
+        reasonNotes: "Daily trading plan limits active executions to prevent overtrading and fatigue.",
+        conditionMissing: "N/A — setup was technically valid, but plan rules dictated halting executions.",
+        wouldHaveValidated: "N/A — rule adherence takes priority over taking another setup.",
+        invalidationReason: "Mental fatigue and end-of-day chop risk.",
+      },
+    ];
+
+    const noTradesToInsert: any[] = [];
+    for (let j = 0; j < observationBlueprints.length; j++) {
+      const ob = observationBlueprints[j];
+      const obDate = new Date(now - (j * 7 + 2) * dayMs);
+      obDate.setUTCHours(10 + j, 15, 0, 0);
+
+      noTradesToInsert.push({
+        id: "nt_" + crypto.randomUUID().replace(/-/g, "").slice(0, 24),
+        userId: user.id,
+        accountId: account.id,
+        instrumentSymbol: ob.symbol,
+        market: ob.market,
+        session: ob.session,
+        timeframe: ob.timeframe,
+        bias: ob.bias,
+        title: ob.title,
+        observation: ob.observation,
+        reasonCategory: ob.reasonCategory,
+        reasonNotes: ob.reasonNotes,
+        conditionMissing: ob.conditionMissing,
+        wouldHaveValidated: ob.wouldHaveValidated,
+        invalidationReason: ob.invalidationReason,
+        decisionType: "deliberate_avoidance",
+        status: "rejected",
+        psychologyNotes: "Disciplined rule adherence and capital preservation.",
+        date: obDate,
+        time: `${String(obDate.getUTCHours()).padStart(2, "0")}:15`,
+        tagsJson: JSON.stringify(["demo", "observation"]),
+      });
+    }
+
+    await db.noTradeEntry.createMany({ data: noTradesToInsert });
+
+    // 6. Invalidate caches for this user
     invalidateCache(`dashboard:${user.id}`);
     invalidateCache(`analytics:${user.id}`);
     invalidateCache(`trades:${user.id}`);
     invalidateCache(`accounts:${user.id}`);
     invalidateCache(`strategies:${user.id}`);
     invalidateCache(`calendar:${user.id}`);
+    invalidateCache(`no-trades:${user.id}`);
     invalidateCache(`me:${user.id}`);
 
     await audit("demo_data.generated", "user", user.id, {
-      tradesCount: createdTradeCount,
       account: account.name,
+      accountType: account.accountType,
+      currency: account.currency,
+      startingBalance: account.startingBalanceCents,
+      finalBalance: finalBalanceCents,
+      tradesCount: tradesToInsert.length,
       strategiesCount: createdStrategies.length,
+      noTradesCount: noTradesToInsert.length,
     });
 
     return ok({
@@ -746,22 +994,28 @@ export async function POST(req: NextRequest) {
       account: {
         id: account.id,
         name: account.name,
-        balance: account.currentBalanceCents,
+        accountType: account.accountType,
+        currency: account.currency,
+        startingBalance: account.startingBalanceCents,
+        balance: finalBalanceCents,
+        pnl: totalNetPnlCents,
       },
       summary: {
         accounts: 1,
         strategies: createdStrategies.length,
-        trades: createdTradeCount,
+        trades: tradesToInsert.length,
+        noTrades: noTradesToInsert.length,
       },
       strategiesCount: createdStrategies.length,
-      tradesCount: createdTradeCount,
+      tradesCount: tradesToInsert.length,
+      noTradesCount: noTradesToInsert.length,
       wins: winsCount,
       losses: lossesCount,
       breakevens: besCount,
+      totalNetPnlCents,
     });
   } catch (err: any) {
     console.error("Failed to generate demo data:", err);
     return bad(`Failed to generate demo data: ${err?.message ?? "Internal error"}`);
   }
 }
-

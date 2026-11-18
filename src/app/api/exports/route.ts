@@ -3,6 +3,7 @@ import { db } from "@/lib/db";
 import { requireUser } from "@/lib/auth";
 import { ok, toApiError } from "@/lib/api";
 import { audit } from "@/lib/audit";
+import { isSyntheticSampleTrade } from "@/lib/prop-firm-engine";
 
 /**
  * Export user data as CSV or JSON (spec section 88).
@@ -25,7 +26,7 @@ export async function GET(req: NextRequest) {
       const headers = [
         "id","entryTime","exitTime","instrument","direction","session","status",
         "setupGrade","entryPrice","exitPrice","stop","target","qty",
-        "netPnlCents","actualR","feesCents","commissionCents","swapCents",
+        "netPnlCents","actualR","feesCents","commissionCents","swapCents","isDemoSample",
       ];
       const lines = [headers.join(",")];
       for (const t of trades) {
@@ -48,6 +49,7 @@ export async function GET(req: NextRequest) {
           t.feesCents,
           t.commissionCents,
           t.swapCents,
+          isSyntheticSampleTrade(t) ? "true" : "false",
         ].map((v) => `"${String(v).replace(/"/g, '""')}"`).join(","));
       }
       await audit("export.performed", "trade", undefined, { format, count: trades.length });
@@ -60,7 +62,11 @@ export async function GET(req: NextRequest) {
       });
     }
     await audit("export.performed", "trade", undefined, { format, count: trades.length });
-    return Response.json({ trades });
+    const enrichedTrades = trades.map((t) => ({
+      ...t,
+      isDemoSample: isSyntheticSampleTrade(t),
+    }));
+    return Response.json({ trades: enrichedTrades });
   }
 
   // Full JSON export

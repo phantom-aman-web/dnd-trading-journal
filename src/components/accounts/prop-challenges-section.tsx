@@ -16,6 +16,13 @@ import {
   CalendarDays,
   Percent,
   Sparkles,
+  RefreshCw,
+  ArrowUpRight,
+  Info,
+  Calendar,
+  Eye,
+  ChevronDown,
+  ChevronUp,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -37,9 +44,13 @@ import {
 } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
+import { Skeleton } from "@/components/ui/skeleton";
 import { formatSignedCents } from "@/lib/money";
+import { useNav } from "@/lib/nav-store";
+import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import type { PropChallengeMetrics } from "@/lib/prop-firm-engine";
+import type { PropAccountModel, PropAggregateStatistics } from "@/lib/prop-lifecycle-engine";
 
 interface PropChallengeWithMetrics {
   id: string;
@@ -66,6 +77,8 @@ interface PropChallengeWithMetrics {
     currency: string;
   };
   metrics: PropChallengeMetrics;
+  lifecycle?: any;
+  meta?: any;
 }
 
 interface PropChallengesSectionProps {
@@ -73,8 +86,16 @@ interface PropChallengesSectionProps {
   hideHeader?: boolean;
 }
 
-export function PropChallengesSection({ accounts, hideHeader = false }: PropChallengesSectionProps) {
+export function PropChallengesSection({ accounts: rawAccounts, hideHeader = false }: PropChallengesSectionProps) {
+  const accounts: any[] = Array.isArray(rawAccounts)
+    ? rawAccounts
+    : Array.isArray((rawAccounts as any)?.items)
+    ? (rawAccounts as any).items
+    : Array.isArray((rawAccounts as any)?.accounts)
+    ? (rawAccounts as any).accounts
+    : [];
   const queryClient = useQueryClient();
+  const { navigate } = useNav();
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
 
@@ -82,6 +103,8 @@ export function PropChallengesSection({ accounts, hideHeader = false }: PropChal
   const [accountId, setAccountId] = useState(accounts[0]?.id || "");
   const [name, setName] = useState("");
   const [propFirm, setPropFirm] = useState("FTMO");
+  const [accountModel, setAccountModel] = useState<PropAccountModel>("two_step");
+  const [accountCost, setAccountCost] = useState("540");
   const [stage, setStage] = useState("phase1");
   const [startingBalance, setStartingBalance] = useState("100000");
   const [profitTargetPct, setProfitTargetPct] = useState("10");
@@ -96,17 +119,28 @@ export function PropChallengesSection({ accounts, hideHeader = false }: PropChal
   const [consistencyAction, setConsistencyAction] = useState<
     "dilution_required" | "warning" | "payout_restricted" | "hard_breach"
   >("dilution_required");
+  const [showAggregates, setShowAggregates] = useState(true);
 
-  const { data, isLoading } = useQuery<{ items: PropChallengeWithMetrics[] }>({
+  const { data, isLoading, isError, error, refetch } = useQuery<{
+    items: PropChallengeWithMetrics[];
+    aggregates?: PropAggregateStatistics;
+  }>({
     queryKey: ["prop-challenges"],
     queryFn: async () => {
       const res = await fetch("/api/prop-challenges", { cache: "no-store" });
-      if (!res.ok) throw new Error("Failed to load prop challenges");
+      if (!res.ok) {
+        const err = await res.json().catch(() => null);
+        throw new Error(err?.error || "Failed to load prop challenges");
+      }
       return res.json();
     },
+    staleTime: 0,
+    refetchOnMount: "always",
+    refetchOnWindowFocus: true,
   });
 
   const challenges = data?.items ?? [];
+  const aggregates = data?.aggregates;
 
   const createMutation = useMutation({
     mutationFn: async (payload: any) => {
@@ -172,6 +206,8 @@ export function PropChallengesSection({ accounts, hideHeader = false }: PropChal
     setEditingId(null);
     setName("");
     setPropFirm("FTMO");
+    setAccountModel("two_step");
+    setAccountCost("540");
     setStage("phase1");
     setStartingBalance("100000");
     setProfitTargetPct("10");
@@ -200,6 +236,8 @@ export function PropChallengesSection({ accounts, hideHeader = false }: PropChal
     setAccountId(c.account?.id || accounts[0]?.id || "");
     setName(c.name || "");
     setPropFirm(c.propFirm || "FTMO");
+    setAccountModel(c.meta?.accountModel || "two_step");
+    setAccountCost(((c.meta?.accountCostCents || 54000) / 100).toString());
     setStage(c.stage || "phase1");
     setStartingBalance((c.startingBalanceCents / 100).toString());
     setProfitTargetPct(
@@ -223,10 +261,12 @@ export function PropChallengesSection({ accounts, hideHeader = false }: PropChal
     setIsModalOpen(true);
   }
 
-  function applyPreset(preset: "ftmo" | "apex" | "fundednext") {
+  function applyPreset(preset: "ftmo" | "apex" | "fundednext" | "instant") {
     if (preset === "ftmo") {
       setPropFirm("FTMO");
-      setName("FTMO $100K Phase 1");
+      setName("FTMO $100K 2-Phase");
+      setAccountModel("two_step");
+      setAccountCost("540");
       setStage("phase1");
       setStartingBalance("100000");
       setProfitTargetPct("10");
@@ -241,15 +281,17 @@ export function PropChallengesSection({ accounts, hideHeader = false }: PropChal
       setConsistencyAction("dilution_required");
     } else if (preset === "apex") {
       setPropFirm("Apex");
-      setName("Apex $50K Evaluation");
-      setStage("evaluation");
+      setName("Apex 50K Trailing Evaluation");
+      setAccountModel("one_step");
+      setAccountCost("160");
+      setStage("phase1");
       setStartingBalance("50000");
       setProfitTargetPct("6");
-      setDailyLossLimitPct("0");
+      setDailyLossLimitPct("4");
       setMaxDrawdownPct("5");
       setDrawdownType("trailing");
       setMinTradingDays("7");
-      setResetHour("17");
+      setResetHour("16");
       setResetTimezone("America/Chicago");
       setConsistencyRuleType("single_day_max");
       setConsistencyThresholdPct("30");
@@ -257,6 +299,8 @@ export function PropChallengesSection({ accounts, hideHeader = false }: PropChal
     } else if (preset === "fundednext") {
       setPropFirm("FundedNext");
       setName("FundedNext Stellar $100K");
+      setAccountModel("two_step");
+      setAccountCost("549");
       setStage("phase1");
       setStartingBalance("100000");
       setProfitTargetPct("8");
@@ -266,6 +310,23 @@ export function PropChallengesSection({ accounts, hideHeader = false }: PropChal
       setMinTradingDays("5");
       setResetHour("0");
       setResetTimezone("UTC");
+      setConsistencyRuleType("none");
+      setConsistencyThresholdPct("0");
+      setConsistencyAction("warning");
+    } else if (preset === "instant") {
+      setPropFirm("Instant Funded");
+      setName("Instant Funded $100K Direct");
+      setAccountModel("instant_funded");
+      setAccountCost("350");
+      setStage("funded");
+      setStartingBalance("100000");
+      setProfitTargetPct("0");
+      setDailyLossLimitPct("5");
+      setMaxDrawdownPct("10");
+      setDrawdownType("static");
+      setMinTradingDays("0");
+      setResetHour("17");
+      setResetTimezone("America/New_York");
       setConsistencyRuleType("none");
       setConsistencyThresholdPct("0");
       setConsistencyAction("warning");
@@ -281,7 +342,9 @@ export function PropChallengesSection({ accounts, hideHeader = false }: PropChal
 
     const startBalCents = Math.round(startBal * 100);
     const targetPct = parseFloat(profitTargetPct) || null;
-    const targetCents = targetPct ? Math.round(startBalCents * (targetPct / 100)) : null;
+    const targetCents = accountModel === "instant_funded" || accountModel === "direct_funded"
+      ? null
+      : targetPct ? Math.round(startBalCents * (targetPct / 100)) : null;
 
     const dailyPct = parseFloat(dailyLossLimitPct) || null;
     const dailyCents = dailyPct ? Math.round(startBalCents * (dailyPct / 100)) : null;
@@ -295,7 +358,9 @@ export function PropChallengesSection({ accounts, hideHeader = false }: PropChal
       accountId,
       name: name.trim() || `${propFirm} ${stage.toUpperCase()}`,
       propFirm,
-      stage,
+      accountModel,
+      accountCostCents: Math.round((parseFloat(accountCost) || 0) * 100),
+      stage: accountModel === "instant_funded" || accountModel === "direct_funded" ? "funded" : stage,
       startingBalanceCents: startBalCents,
       profitTargetCents: targetCents,
       dailyLossLimitCents: dailyCents,
@@ -303,7 +368,7 @@ export function PropChallengesSection({ accounts, hideHeader = false }: PropChal
       maxDrawdownCents: maxDDCents,
       maxDrawdownPct: maxDDPct,
       drawdownType,
-      minTradingDays: parseInt(minTradingDays, 10) || 4,
+      minTradingDays: accountModel === "instant_funded" || accountModel === "direct_funded" ? null : (parseInt(minTradingDays, 10) || 4),
       resetTimezone,
       resetHour: parseInt(resetHour, 10) || 17,
       consistencyRuleType,
@@ -331,6 +396,47 @@ export function PropChallengesSection({ accounts, hideHeader = false }: PropChal
       default:
         return <Badge className="bg-blue-500/15 text-blue-600 dark:text-blue-400 border-blue-500/30 gap-1">Safe</Badge>;
     }
+  }
+
+  // Loading State
+  if (isLoading) {
+    return (
+      <div className="space-y-4">
+        {!hideHeader && (
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-6 border-t border-border">
+            <div>
+              <h2 className="text-xl font-bold text-foreground flex items-center gap-2">
+                <Trophy className="h-5 w-5 text-amber-500" />
+                Prop Firm Challenge Tracker
+              </h2>
+              <p className="text-sm text-muted-foreground mt-0.5">
+                Real-time rule tracking for evaluation challenges and funded accounts.
+              </p>
+            </div>
+          </div>
+        )}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <Skeleton className="h-72 w-full rounded-xl" />
+          <Skeleton className="h-72 w-full rounded-xl" />
+        </div>
+      </div>
+    );
+  }
+
+  // Error State
+  if (isError) {
+    return (
+      <div className="rounded-xl border border-destructive/30 bg-destructive/5 p-6 text-center space-y-3">
+        <AlertTriangle className="h-8 w-8 text-destructive mx-auto" />
+        <h4 className="text-base font-semibold text-foreground">Failed to load challenge trackers</h4>
+        <p className="text-xs text-muted-foreground max-w-md mx-auto">
+          {error instanceof Error ? error.message : "An unexpected error occurred while loading prop firm challenges."}
+        </p>
+        <Button variant="outline" size="sm" onClick={() => refetch()} className="gap-1.5 text-xs">
+          <RefreshCw className="h-3.5 w-3.5" /> Retry Loading
+        </Button>
+      </div>
+    );
   }
 
   return (
@@ -362,6 +468,154 @@ export function PropChallengesSection({ accounts, hideHeader = false }: PropChal
           <Button onClick={handleOpenCreate} size="sm" className="gap-1.5">
             <Plus className="h-4 w-4" /> New Challenge
           </Button>
+        </div>
+      )}
+
+      {/* Prop Firm Portfolio & Aggregated Analytics Hub */}
+      {aggregates && aggregates.totalChallenges > 0 && (
+        <div className="rounded-xl border border-border bg-card p-4 space-y-3 shadow-xs">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Trophy className="h-4 w-4 text-primary" />
+              <h3 className="font-semibold text-xs uppercase tracking-wider font-mono text-foreground">
+                Prop Firm Portfolio & Financial Reconciliation
+              </h3>
+            </div>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setShowAggregates(!showAggregates)}
+              className="h-7 px-2 text-xs text-muted-foreground"
+            >
+              {showAggregates ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
+            </Button>
+          </div>
+
+          {showAggregates && (
+            <div className="space-y-3 pt-1">
+              <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-2.5 text-xs">
+                <div className="p-2.5 rounded-lg bg-muted/40 border border-border/50">
+                  <div className="text-[10px] font-mono uppercase text-muted-foreground">Total Challenges</div>
+                  <div className="font-bold text-foreground text-sm font-mono mt-0.5">{aggregates.totalChallenges}</div>
+                </div>
+                <div className="p-2.5 rounded-lg bg-muted/40 border border-border/50">
+                  <div className="text-[10px] font-mono uppercase text-muted-foreground">Active Evals</div>
+                  <div className="font-bold text-primary text-sm font-mono mt-0.5">{aggregates.activeEvaluations}</div>
+                </div>
+                <div className="p-2.5 rounded-lg bg-muted/40 border border-border/50">
+                  <div className="text-[10px] font-mono uppercase text-muted-foreground">Passed / Funded</div>
+                  <div className="font-bold text-profit text-sm font-mono mt-0.5">
+                    {aggregates.passedEvaluations} / {aggregates.fundedAccounts}
+                  </div>
+                </div>
+                <div className="p-2.5 rounded-lg bg-muted/40 border border-border/50">
+                  <div className="text-[10px] font-mono uppercase text-muted-foreground">Pass Rate</div>
+                  <div className="font-bold text-foreground text-sm font-mono mt-0.5">{aggregates.passRatePct}%</div>
+                </div>
+                <div className="p-2.5 rounded-lg bg-muted/40 border border-border/50">
+                  <div className="text-[10px] font-mono uppercase text-muted-foreground">Realized Payouts</div>
+                  {aggregates.isMultiCurrency && aggregates.byCurrency ? (
+                    <div className="font-bold text-profit text-xs font-mono mt-0.5 space-y-0.5">
+                      {Object.entries(aggregates.byCurrency).map(([cur, fin]) => (
+                        <div key={cur}>{cur}: {formatSignedCents(fin.totalPayoutsCents, cur).text.replace("+ ", "")}</div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="font-bold text-profit text-sm font-mono mt-0.5">
+                      {formatSignedCents(aggregates.totalPayoutsCents, aggregates.primaryCurrency || "USD").text.replace("+ ", "")}
+                    </div>
+                  )}
+                </div>
+                <div className="p-2.5 rounded-lg bg-muted/40 border border-border/50">
+                  <div className="text-[10px] font-mono uppercase text-muted-foreground">Fees Paid</div>
+                  {aggregates.isMultiCurrency && aggregates.byCurrency ? (
+                    <div className="font-bold text-muted-foreground text-xs font-mono mt-0.5 space-y-0.5">
+                      {Object.entries(aggregates.byCurrency).map(([cur, fin]) => (
+                        <div key={cur}>{cur}: {formatSignedCents(fin.totalFeesCents, cur).text.replace("+ ", "")}</div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="font-bold text-muted-foreground text-sm font-mono mt-0.5">
+                      {formatSignedCents(aggregates.totalFeesCents, aggregates.primaryCurrency || "USD").text.replace("+ ", "")}
+                    </div>
+                  )}
+                </div>
+                <div className="p-2.5 rounded-lg bg-muted/40 border border-border/50">
+                  <div className="text-[10px] font-mono uppercase text-muted-foreground">Net Cash Outcome</div>
+                  {aggregates.isMultiCurrency && aggregates.byCurrency ? (
+                    <div className="font-bold text-xs font-mono mt-0.5 space-y-0.5">
+                      {Object.entries(aggregates.byCurrency).map(([cur, fin]) => (
+                        <div key={cur} className={fin.netCashOutcomeCents >= 0 ? "text-profit" : "text-loss"}>
+                          {cur}: {formatSignedCents(fin.netCashOutcomeCents, cur).text}
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className={cn("font-bold text-sm font-mono mt-0.5", (aggregates.netCashOutcomeCents ?? aggregates.netProfitabilityCents) >= 0 ? "text-profit" : "text-loss")}>
+                      {formatSignedCents(aggregates.netCashOutcomeCents ?? aggregates.netProfitabilityCents, aggregates.primaryCurrency || "USD").text}
+                    </div>
+                  )}
+                </div>
+                <div className="p-2.5 rounded-lg bg-muted/40 border border-border/50">
+                  <div className="text-[10px] font-mono uppercase text-muted-foreground">Simulated P&L</div>
+                  {aggregates.isMultiCurrency && aggregates.byCurrency ? (
+                    <div className="font-bold text-xs font-mono mt-0.5 space-y-0.5">
+                      {Object.entries(aggregates.byCurrency).map(([cur, fin]) => (
+                        <div key={cur} className={fin.simulatedTradingProfitCents >= 0 ? "text-profit" : "text-loss"}>
+                          {cur}: {formatSignedCents(fin.simulatedTradingProfitCents, cur).text}
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className={cn("font-bold text-sm font-mono mt-0.5", (aggregates.totalSimulatedTradingProfitCents ?? 0) >= 0 ? "text-profit" : "text-loss")}>
+                      {formatSignedCents(aggregates.totalSimulatedTradingProfitCents ?? 0, aggregates.primaryCurrency || "USD").text}
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Informational Financial Note */}
+              <div className="text-[11px] text-muted-foreground bg-muted/20 p-2.5 rounded-lg border border-border/50 flex flex-col gap-1.5">
+                <span className="flex items-center gap-1.5">
+                  <Info className="h-3.5 w-3.5 text-primary shrink-0" />
+                  <strong>Financial Ledger Clarity:</strong> Net Cash Outcome tracks real cash flow (payout disbursements received minus challenge fees paid). Simulated P&L reflects cumulative trading gains across evaluation and funded accounts.
+                </span>
+                {aggregates.isMultiCurrency && aggregates.byCurrency && (
+                  <span className="text-[10px] text-muted-foreground/90 font-mono">
+                    Multi-currency isolation active ({Object.keys(aggregates.byCurrency).join(", ")}): metrics are tracked strictly by denomination to prevent inaccurate currency mixing.
+                  </span>
+                )}
+              </div>
+
+              {/* Firm & Failure Breakdown */}
+              {Object.keys(aggregates.byFirm).length > 0 && (
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs pt-1 border-t border-border/50">
+                  <div className="space-y-1">
+                    <span className="text-[10px] font-mono uppercase text-muted-foreground">Performance by Firm</span>
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      {Object.entries(aggregates.byFirm).map(([firm, data]) => (
+                        <Badge key={firm} variant="secondary" className="text-[11px] font-normal gap-1 py-0.5">
+                          <strong>{firm}:</strong> {data.total} accts • {data.passed} passed • {formatSignedCents(data.netPnlCents, data.currency || "USD").text}
+                        </Badge>
+                      ))}
+                    </div>
+                  </div>
+                  {aggregates.frequentBreachRules.length > 0 && (
+                    <div className="space-y-1">
+                      <span className="text-[10px] font-mono uppercase text-muted-foreground">Frequent Failure Rules</span>
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        {aggregates.frequentBreachRules.slice(0, 3).map((r) => (
+                          <Badge key={r.ruleKey} variant="outline" className="text-[11px] font-normal text-loss border-loss/30 gap-1 py-0.5">
+                            {r.ruleName} ({r.count})
+                          </Badge>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
         </div>
       )}
 
@@ -421,6 +675,10 @@ export function PropChallengesSection({ accounts, hideHeader = false }: PropChal
             const dailyPct = m.dailyLossUsedPct ?? 0;
             const ddPct = m.drawdownUsedPct ?? 0;
 
+            const formattedStartDate = c.startDate
+              ? new Date(c.startDate).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })
+              : "—";
+
             return (
               <div
                 key={c.id}
@@ -429,19 +687,60 @@ export function PropChallengesSection({ accounts, hideHeader = false }: PropChal
                 {/* Header row */}
                 <div className="flex items-start justify-between gap-2">
                   <div>
-                    <div className="flex items-center gap-2">
-                      <h3 className="font-bold text-foreground text-base">{c.name}</h3>
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <h3
+                        onClick={() => navigate("propChallenges", { challengeId: c.id })}
+                        className="font-bold text-foreground text-base hover:text-primary cursor-pointer transition-colors"
+                      >
+                        {c.name}
+                      </h3>
                       {getStatusBadge(m)}
+                      {c.meta?.isFirmDispute && (
+                        <Badge
+                          variant="outline"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            navigate("propChallenges", { challengeId: c.id, tab: "breaches" });
+                          }}
+                          className="bg-loss/15 text-loss border-loss/30 text-[10px] font-mono cursor-pointer hover:bg-loss/20 gap-1"
+                        >
+                          <ShieldAlert className="h-3 w-3" /> Firm Dispute
+                        </Badge>
+                      )}
                     </div>
-                    <p className="text-xs text-muted-foreground mt-0.5">
-                      {c.propFirm} · {c.stage.toUpperCase()} · Account: {c.account?.name || "Unlinked"}
-                    </p>
+                    <div className="flex items-center gap-2 text-xs text-muted-foreground mt-0.5 flex-wrap">
+                      <span className="font-medium text-foreground">{c.propFirm}</span>
+                      <span>·</span>
+                      <span className="uppercase tracking-wide font-mono text-[10px] bg-muted px-1.5 py-0.5 rounded">
+                        {c.meta?.accountModel?.replace("_", " ") || c.stage}
+                      </span>
+                      <span>·</span>
+                      <span className="font-mono text-[10px] text-primary bg-primary/10 px-1.5 py-0.5 rounded">
+                        {c.lifecycle?.activePhase?.name || c.stage}
+                      </span>
+                      <span>·</span>
+                      {c.account ? (
+                        <span>Account: <strong className="text-foreground">{c.account.name}</strong> ({currency})</span>
+                      ) : (
+                        <Badge variant="destructive" className="text-[10px] py-0 px-1.5">Unlinked Account</Badge>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-2 text-[11px] text-muted-foreground/80 mt-1">
+                      <Calendar className="h-3 w-3 text-primary shrink-0" />
+                      <span>Tracking since {formattedStartDate}</span>
+                      {c.maxTradingDays && (
+                        <>
+                          <span>·</span>
+                          <span>{m.daysRemaining !== null ? `${m.daysRemaining} days remaining` : ""}</span>
+                        </>
+                      )}
+                    </div>
                   </div>
 
-                  <div className="flex items-center gap-1">
+                  <div className="flex items-center gap-1 shrink-0">
                     <button
                       onClick={() => handleOpenEdit(c)}
-                      className="text-muted-foreground hover:text-foreground p-1.5 rounded-md hover:bg-muted transition-colors"
+                      className="text-muted-foreground hover:text-foreground p-1.5 rounded-md hover:bg-muted transition-colors cursor-pointer"
                       title="Edit challenge rules"
                     >
                       <PencilLine className="h-4 w-4" />
@@ -452,7 +751,7 @@ export function PropChallengesSection({ accounts, hideHeader = false }: PropChal
                           deleteMutation.mutate(c.id);
                         }
                       }}
-                      className="text-muted-foreground hover:text-destructive p-1.5 rounded-md hover:bg-muted transition-colors"
+                      className="text-muted-foreground hover:text-destructive p-1.5 rounded-md hover:bg-muted transition-colors cursor-pointer"
                       title="Delete tracker"
                     >
                       <Trash2 className="h-4 w-4" />
@@ -460,16 +759,72 @@ export function PropChallengesSection({ accounts, hideHeader = false }: PropChal
                   </div>
                 </div>
 
+                {/* Live Account Performance Summary KPI Banner */}
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 p-3 rounded-xl border border-border/70 bg-muted/20 text-xs">
+                  <div className="space-y-0.5 min-w-0">
+                    <span className="text-[10px] text-muted-foreground uppercase tracking-wider font-mono block">Current Balance</span>
+                    <div className="font-bold text-foreground text-sm font-mono truncate">
+                      {formatSignedCents(m.currentBalanceCents, currency).text.replace("+ ", "")}
+                    </div>
+                    <div className="text-[10px] text-muted-foreground truncate">
+                      Start: {formatSignedCents(m.startingBalanceCents, currency).text.replace("+ ", "")}
+                    </div>
+                  </div>
+
+                  <div className="space-y-0.5 min-w-0">
+                    <span className="text-[10px] text-muted-foreground uppercase tracking-wider font-mono block">Total Net P&L</span>
+                    <div className={cn("font-bold text-sm font-mono truncate", m.netProfitCents >= 0 ? "text-profit" : "text-loss")}>
+                      {formatSignedCents(m.netProfitCents, currency).text}
+                    </div>
+                    <div className="text-[10px] text-muted-foreground truncate">
+                      {m.startingBalanceCents > 0
+                        ? `${m.netProfitCents >= 0 ? "+" : ""}${((m.netProfitCents / m.startingBalanceCents) * 100).toFixed(1)}% return`
+                        : "—"}
+                    </div>
+                  </div>
+
+                  <div className="space-y-0.5 min-w-0">
+                    <span className="text-[10px] text-muted-foreground uppercase tracking-wider font-mono block">Executions</span>
+                    <div className="font-bold text-foreground text-sm font-mono truncate">
+                      {m.tradeCount} <span className="text-[11px] font-normal text-muted-foreground">trades</span>
+                    </div>
+                    <div className="text-[10px] text-muted-foreground font-mono truncate">
+                      {m.winRate}% ({m.winCount}W · {m.lossCount}L)
+                    </div>
+                  </div>
+
+                  <div className="space-y-0.5 min-w-0">
+                    <span className="text-[10px] text-muted-foreground uppercase tracking-wider font-mono block">Profit Factor</span>
+                    <div className="font-bold text-foreground text-sm font-mono truncate">
+                      {m.profitFactor != null ? m.profitFactor : "—"}
+                    </div>
+                    <div className="text-[10px] text-muted-foreground truncate">
+                      {m.breakevenCount} Breakevens
+                    </div>
+                  </div>
+                </div>
+
+                {/* Informational callout if account has 0 trades */}
+                {m.tradeCount === 0 && (
+                  <div className="p-3 rounded-lg border border-border/60 bg-muted/20 text-xs text-muted-foreground flex items-center gap-2">
+                    <Info className="h-4 w-4 text-primary shrink-0" />
+                    <span>
+                      No trades executed yet for this challenge account. Every trade logged under <strong>{c.account?.name || "this account"}</strong> will automatically update this tracker in real time.
+                    </span>
+                  </div>
+                )}
+
                 {/* Status reason alert if not safe */}
                 {m.status !== "safe" && (
                   <div
-                    className={`text-xs p-2.5 rounded-lg border flex items-center gap-2 ${
+                    className={cn(
+                      "text-xs p-2.5 rounded-lg border flex items-center gap-2",
                       m.status === "passed"
                         ? "bg-profit/10 border-profit/20 text-profit"
                         : m.status === "breached"
                         ? "bg-rose-500/10 border-rose-500/20 text-rose-600 dark:text-rose-400"
                         : "bg-amber-500/10 border-amber-500/20 text-amber-600 dark:text-amber-400"
-                    }`}
+                    )}
                   >
                     {m.status === "passed" ? (
                       <CheckCircle2 className="h-4 w-4 shrink-0" />
@@ -489,11 +844,22 @@ export function PropChallengesSection({ accounts, hideHeader = false }: PropChal
                         <span className="flex items-center gap-1 font-medium">
                           <Target className="h-3.5 w-3.5 text-primary" /> Profit Target
                         </span>
-                        <span className="font-semibold text-foreground">
+                        <span className="font-semibold text-foreground font-mono">
                           {formatSignedCents(m.netProfitCents, currency).text} / {formatSignedCents(c.profitTargetCents, currency).text} ({Math.max(0, targetPct)}%)
                         </span>
                       </div>
-                      <Progress value={Math.min(100, Math.max(0, targetPct))} className="h-2" />
+                      <Progress
+                        value={Math.min(100, Math.max(0, targetPct))}
+                        className={cn("h-2", m.profitTargetReached && "[&>div]:bg-profit")}
+                      />
+                      <div className="flex justify-between items-center text-[10px] text-muted-foreground pt-0.5">
+                        <span>Target Progress:</span>
+                        <span className={cn("font-medium", m.profitTargetReached ? "text-profit font-semibold" : "text-foreground font-mono")}>
+                          {m.profitTargetReached
+                            ? "Target Achieved ✓"
+                            : `Remaining: ${formatSignedCents(m.remainingProfitTargetCents ?? 0, currency).text}`}
+                        </span>
+                      </div>
                     </div>
                   )}
 
@@ -504,17 +870,17 @@ export function PropChallengesSection({ accounts, hideHeader = false }: PropChal
                         <span className="flex items-center gap-1 font-medium">
                           <Clock className="h-3.5 w-3.5 text-amber-500" /> Daily Loss ({m.cycleResetTime})
                         </span>
-                        <span className={`font-semibold ${dailyPct >= 90 ? "text-rose-500" : dailyPct >= 75 ? "text-amber-500" : "text-foreground"}`}>
+                        <span className={cn("font-semibold font-mono", dailyPct >= 90 ? "text-rose-500" : dailyPct >= 75 ? "text-amber-500" : "text-foreground")}>
                           ${(m.todayLossCents / 100).toFixed(2)} / ${(c.dailyLossLimitCents / 100).toFixed(2)} ({dailyPct}%)
                         </span>
                       </div>
                       <Progress
                         value={Math.min(100, dailyPct)}
-                        className={`h-2 ${dailyPct >= 90 ? "[&>div]:bg-rose-500" : dailyPct >= 75 ? "[&>div]:bg-amber-500" : ""}`}
+                        className={cn("h-2", dailyPct >= 90 ? "[&>div]:bg-rose-500" : dailyPct >= 75 ? "[&>div]:bg-amber-500" : "")}
                       />
                       <div className="flex justify-between items-center text-[10px] text-muted-foreground pt-0.5">
-                        <span>Buffer Remaining:</span>
-                        <span className={`font-mono font-medium ${m.dailyLossBreached ? "text-rose-500" : "text-foreground"}`}>
+                        <span>Allowable Risk Remaining Today:</span>
+                        <span className={cn("font-mono font-medium", m.dailyLossBreached ? "text-rose-500 font-bold" : "text-foreground")}>
                           ${((m.remainingDailyLossCents ?? 0) / 100).toFixed(2)}
                         </span>
                       </div>
@@ -526,19 +892,19 @@ export function PropChallengesSection({ accounts, hideHeader = false }: PropChal
                     <div className="space-y-1">
                       <div className="flex justify-between items-center text-muted-foreground">
                         <span className="flex items-center gap-1 font-medium">
-                          <TrendingDown className="h-3.5 w-3.5 text-rose-500" /> Max Drawdown ({c.drawdownType})
+                          <TrendingDown className="h-3.5 w-3.5 text-rose-500" /> Max Drawdown ({c.drawdownType === "trailing" ? "Trailing from Peak" : "Static from Start"})
                         </span>
-                        <span className={`font-semibold ${ddPct >= 90 ? "text-rose-500" : ddPct >= 75 ? "text-amber-500" : "text-foreground"}`}>
+                        <span className={cn("font-semibold font-mono", ddPct >= 90 ? "text-rose-500" : ddPct >= 75 ? "text-amber-500" : "text-foreground")}>
                           ${(m.currentDrawdownCents / 100).toFixed(2)} / ${(c.maxDrawdownCents / 100).toFixed(2)} ({ddPct}%)
                         </span>
                       </div>
                       <Progress
                         value={Math.min(100, ddPct)}
-                        className={`h-2 ${ddPct >= 90 ? "[&>div]:bg-rose-500" : ddPct >= 75 ? "[&>div]:bg-amber-500" : ""}`}
+                        className={cn("h-2", ddPct >= 90 ? "[&>div]:bg-rose-500" : ddPct >= 75 ? "[&>div]:bg-amber-500" : "")}
                       />
                       <div className="flex justify-between items-center text-[10px] text-muted-foreground pt-0.5">
-                        <span>Buffer Remaining:</span>
-                        <span className={`font-mono font-medium ${m.drawdownBreached ? "text-rose-500" : "text-foreground"}`}>
+                        <span>{c.drawdownType === "trailing" ? `Peak Equity: $${(m.highWaterMarkCents / 100).toFixed(2)} · Buffer Left:` : "Drawdown Buffer Remaining:"}</span>
+                        <span className={cn("font-mono font-medium", m.drawdownBreached ? "text-rose-500 font-bold" : "text-foreground")}>
                           ${((m.remainingDrawdownCents ?? 0) / 100).toFixed(2)}
                         </span>
                       </div>
@@ -550,39 +916,71 @@ export function PropChallengesSection({ accounts, hideHeader = false }: PropChal
                     <div className="space-y-1">
                       <div className="flex justify-between items-center text-muted-foreground">
                         <span className="flex items-center gap-1 font-medium">
-                          <Percent className="h-3.5 w-3.5 text-blue-500" /> Consistency Limit (Max {m.consistencyThresholdPct}%)
+                          <Percent className="h-3.5 w-3.5 text-blue-500" /> Consistency Limit (Max {m.consistencyThresholdPct}% single day)
                         </span>
-                        <span className={`font-semibold ${
+                        <span className={cn("font-semibold font-mono",
                           m.consistencyStatus === "breached" ? "text-rose-500" :
                           m.consistencyStatus === "at_risk" ? "text-amber-500" : "text-foreground"
-                        }`}>
-                          {m.bestDayPctOfTotal !== null ? `${m.bestDayPctOfTotal}%` : "0%"} / {m.consistencyThresholdPct}% ({m.consistencyStatus.toUpperCase()})
+                        )}>
+                          Best Day: {m.bestDayPctOfTotal !== null ? `${m.bestDayPctOfTotal}%` : "0%"} / {m.consistencyThresholdPct}% ({m.consistencyStatus.toUpperCase()})
                         </span>
                       </div>
                       <Progress
                         value={Math.min(100, Math.round(((m.bestDayPctOfTotal ?? 0) / m.consistencyThresholdPct) * 100))}
-                        className={`h-2 ${m.consistencyStatus === "breached" ? "[&>div]:bg-rose-500" : m.consistencyStatus === "at_risk" ? "[&>div]:bg-amber-500" : ""}`}
+                        className={cn("h-2", m.consistencyStatus === "breached" ? "[&>div]:bg-rose-500" : m.consistencyStatus === "at_risk" ? "[&>div]:bg-amber-500" : "")}
                       />
                     </div>
                   )}
                 </div>
 
                 {/* Footer metrics row */}
-                <div className="grid grid-cols-2 gap-2 pt-3 border-t border-border text-xs">
+                <div className="flex flex-wrap items-center justify-between gap-2 pt-3 border-t border-border text-xs">
                   <div className="flex items-center gap-1.5 text-muted-foreground">
                     <CalendarDays className="h-3.5 w-3.5 text-primary" />
                     <span>Trading Days:</span>
-                    <strong className="text-foreground ml-auto">
+                    <strong className="text-foreground font-mono">
                       {m.tradingDaysCount} {c.minTradingDays ? `/ ${c.minTradingDays}` : ""} {m.minDaysMet ? "✓" : ""}
                     </strong>
                   </div>
                   <div className="flex items-center gap-1.5 text-muted-foreground">
                     <Percent className="h-3.5 w-3.5 text-primary" />
                     <span>Best Day:</span>
-                    <strong className="text-foreground ml-auto">
-                      {m.bestDayPctOfTotal !== null ? `${m.bestDayPctOfTotal}%` : "—"}
+                    <strong className="text-foreground font-mono">
+                      {m.bestDayProfitCents > 0 ? formatSignedCents(m.bestDayProfitCents, currency).text : "—"}
                     </strong>
                   </div>
+                  {c.account?.id && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => {
+                        const accId = c.account?.id || "";
+                        useNav.getState().setSelectedAccountId(accId);
+                        navigate("tradesLog", {
+                          accountId: accId,
+                          propChallengeId: c.id,
+                          propChallengeName: c.name,
+                          propFirm: c.propFirm,
+                        });
+                      }}
+                      className="h-7 px-2 text-[11px] gap-1 text-primary hover:text-primary hover:bg-primary/10 ml-auto cursor-pointer"
+                    >
+                      Trades ({m.tradeCount}) <ArrowUpRight className="h-3 w-3" />
+                    </Button>
+                  )}
+                </div>
+
+                {/* Card Full Inspection Action */}
+                <div className="pt-2 border-t border-border/60">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => navigate("propChallenges", { challengeId: c.id })}
+                    className="w-full text-xs font-semibold gap-1.5 bg-primary/5 hover:bg-primary/10 text-primary border-primary/20 justify-center h-8"
+                  >
+                    <Eye className="h-3.5 w-3.5" />
+                    Inspect Details, Rules & Diagnostics →
+                  </Button>
                 </div>
               </div>
             );
@@ -596,7 +994,7 @@ export function PropChallengesSection({ accounts, hideHeader = false }: PropChal
           <DialogHeader>
             <DialogTitle>{editingId ? "Edit Challenge Tracker" : "Track Prop Firm Challenge"}</DialogTitle>
             <DialogDescription>
-              Configure evaluation target, daily loss limit, drawdown rules, and reset parameters.
+              Configure evaluation model, rules, daily loss limit, drawdown parameters, and reset timezone.
             </DialogDescription>
           </DialogHeader>
 
@@ -609,14 +1007,14 @@ export function PropChallengesSection({ accounts, hideHeader = false }: PropChal
                 onClick={() => applyPreset("ftmo")}
                 className="px-2 py-0.5 rounded bg-muted hover:bg-muted/80 text-[11px] font-medium transition-colors"
               >
-                FTMO 100k
+                FTMO 100k (2-Step)
               </button>
               <button
                 type="button"
                 onClick={() => applyPreset("apex")}
                 className="px-2 py-0.5 rounded bg-muted hover:bg-muted/80 text-[11px] font-medium transition-colors"
               >
-                Apex 50k
+                Apex 50k (Trailing)
               </button>
               <button
                 type="button"
@@ -624,6 +1022,13 @@ export function PropChallengesSection({ accounts, hideHeader = false }: PropChal
                 className="px-2 py-0.5 rounded bg-muted hover:bg-muted/80 text-[11px] font-medium transition-colors"
               >
                 FundedNext 100k
+              </button>
+              <button
+                type="button"
+                onClick={() => applyPreset("instant")}
+                className="px-2 py-0.5 rounded bg-muted hover:bg-muted/80 text-[11px] font-medium transition-colors"
+              >
+                Instant Funded 100k
               </button>
             </div>
           )}
@@ -658,6 +1063,47 @@ export function PropChallengesSection({ accounts, hideHeader = false }: PropChal
               </div>
             </div>
 
+            {/* Account Model & Challenge Cost */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div className="min-w-0 space-y-1.5">
+                <Label>Account Model</Label>
+                <Select value={accountModel} onValueChange={(v: any) => {
+                  setAccountModel(v);
+                  if (v === "instant_funded" || v === "direct_funded") {
+                    setStage("funded");
+                    setProfitTargetPct("0");
+                  } else if (v === "one_step") {
+                    setStage("phase1");
+                  } else if (v === "two_step") {
+                    setStage("phase1");
+                  }
+                }}>
+                  <SelectTrigger className="h-9 w-full">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="two_step">2-Step Evaluation (Standard)</SelectItem>
+                    <SelectItem value="one_step">1-Step Evaluation (Fast Pass)</SelectItem>
+                    <SelectItem value="multi_step">Multi-Step Evaluation (3+ Phases)</SelectItem>
+                    <SelectItem value="instant_funded">Instant Funded (No Evaluation)</SelectItem>
+                    <SelectItem value="direct_funded">Direct Funded</SelectItem>
+                    <SelectItem value="custom">Custom Firm Model</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="min-w-0 space-y-1.5">
+                <Label>Challenge Cost / Fee ($)</Label>
+                <Input
+                  type="number"
+                  value={accountCost}
+                  onChange={(e) => setAccountCost(e.target.value)}
+                  placeholder="540"
+                  className="h-9 w-full"
+                />
+              </div>
+            </div>
+
             {/* Name & Stage */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="min-w-0 space-y-1.5">
@@ -671,16 +1117,15 @@ export function PropChallengesSection({ accounts, hideHeader = false }: PropChal
               </div>
 
               <div className="min-w-0 space-y-1.5">
-                <Label>Stage / Phase</Label>
+                <Label>Initial Stage</Label>
                 <Select value={stage} onValueChange={setStage}>
                   <SelectTrigger className="h-9 w-full">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="phase1">Phase 1 (Step 1)</SelectItem>
-                    <SelectItem value="phase2">Phase 2 (Verification)</SelectItem>
-                    <SelectItem value="funded">Funded / Live Account</SelectItem>
-                    <SelectItem value="evaluation">Single Phase Evaluation</SelectItem>
+                    <SelectItem value="phase1">Phase 1</SelectItem>
+                    <SelectItem value="phase2">Phase 2</SelectItem>
+                    <SelectItem value="funded">Funded Stage</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
@@ -736,7 +1181,7 @@ export function PropChallengesSection({ accounts, hideHeader = false }: PropChal
               </div>
             </div>
 
-            {/* Drawdown Type & Min Trading Days — Non-colliding responsive structure */}
+            {/* Drawdown Type & Min Trading Days */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="min-w-0 space-y-1.5">
                 <Label>Drawdown Model</Label>

@@ -48,10 +48,14 @@ export function parseChallengeMetadata(
   rawNotes: string | null | undefined,
   accountConsistencyRate?: number | null,
 ): ChallengeMetadata {
+  const normalizedRate = accountConsistencyRate != null
+    ? (accountConsistencyRate > 1 ? Math.round(accountConsistencyRate) : Math.round(accountConsistencyRate * 100))
+    : null;
+
   const fallback: ChallengeMetadata = {
     userNotes: "",
-    consistencyRuleType: accountConsistencyRate ? "single_day_max" : "none",
-    consistencyThresholdPct: accountConsistencyRate ? Math.round(accountConsistencyRate * 100) : null,
+    consistencyRuleType: normalizedRate ? "single_day_max" : "none",
+    consistencyThresholdPct: normalizedRate,
     consistencyAction: "soft_rule",
   };
 
@@ -79,14 +83,20 @@ export function parseChallengeMetadata(
           userNotes: typeof parsed.userNotes === "string" ? parsed.userNotes : "",
           consistencyRuleType:
             parsed.consistencyRuleType === "single_day_max" ||
-            parsed.consistencyRuleType === "daily_pnl_consistency" ||
-            parsed.consistencyRuleType === "none"
+              parsed.consistencyRuleType === "daily_pnl_consistency" ||
+              parsed.consistencyRuleType === "none"
               ? parsed.consistencyRuleType
               : fallback.consistencyRuleType,
-          consistencyThresholdPct:
-            parsed.consistencyThresholdPct != null && !isNaN(Number(parsed.consistencyThresholdPct))
-              ? Number(parsed.consistencyThresholdPct)
-              : fallback.consistencyThresholdPct,
+          consistencyThresholdPct: (() => {
+            const val =
+              parsed.consistencyThresholdPct != null && !isNaN(Number(parsed.consistencyThresholdPct))
+                ? Number(parsed.consistencyThresholdPct)
+                : fallback.consistencyThresholdPct;
+            if (val != null && val > 100) {
+              return val <= 10000 ? Math.round(val / 100) : 50;
+            }
+            return val;
+          })(),
           consistencyAction: action,
         };
       }
@@ -127,6 +137,25 @@ export interface TradeForChallenge {
   exitTime: string | Date | null;
   status: string; // "open" | "closed" | "planned" | "draft"
   isDraft?: boolean;
+  tagsJson?: string | null;
+  notes?: string | null;
+}
+
+export function isSyntheticSampleTrade(t: { tagsJson?: string | null; notes?: string | null }): boolean {
+  if (t.tagsJson) {
+    try {
+      const tags = typeof t.tagsJson === "string" ? JSON.parse(t.tagsJson) : t.tagsJson;
+      if (Array.isArray(tags)) {
+        if (tags.includes("synthetic_sample") || tags.includes("apex_repair_isolation")) return true;
+      }
+    } catch {
+      if (t.tagsJson.includes("synthetic_sample") || t.tagsJson.includes("apex_repair_isolation")) return true;
+    }
+  }
+  if (t.notes && (t.notes.includes("SYNTHETIC_SAMPLE") || t.notes.includes("apex_repair_isolation"))) {
+    return true;
+  }
+  return false;
 }
 
 export interface PropChallengeMetrics {
@@ -136,6 +165,15 @@ export interface PropChallengeMetrics {
   profitTargetCents: number | null;
   profitTargetProgressPct: number | null;
   profitTargetReached: boolean;
+  remainingProfitTargetCents: number | null;
+
+  // Execution & Performance Statistics
+  tradeCount: number;
+  winCount: number;
+  lossCount: number;
+  breakevenCount: number;
+  winRate: number; // percentage (e.g. 72.7)
+  profitFactor: number | null;
 
   // Daily Loss
   dailyLossLimitCents: number | null;
@@ -155,10 +193,12 @@ export interface PropChallengeMetrics {
   drawdownUsedPct: number | null;
   drawdownBreached: boolean;
 
-  // Trading Days
+  // Trading Days & Duration
   minTradingDays: number | null;
+  maxTradingDays: number | null;
   tradingDaysCount: number;
   minDaysMet: boolean;
+  daysRemaining: number | null;
 
   // Consistency (single day max profit rule or custom)
   consistencyRuleType: "single_day_max" | "daily_pnl_consistency" | "none";
@@ -229,9 +269,9 @@ export function evaluatePropChallenge(
   const resetHour = config.resetHour ?? 17;
   const drawdownType = (config.drawdownType === "trailing" ? "trailing" : "static") as "static" | "trailing";
 
-  // Filter valid trades on or after challenge start date (excluding drafts/planned)
+  // Filter valid trades on or after challenge start date (excluding drafts/planned and synthetic sample records)
   const validTrades = trades
-    .filter((t) => !t.isDraft && t.status !== "planned")
+    .filter((t) => !t.isDraft && t.status !== "planned" && !isSyntheticSampleTrade(t))
     .filter((t) => {
       const tradeTime = t.exitTime ? new Date(t.exitTime).getTime() : t.entryTime ? new Date(t.entryTime).getTime() : 0;
       return tradeTime >= startMs;
@@ -323,14 +363,57 @@ export function evaluatePropChallenge(
     profitTargetReached = netProfitCents >= profitTargetCents;
   }
 
-  // Trading Days
+  // Execution & Performance Statistics
+  const tradeCount = validTrades.length;
+  let winCount = 0;
+  let lossCount = 0;
+  let breakevenCount = 0;
+  let grossWinCents = 0;
+  let grossLossCents = 0;
+
+  for (const t of validTrades) {
+    if (t.netPnlCents > 0 || t.status === "win" || t.status === "partial_win") {
+      winCount++;
+      grossWinCents += Math.max(0, t.netPnlCents);
+    } else if (t.netPnlCents < 0 || t.status === "loss" || t.status === "partial_loss") {
+      lossCount++;
+      grossLossCents += Math.abs(t.netPnlCents);
+    } else {
+      breakevenCount++;
+    }
+  }
+
+  const winRate = tradeCount > 0 ? Math.round((winCount / tradeCount) * 1000) / 10 : 0;
+  const profitFactor = grossLossCents > 0
+    ? Math.round((grossWinCents / grossLossCents) * 100) / 100
+    : grossWinCents > 0
+      ? 99.99
+      : null;
+
+  const remainingProfitTargetCents = profitTargetCents !== null
+    ? Math.max(0, profitTargetCents - netProfitCents)
+    : null;
+
+  // Trading Days & Duration
   const tradingDaysCount = tradingDayKeys.size;
   const minTradingDays = config.minTradingDays ?? null;
   const minDaysMet = minTradingDays ? tradingDaysCount >= minTradingDays : true;
+  const maxTradingDays = config.maxTradingDays ?? null;
+  const daysRemaining = maxTradingDays !== null
+    ? Math.max(0, maxTradingDays - tradingDaysCount)
+    : null;
 
   // Consistency Metric (Single-day profit dominance or configured rule)
   const consistencyRuleType = config.consistencyRuleType ?? (config.consistencyThresholdPct ? "single_day_max" : "none");
-  const consistencyThresholdPct = config.consistencyThresholdPct ?? null;
+  let rawConsistencyThreshold = config.consistencyThresholdPct ?? null;
+  if (rawConsistencyThreshold != null && rawConsistencyThreshold > 100) {
+    if (rawConsistencyThreshold <= 10000) {
+      rawConsistencyThreshold = Math.round(rawConsistencyThreshold / 100);
+    } else {
+      rawConsistencyThreshold = 50;
+    }
+  }
+  const consistencyThresholdPct = rawConsistencyThreshold;
 
   let bestDayProfitCents = 0;
   for (const dayPnl of dailyPnlMap.values()) {
@@ -341,7 +424,7 @@ export function evaluatePropChallenge(
 
   let bestDayPctOfTotal: number | null = null;
   if (netProfitCents > 0 && bestDayProfitCents > 0) {
-    bestDayPctOfTotal = Math.round((bestDayProfitCents / netProfitCents) * 100);
+    bestDayPctOfTotal = Math.min(100, Math.max(0, Math.round((bestDayProfitCents / netProfitCents) * 100)));
   }
 
   let consistencyBreached = false;
@@ -431,6 +514,13 @@ export function evaluatePropChallenge(
     profitTargetCents,
     profitTargetProgressPct,
     profitTargetReached,
+    remainingProfitTargetCents,
+    tradeCount,
+    winCount,
+    lossCount,
+    breakevenCount,
+    winRate,
+    profitFactor,
     dailyLossLimitCents,
     todayPnlCents,
     todayLossCents,
@@ -446,8 +536,10 @@ export function evaluatePropChallenge(
     drawdownUsedPct,
     drawdownBreached,
     minTradingDays,
+    maxTradingDays,
     tradingDaysCount,
     minDaysMet,
+    daysRemaining,
     consistencyRuleType,
     consistencyThresholdPct,
     consistencyAction,

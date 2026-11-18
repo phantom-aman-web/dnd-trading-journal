@@ -23,7 +23,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Plus, ListChecks, ChevronRight, Loader2, Trash2, PencilLine, X, ArrowUp, ArrowDown, GitCompare } from "lucide-react";
+import { Plus, ListChecks, ChevronRight, Loader2, Trash2, PencilLine, X, ArrowUp, ArrowDown, GitCompare, ShieldCheck, GitBranch } from "lucide-react";
 import { toast } from "sonner";
 import { FieldLabel } from "@/components/common/field-label";
 import { cn } from "@/lib/utils";
@@ -466,7 +466,7 @@ function SetupDialog({ open, onOpenChange, strategyId, onSaved }: SetupDialogPro
     });
   }
 
-  async function submit() {
+  async function submit(isUpgrade = false) {
     if (!name.trim()) {
       toast.error("Setup name is required");
       return;
@@ -483,43 +483,65 @@ function SetupDialog({ open, onOpenChange, strategyId, onSaved }: SetupDialogPro
     setLoading(true);
     try {
       if (isEdit && strategyId) {
-        // For edits, create a new version (v1.1, v1.2, ...) that carries the
-        // updated checklist. The strategy row is also updated with name/market/
-        // description via PATCH first, so the list view stays consistent.
-        const patchRes = await fetch(`/api/strategies/${strategyId}`, {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            name: name.trim(),
-            market,
-            description: description.trim() || null,
-          }),
-        });
-        if (!patchRes.ok) {
-          toast.error("Failed to update setup.");
-          setLoading(false);
-          return;
-        }
-        // Compute the next version label by bumping the minor of the latest.
         const latestLabel = latest?.versionLabel ?? "1.0";
         const [maj, min] = latestLabel.split(".");
         const nextLabel = `${maj}.${Number(min ?? 0) + 1}`;
-        const versionRes = await fetch(`/api/strategies/${strategyId}`, {
-          method: "PUT",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            versionLabel: nextLabel,
-            changeReason: "Updated checklist",
-            changeSummary: "Edited setup checklist from the Setups view.",
-            rules: cleanItems,
-          }),
-        });
-        if (!versionRes.ok) {
-          toast.error("Failed to save checklist.");
-          setLoading(false);
-          return;
+
+        if (!isUpgrade) {
+          // Save in-place to current version
+          const patchRes = await fetch(`/api/strategies/${strategyId}`, {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              name: name.trim(),
+              market,
+              description: description.trim() || null,
+              updateCurrentVersion: true,
+              rules: cleanItems,
+              changeReason: "Updated checklist in place",
+              changeSummary: `Saved checklist edits to v${latestLabel}`,
+            }),
+          });
+          if (!patchRes.ok) {
+            toast.error("Failed to update setup.");
+            setLoading(false);
+            return;
+          }
+          toast.success(`Saved changes to current version v${latestLabel}.`);
+        } else {
+          // Upgrade to next version
+          const patchRes = await fetch(`/api/strategies/${strategyId}`, {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              name: name.trim(),
+              market,
+              description: description.trim() || null,
+            }),
+          });
+          if (!patchRes.ok) {
+            toast.error("Failed to update setup metadata.");
+            setLoading(false);
+            return;
+          }
+          const versionRes = await fetch(`/api/strategies/${strategyId}`, {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              versionLabel: nextLabel,
+              changeReason: "Updated checklist",
+              changeSummary: "Edited setup checklist from the Setups view.",
+              rules: cleanItems,
+            }),
+          });
+          if (!versionRes.ok) {
+            toast.error("Failed to save checklist.");
+            setLoading(false);
+            return;
+          }
+          toast.success(`Upgraded setup to version v${nextLabel} (v${latestLabel} preserved).`);
         }
-        toast.success("Setup updated.");
+
         qc.invalidateQueries({ queryKey: ["strategies"] });
         qc.invalidateQueries({ queryKey: ["strategy", strategyId] });
         onSaved();
@@ -675,10 +697,39 @@ function SetupDialog({ open, onOpenChange, strategyId, onSaved }: SetupDialogPro
             </div>
           </div>
 
-          <Button onClick={submit} disabled={loading} className="w-full">
-            {loading && <Loader2 className="h-4 w-4 animate-spin mr-2" />}
-            {isEdit ? "Save Changes" : "Create Setup"}
-          </Button>
+          {isEdit ? (
+            <div className="flex flex-col sm:flex-row gap-2 pt-2">
+              <Button
+                type="button"
+                variant="secondary"
+                onClick={() => submit(false)}
+                disabled={loading}
+                className="flex-1 gap-1.5 font-medium cursor-pointer text-xs"
+              >
+                {loading && <Loader2 className="h-4 w-4 animate-spin mr-1" />}
+                <ShieldCheck className="h-4 w-4 text-primary shrink-0" />
+                Save Changes to Current Version (v{latest?.versionLabel ?? "1.0"})
+              </Button>
+              <Button
+                type="button"
+                onClick={() => submit(true)}
+                disabled={loading}
+                className="flex-1 gap-1.5 bg-primary text-primary-foreground font-semibold cursor-pointer text-xs"
+              >
+                {loading && <Loader2 className="h-4 w-4 animate-spin mr-1" />}
+                <GitBranch className="h-4 w-4 shrink-0" />
+                Upgrade to New Version (v{(() => {
+                  const [maj, min] = (latest?.versionLabel ?? "1.0").split(".");
+                  return `${maj}.${Number(min ?? 0) + 1}`;
+                })()})
+              </Button>
+            </div>
+          ) : (
+            <Button onClick={() => submit(false)} disabled={loading} className="w-full cursor-pointer">
+              {loading && <Loader2 className="h-4 w-4 animate-spin mr-2" />}
+              Create Setup
+            </Button>
+          )}
         </div>
       </DialogContent>
     </Dialog>

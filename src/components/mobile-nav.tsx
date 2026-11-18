@@ -1,7 +1,10 @@
 "use client";
 
-import { useNav, type ViewKey } from "@/lib/nav-store";
+import { useNav } from "@/lib/nav-store";
 import { useAuth } from "@/lib/auth-store";
+import { usePrivacyStore } from "@/lib/privacy-store";
+import { useTheme } from "@/components/theme-provider";
+import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import {
   LayoutDashboard,
@@ -9,18 +12,38 @@ import {
   Plus,
   Calendar,
   User,
+  Settings as SettingsIcon,
+  SlidersHorizontal,
+  Palette,
+  Check,
+  Eye,
+  EyeOff,
+  DatabaseBackup,
+  LogOut,
 } from "lucide-react";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+  DropdownMenuSub,
+  DropdownMenuSubTrigger,
+  DropdownMenuSubContent,
+} from "@/components/ui/dropdown-menu";
 
 export function MobileNav() {
   const { view, params, navigate } = useNav();
-  const { user } = useAuth();
+  const { user, signOut } = useAuth();
+  const { isPrivate, togglePrivacy } = usePrivacyStore();
+  const { theme, setTheme } = useTheme();
 
-  // Profile is ONLY active when explicitly visiting the Profile destination
-  const isProfileActive = view === "settings" && params.tab === "profile";
   const isHomeActive = view === "dashboard";
   const isTradesActive = view === "tradesLog" || view === "tradeDetail";
   const isAddActive = view === "tradeNew";
   const isCalendarActive = view === "calendar";
+  const isProfileActive = view === "settings" || view === "backup";
 
   return (
     <nav
@@ -98,29 +121,187 @@ export function MobileNav() {
           <span>Calendar</span>
         </button>
 
-        {/* 5. Profile (Dedicated Personal Account Destination) */}
-        <button
-          type="button"
-          onClick={() => navigate("settings", { tab: "profile" })}
-          className={cn(
-            "flex flex-col items-center justify-center gap-0.5 py-1 text-[11px] transition-colors relative cursor-pointer",
-            isProfileActive
-              ? "text-primary font-semibold"
-              : "text-muted-foreground hover:text-foreground"
-          )}
-          aria-current={isProfileActive ? "page" : undefined}
-          aria-label="Account Profile"
-        >
-          <span className={cn(
-            "h-7 w-7 rounded-full flex items-center justify-center text-xs font-bold transition-all",
-            isProfileActive
-              ? "bg-primary text-primary-foreground ring-2 ring-primary/30"
-              : "bg-muted text-foreground/80 hover:bg-muted/80"
-          )}>
-            {user?.name?.[0] ?? user?.email?.[0]?.toUpperCase() ?? <User className="h-4 w-4" />}
-          </span>
-          <span>Profile</span>
-        </button>
+        {/* 5. Profile with Popup Menu */}
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <button
+              type="button"
+              className={cn(
+                "flex flex-col items-center justify-center gap-0.5 py-1 text-[11px] transition-colors relative cursor-pointer",
+                isProfileActive
+                  ? "text-primary font-semibold"
+                  : "text-muted-foreground hover:text-foreground"
+              )}
+              aria-label="Profile and account menu"
+              aria-current={isProfileActive ? "page" : undefined}
+            >
+              <span className={cn("p-1 rounded-lg transition-colors", isProfileActive && "bg-primary/10")}>
+                <User className="h-5 w-5" />
+              </span>
+              <span>Profile</span>
+            </button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent
+            side="top"
+            align="end"
+            sideOffset={14}
+            className="w-64 p-1.5 max-h-[85vh] overflow-y-auto mb-1 z-50 shadow-xl border-border bg-card/95 backdrop-blur-md"
+          >
+            {/* Account Header */}
+            <DropdownMenuLabel className="flex flex-col gap-0.5 px-2 py-1.5">
+              <span className="font-semibold text-foreground text-sm">{user?.name ?? "Trader"}</span>
+              <span className="text-xs text-muted-foreground font-normal truncate">{user?.email}</span>
+            </DropdownMenuLabel>
+            <DropdownMenuSeparator className="my-1" />
+
+            {/* Account Section */}
+            <DropdownMenuLabel className="text-[10px] font-mono uppercase tracking-wider text-muted-foreground/70 px-2 py-1">
+              Account
+            </DropdownMenuLabel>
+            <DropdownMenuItem onClick={() => navigate("settings", { tab: "profile" })} className="cursor-pointer">
+              <User className="h-4 w-4 mr-2 text-muted-foreground" />
+              Profile & Account
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={() => navigate("settings", { tab: "trading" })} className="cursor-pointer">
+              <SettingsIcon className="h-4 w-4 mr-2 text-muted-foreground" />
+              Trading Preferences
+            </DropdownMenuItem>
+
+            <DropdownMenuSeparator className="my-1" />
+
+            {/* Preferences Section */}
+            <DropdownMenuLabel className="text-[10px] font-mono uppercase tracking-wider text-muted-foreground/70 px-2 py-1">
+              Preferences
+            </DropdownMenuLabel>
+            <DropdownMenuItem onClick={() => navigate("settings", { tab: "preferences" })} className="cursor-pointer">
+              <SlidersHorizontal className="h-4 w-4 mr-2 text-muted-foreground" />
+              Preferences Center
+            </DropdownMenuItem>
+
+            {/* Direct Themes Submenu */}
+            <DropdownMenuSub>
+              <DropdownMenuSubTrigger className="cursor-pointer">
+                <Palette className="h-4 w-4 mr-2 text-muted-foreground" />
+                <span className="flex-1">Themes</span>
+                <span className="text-[10px] font-mono text-muted-foreground capitalize mr-1">
+                  {theme === "nordic" ? "Nordic" : theme === "terminal" ? "Terminal" : "Institutional"}
+                </span>
+              </DropdownMenuSubTrigger>
+              <DropdownMenuSubContent className="w-56 p-1">
+                <DropdownMenuLabel className="text-[10px] font-mono uppercase tracking-wider text-muted-foreground/70 px-2 py-1">
+                  Choose Theme
+                </DropdownMenuLabel>
+                <DropdownMenuItem
+                  onClick={() => setTheme("nordic")}
+                  className="flex items-center justify-between cursor-pointer py-1.5"
+                >
+                  <div className="flex items-center gap-2">
+                    <span className="h-3 w-3 rounded-full bg-slate-200 border border-slate-300" />
+                    <span className="text-xs font-medium">Nordic</span>
+                  </div>
+                  {theme === "nordic" && <Check className="h-3.5 w-3.5 text-primary" />}
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  onClick={() => setTheme("terminal")}
+                  className="flex items-center justify-between cursor-pointer py-1.5"
+                >
+                  <div className="flex items-center gap-2">
+                    <span className="h-3 w-3 rounded-full bg-emerald-500 border border-emerald-600" />
+                    <span className="text-xs font-medium">Terminal</span>
+                  </div>
+                  {theme === "terminal" && <Check className="h-3.5 w-3.5 text-primary" />}
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  onClick={() => setTheme("institutional")}
+                  className="flex items-center justify-between cursor-pointer py-1.5"
+                >
+                  <div className="flex items-center gap-2">
+                    <span className="h-3 w-3 rounded-full bg-slate-700 border border-slate-800" />
+                    <span className="text-xs font-medium">Slate Contrast</span>
+                  </div>
+                  {theme === "institutional" && <Check className="h-3.5 w-3.5 text-primary" />}
+                </DropdownMenuItem>
+                <DropdownMenuSeparator className="my-1" />
+                <DropdownMenuItem
+                  onClick={() => navigate("settings", { tab: "preferences", sub: "themes" })}
+                  className="text-xs text-muted-foreground cursor-pointer py-1.5"
+                >
+                  <SlidersHorizontal className="h-3.5 w-3.5 mr-2" />
+                  <span>More Theme Settings…</span>
+                </DropdownMenuItem>
+              </DropdownMenuSubContent>
+            </DropdownMenuSub>
+            {/* Note: Keyboard Shortcuts explicitly removed for mobile */}
+
+            <DropdownMenuSeparator className="my-1" />
+
+            {/* Privacy Section */}
+            <DropdownMenuLabel className="text-[10px] font-mono uppercase tracking-wider text-muted-foreground/70 px-2 py-1">
+              Privacy
+            </DropdownMenuLabel>
+            <DropdownMenuItem
+              onClick={() => {
+                togglePrivacy();
+                toast.success(isPrivate ? "Sensitive information is now visible." : "Sensitive financial information masked globally.");
+              }}
+              className="flex items-center justify-between cursor-pointer"
+            >
+              <div className="flex items-center gap-2">
+                {isPrivate ? (
+                  <Eye className="h-4 w-4 text-emerald-500" />
+                ) : (
+                  <EyeOff className="h-4 w-4 text-amber-500" />
+                )}
+                <span className="font-medium text-xs">{isPrivate ? "Show Sensitive Information" : "Hide Sensitive Information"}</span>
+              </div>
+              <span
+                className={cn(
+                  "text-[9px] font-mono px-1.5 py-0.5 rounded font-semibold tracking-wide",
+                  isPrivate
+                    ? "bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-500/20"
+                    : "bg-muted text-muted-foreground"
+                )}
+              >
+                {isPrivate ? "MASKED" : "VISIBLE"}
+              </span>
+            </DropdownMenuItem>
+
+            <DropdownMenuSeparator className="my-1" />
+
+            {/* Session Section */}
+            <DropdownMenuLabel className="text-[10px] font-mono uppercase tracking-wider text-muted-foreground/70 px-2 py-1">
+              Session
+            </DropdownMenuLabel>
+            <DropdownMenuItem onClick={() => navigate("backup")} className="cursor-pointer">
+              <DatabaseBackup className="h-4 w-4 mr-2 text-muted-foreground" />
+              Backup / Restore
+            </DropdownMenuItem>
+            <DropdownMenuItem
+              onClick={async () => {
+                const res = await fetch("/api/exports?format=json&type=all");
+                const data = await res.json();
+                const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement("a");
+                a.href = url;
+                a.download = `alphapips-export-${Date.now()}.json`;
+                a.click();
+                URL.revokeObjectURL(url);
+                toast.success("Export ready.");
+              }}
+              className="cursor-pointer"
+            >
+              Export Data (JSON)
+            </DropdownMenuItem>
+            <DropdownMenuItem
+              onClick={() => signOut()}
+              className="text-loss focus:text-loss cursor-pointer"
+            >
+              <LogOut className="h-4 w-4 mr-2" />
+              Sign Out
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
       </div>
     </nav>
   );

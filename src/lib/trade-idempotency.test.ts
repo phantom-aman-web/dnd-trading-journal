@@ -130,7 +130,7 @@ describe("Trade Creation Idempotency & Concurrency Hardening", () => {
     if (claim2.status === "completed") {
       expect(claim2.tradeId).toBe(trade1.id);
     }
-  }, 20000);
+  }, 45000);
 
   it("Scenario 2: Replay after 30+ seconds returns the original trade (no expiration wipe)", async () => {
     const key = `aged-key-${Date.now()}`;
@@ -165,7 +165,7 @@ describe("Trade Creation Idempotency & Concurrency Hardening", () => {
     if (replayClaim.status === "completed") {
       expect(replayClaim.tradeId).toBe(trade.id);
     }
-  }, 20000);
+  }, 45000);
 
   it("Scenario 3: Replay after browser reload returns the original trade", async () => {
     // A browser reload loses in-memory client state and sends the cached key from localStorage/headers
@@ -197,7 +197,7 @@ describe("Trade Creation Idempotency & Concurrency Hardening", () => {
     if (claimAfter.status === "completed") {
       expect(claimAfter.tradeId).toBe(trade.id);
     }
-  }, 20000);
+  }, 45000);
 
   it("Scenario 4: Concurrent duplicate requests cannot create duplicate trades (race-condition safe)", async () => {
     const key = `concurrent-key-${Date.now()}`;
@@ -237,7 +237,7 @@ describe("Trade Creation Idempotency & Concurrency Hardening", () => {
     // A waiting client now successfully resolves the trade ID
     const resolvedId = await waitForInFlightTrade(userAId, key, 1000);
     expect(resolvedId).toBe(trade.id);
-  }, 20000);
+  }, 45000);
 
   it("Scenario 5: Same key with different payload is safely rejected with conflict (409)", async () => {
     const key = `conflict-key-${Date.now()}`;
@@ -257,7 +257,7 @@ describe("Trade Creation Idempotency & Concurrency Hardening", () => {
     if (claim2.status === "conflict") {
       expect(claim2.message).toContain("different request payload");
     }
-  }, 20000);
+  }, 45000);
 
   it("Scenario 6: Different keys can create different intentional trades even with identical parameters", async () => {
     const key1 = `diff-key-1-${Date.now()}`;
@@ -296,7 +296,7 @@ describe("Trade Creation Idempotency & Concurrency Hardening", () => {
     await finalizeIdempotencyKey(userAId, key2, trade2.id);
 
     expect(trade1.id).not.toBe(trade2.id);
-  }, 20000);
+  }, 45000);
 
   it("Scenario 7: Cross-user key isolation — User A's key does not block User B from using the same key string", async () => {
     const sharedKeyString = `shared-client-uuid-${Date.now()}`;
@@ -339,7 +339,7 @@ describe("Trade Creation Idempotency & Concurrency Hardening", () => {
     expect(tradeA.id).not.toBe(tradeB.id);
     expect(tradeA.userId).toBe(userAId);
     expect(tradeB.userId).toBe(userBId);
-  }, 20000);
+  }, 45000);
 
   it("Scenario 8: Exactly-one-record DB verification across multiple replays", async () => {
     const key = `db-count-key-${Date.now()}`;

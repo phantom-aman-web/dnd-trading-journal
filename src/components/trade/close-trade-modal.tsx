@@ -217,6 +217,7 @@ export function CloseTradeModal({ tradeId, onClose }: CloseTradeModalProps) {
       qc.invalidateQueries({ queryKey: ["dashboard"] });
       qc.invalidateQueries({ queryKey: ["analytics"] });
       qc.invalidateQueries({ queryKey: ["calendar"] });
+      qc.invalidateQueries({ queryKey: ["prop-challenges"] });
       qc.invalidateQueries({ queryKey: ["trade", trade.id] });
 
       onClose();

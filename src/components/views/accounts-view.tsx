@@ -444,6 +444,7 @@ export function AccountsView() {
                           await qc.invalidateQueries({ queryKey: ["dashboard"] });
                           await qc.invalidateQueries({ queryKey: ["analytics"] });
                           await qc.invalidateQueries({ queryKey: ["calendar"] });
+                          await qc.invalidateQueries({ queryKey: ["prop-challenges"] });
                         } else {
                           const d = await res.json().catch(() => null);
                           toast.error(d?.error ?? "Failed to delete account.");
@@ -634,6 +635,7 @@ export function AccountsView() {
         onSaved={() => {
           qc.invalidateQueries({ queryKey: ["accounts"] });
           qc.invalidateQueries({ queryKey: ["trades"] });
+          qc.invalidateQueries({ queryKey: ["prop-challenges"] });
           setDialogOpen(false);
           setEditing(null);
         }}

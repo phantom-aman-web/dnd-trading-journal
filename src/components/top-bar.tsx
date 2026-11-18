@@ -62,7 +62,7 @@ interface TopBarProps {
 }
 
 export function TopBar({ onOpenMobileNav, onOpenShortcuts }: TopBarProps) {
-  const { navigate, setCommandOpen, params, selectedAccountId, setSelectedAccountId } = useNav();
+  const { view, navigate, setCommandOpen, params, selectedAccountId, setSelectedAccountId } = useNav();
   const { user, signOut } = useAuth();
   const { isPrivate, togglePrivacy } = usePrivacyStore();
   const { theme, setTheme } = useTheme();
@@ -112,17 +112,27 @@ export function TopBar({ onOpenMobileNav, onOpenShortcuts }: TopBarProps) {
         </SelectContent>
       </Select>
 
+      {/* Mobile Search Button — always fully visible, properly aligned, never clipped */}
       <button
         onClick={() => setCommandOpen(true)}
-        className="flex items-center justify-between h-9 px-3 rounded-md border border-input bg-muted/50 text-sm text-muted-foreground hover:bg-muted min-w-0 flex-1 max-w-md group shrink"
+        className="sm:hidden flex items-center justify-center h-9 w-9 rounded-md border border-input bg-muted/50 text-muted-foreground hover:bg-muted hover:text-foreground shrink-0 transition-colors"
+        aria-label="Search"
+        title="Open Command Palette (⌘K or /)"
+      >
+        <Search className="h-4 w-4 shrink-0" />
+      </button>
+
+      {/* Desktop Search Bar — preserved */}
+      <button
+        onClick={() => setCommandOpen(true)}
+        className="hidden sm:flex items-center justify-between h-9 px-3 rounded-md border border-input bg-muted/50 text-sm text-muted-foreground hover:bg-muted min-w-0 flex-1 max-w-md group shrink"
         title="Open Command Palette (⌘K or /)"
       >
         <div className="flex items-center gap-2 truncate">
           <Search className="h-4 w-4 shrink-0" />
-          <span className="hidden sm:inline truncate">Search trades, observations, setups, tasks, notes...</span>
-          <span className="sm:hidden truncate">Search</span>
+          <span className="truncate">Search trades, observations, setups, tasks, notes...</span>
         </div>
-        <kbd className="hidden sm:inline-flex items-center gap-0.5 text-[10px] font-mono px-1.5 py-0.5 rounded bg-muted text-muted-foreground border border-border group-hover:border-foreground/30">
+        <kbd className="inline-flex items-center gap-0.5 text-[10px] font-mono px-1.5 py-0.5 rounded bg-muted text-muted-foreground border border-border group-hover:border-foreground/30">
           ⌘K
         </kbd>
       </button>
@@ -163,16 +173,18 @@ export function TopBar({ onOpenMobileNav, onOpenShortcuts }: TopBarProps) {
           <Sliders className="h-4 w-4" />
         </Button>
 
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <button className="flex items-center gap-1.5 h-9 px-2 rounded-md hover:bg-muted transition-colors">
-              <div className="h-7 w-7 rounded-full bg-primary flex items-center justify-center text-primary-foreground text-xs font-bold shadow-xs">
-                {user?.name?.[0] ?? user?.email?.[0]?.toUpperCase() ?? "U"}
-              </div>
-              <ChevronDown className="h-3.5 w-3.5 text-muted-foreground/70" />
-            </button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="w-64 p-1.5">
+        {/* Desktop Profile Dropdown — preserved */}
+        <div className="hidden md:block">
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <button className="flex items-center gap-1.5 h-9 px-2 rounded-md hover:bg-muted transition-colors">
+                <div className="h-7 w-7 rounded-full bg-primary flex items-center justify-center text-primary-foreground text-xs font-bold shadow-xs">
+                  {user?.name?.[0] ?? user?.email?.[0]?.toUpperCase() ?? "U"}
+                </div>
+                <ChevronDown className="h-3.5 w-3.5 text-muted-foreground/70" />
+              </button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-64 p-1.5">
             {/* Account header */}
             <DropdownMenuLabel className="flex flex-col gap-0.5 px-2 py-1.5">
               <span className="font-semibold text-foreground text-sm">{user?.name ?? "Trader"}</span>
@@ -331,6 +343,7 @@ export function TopBar({ onOpenMobileNav, onOpenShortcuts }: TopBarProps) {
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
+        </div>
       </div>
     </header>
   );

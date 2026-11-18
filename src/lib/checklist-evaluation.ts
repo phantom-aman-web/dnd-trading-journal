@@ -383,8 +383,14 @@ export function parseGradingThresholds(
 /**
  * Serialize an answers map for `TradeChecklistEvaluation.rawAnswersJson`.
  * Returns a stable JSON string (keys sorted) for reproducible storage.
+ * Optionally snapshots the ChecklistItem rules active at evaluation time
+ * to guarantee 100% immutable historical integrity even when strategy rules
+ * are later edited in place.
  */
-export function serializeAnswers(answers: ChecklistAnswer): string {
+export function serializeAnswers(
+  answers: ChecklistAnswer,
+  itemsSnapshot?: ChecklistItem[],
+): string {
   const safe = answers && typeof answers === "object" ? answers : {};
   const sorted: ChecklistAnswer = {};
   for (const key of Object.keys(safe).sort()) {
@@ -398,12 +404,19 @@ export function serializeAnswers(answers: ChecklistAnswer): string {
       };
     }
   }
+  if (itemsSnapshot && Array.isArray(itemsSnapshot) && itemsSnapshot.length > 0) {
+    return JSON.stringify({
+      answers: sorted,
+      items: itemsSnapshot,
+    });
+  }
   return JSON.stringify(sorted);
 }
 
 /**
  * Parse a `TradeChecklistEvaluation.rawAnswersJson` back into a typed map.
  * Never throws — invalid JSON returns `{}`.
+ * Transparently supports both legacy flat `{ [id]: ... }` and snapshotted `{ answers: { ... }, items: [ ... ] }`.
  */
 export function parseAnswers(
   rawAnswersJson: string | null | undefined,
@@ -414,8 +427,12 @@ export function parseAnswers(
     if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
       return {};
     }
+    const target =
+      parsed.answers && typeof parsed.answers === "object" && !Array.isArray(parsed.answers)
+        ? parsed.answers
+        : parsed;
     const out: ChecklistAnswer = {};
-    for (const [k, v] of Object.entries(parsed as Record<string, unknown>)) {
+    for (const [k, v] of Object.entries(target as Record<string, unknown>)) {
       if (!v || typeof v !== "object") continue;
       const a = v as { checked?: unknown; note?: unknown };
       const note =
@@ -428,6 +445,25 @@ export function parseAnswers(
     return out;
   } catch {
     return {};
+  }
+}
+
+/**
+ * Extract snapshot checklist items from `TradeChecklistEvaluation.rawAnswersJson` if present.
+ */
+export function parseSnapshotItems(
+  rawAnswersJson: string | null | undefined,
+): ChecklistItem[] | null {
+  if (!rawAnswersJson) return null;
+  try {
+    const parsed = JSON.parse(rawAnswersJson);
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return null;
+    if (Array.isArray(parsed.items) && parsed.items.length > 0) {
+      return parseChecklistItems(JSON.stringify(parsed.items));
+    }
+    return null;
+  } catch {
+    return null;
   }
 }
 

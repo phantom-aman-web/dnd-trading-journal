@@ -8,6 +8,7 @@ import { computeTimeInTradeAnalytics } from "@/lib/duration-analytics";
 import { computeChecklistAdherence, type TradeChecklistRecord } from "@/lib/checklist-adherence";
 import { evaluateDataQuality, type ScannableTradeRecord } from "@/lib/data-quality-engine";
 import { computeDrawdownAnalytics } from "@/lib/drawdown-analytics-engine";
+import { isSyntheticSampleTrade } from "@/lib/prop-firm-engine";
 
 function safeParseArr(json: string | null): string[] {
   if (!json) return [];
@@ -73,9 +74,11 @@ export async function GET(req: NextRequest) {
     if (accountId && accountId !== "all") priorWhere.accountId = accountId;
     const priorTrades = await db.trade.findMany({
       where: priorWhere,
-      select: { netPnlCents: true },
+      select: { netPnlCents: true, tagsJson: true, notes: true },
     });
-    priorRealizedPnlCents = priorTrades.reduce((sum, t) => sum + (t.netPnlCents || 0), 0);
+    priorRealizedPnlCents = priorTrades
+      .filter((t) => !isSyntheticSampleTrade(t))
+      .reduce((sum, t) => sum + (t.netPnlCents || 0), 0);
   }
 
   if (accountId && accountId !== "all") {
@@ -100,7 +103,8 @@ export async function GET(req: NextRequest) {
       startingBalanceCents = null;
     }
   }
-  const trades = await db.trade.findMany({ where, orderBy: { exitTime: "asc" } });
+  const rawTrades = await db.trade.findMany({ where, orderBy: { exitTime: "asc" } });
+  const trades = rawTrades.filter((t) => !isSyntheticSampleTrade(t));
   const rows: TradeMetricRow[] = trades.map((t) => ({
     id: t.id,
     netPnlCents: t.netPnlCents,
@@ -267,7 +271,7 @@ export async function GET(req: NextRequest) {
       strategyMetaMap.set(s.id, { name: s.name, versions: vMap });
     }
 
-    const tradesForChecklist = await db.trade.findMany({
+    const rawTradesForChecklist = await db.trade.findMany({
       where,
       include: {
         checklistEvaluations: {
@@ -279,6 +283,7 @@ export async function GET(req: NextRequest) {
       },
       orderBy: { exitTime: "asc" },
     });
+    const tradesForChecklist = rawTradesForChecklist.filter((t) => !isSyntheticSampleTrade(t));
 
     const tradeRecords: TradeChecklistRecord[] = tradesForChecklist.map((t) => {
       const latestEval = t.checklistEvaluations?.[0];
@@ -382,7 +387,7 @@ export async function GET(req: NextRequest) {
     return send(computeTimeInTradeAnalytics(trades));
   }
   if (dimension === "data-quality") {
-    const tradesForQuality = await db.trade.findMany({
+    const rawTradesForQuality = await db.trade.findMany({
       where,
       include: {
         strategy: { select: { id: true, name: true } },
@@ -392,6 +397,7 @@ export async function GET(req: NextRequest) {
       },
       orderBy: { entryTime: "desc" },
     });
+    const tradesForQuality = rawTradesForQuality.filter((t) => !isSyntheticSampleTrade(t));
 
     const scannable: ScannableTradeRecord[] = tradesForQuality.map((t) => {
       let hasRules = false;

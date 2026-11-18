@@ -1,0 +1,106 @@
+{
+  "desktop": {
+    "overviewBanner": {
+      "hasHeader": true,
+      "hasNetCash": true,
+      "hasSimulatedPnl": true,
+      "hasUSD": true,
+      "hasGBP": true,
+      "hasMultiCurrencyNote": true,
+      "firmAlphaCapitalGbp": true,
+      "firmFtmoUsd": true,
+      "firmApexUsd": true
+    }
+  },
+  "mobile": {
+    "390x844": {
+      "scrollWidth": 390,
+      "clientWidth": 390,
+      "hasHorizontalOverflow": false
+    },
+    "320x568": {
+      "scrollWidth": 320,
+      "clientWidth": 320,
+      "hasHorizontalOverflow": false
+    }
+  },
+  "interactions": {
+    "openChallengeDetail": true,
+    "tabSwitching": {
+      "overview": {
+        "clicked": true,
+        "visible": true
+      },
+      "rules": {
+        "clicked": true,
+        "visible": true
+      },
+      "performance": {
+        "clicked": true,
+        "visible": true
+      },
+      "trades": {
+        "clicked": true,
+        "visible": true
+      },
+      "phases": {
+        "clicked": true,
+        "visible": true
+      },
+      "breaches": {
+        "clicked": true,
+        "visible": true
+      },
+      "payouts": {
+        "clicked": true,
+        "visible": true
+      },
+      "settings": {
+        "clicked": true,
+        "visible": true
+      }
+    },
+    "ruleFilters": {
+      "count": 0,
+      "labels": []
+    },
+    "ruleSimulator": {
+      "simulatorFound": false,
+      "presetClicked": false,
+      "hasProjectedBalance": false,
+      "hasProjectedDrawdown": false
+    },
+    "performanceTab": {
+      "hasWinRate": false,
+      "hasProfitFactor": true,
+      "hasCohorts": false,
+      "hasPayoffRatio": false,
+      "hasInstruments": false
+    },
+    "tradeFilters": {
+      "filterButtonsFound": 0,
+      "hasComplianceImpactTags": true
+    },
+    "phasesTab": {
+      "hasPhaseCards": true,
+      "hasSnapshot": false,
+      "hasTradingDays": true,
+      "hasCalculationBasis": false
+    },
+    "failuresTab": {
+      "hasAuditTrail": false,
+      "hasDisputeAction": true
+    },
+    "payoutsTab": {
+      "hasChecklist": false,
+      "hasDisbursements": false
+    },
+    "settingsTab": {
+      "hasConnectionCard": false,
+      "hasDropdown": true
+    },
+    "backToPortfolio": true,
+    "backAtPortfolio": true
+  },
+  "errors": []
+}

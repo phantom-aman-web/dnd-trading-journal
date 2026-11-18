@@ -460,6 +460,20 @@ export async function POST(req: NextRequest) {
     typeof data.checklistAnswers === "object" &&
     Object.keys(data.checklistAnswers).length > 0;
 
+  let activeSv: { id: string; versionLabel: string; rulesJson: string } | null = null;
+  if (data.strategyVersionId) {
+    activeSv = await db.strategyVersion.findFirst({
+      where: { id: data.strategyVersionId, strategy: { userId: user.id } },
+      select: { id: true, versionLabel: true, rulesJson: true },
+    });
+  } else if (data.strategyId) {
+    activeSv = await db.strategyVersion.findFirst({
+      where: { strategyId: data.strategyId, strategy: { userId: user.id } },
+      orderBy: { effectiveDate: "desc" },
+      select: { id: true, versionLabel: true, rulesJson: true },
+    });
+  }
+
   if (hasChecklistAnswers) {
     let items: ReturnType<typeof extractChecklist> = [];
     let thresholds: ReturnType<typeof parseGradingThresholds> = {
@@ -469,41 +483,36 @@ export async function POST(req: NextRequest) {
     let evalStrategyVersionId: string | null = null;
 
     // Path A: StrategyVersion.rulesJson (the normal path for form-driven trades).
-    if (data.strategyVersionId) {
-      const sv = await db.strategyVersion.findFirst({
-        where: { id: data.strategyVersionId, strategy: { userId: user.id } },
-      });
-      if (sv) {
-        items = extractChecklist(sv.rulesJson);
-        // If the strategy has an associated ChecklistConfig, link the
-        // evaluation to its latest version too (for the snapshot FK).
-        if (data.strategyId) {
-          const strat = await db.strategy.findFirst({
-            where: { id: data.strategyId, userId: user.id },
-            include: {
-              checklistConfig: {
-                include: {
-                  versions: { orderBy: { effectiveDate: "desc" }, take: 1 },
-                },
+    if (activeSv) {
+      items = extractChecklist(activeSv.rulesJson);
+      // If the strategy has an associated ChecklistConfig, link the
+      // evaluation to its latest version too (for the snapshot FK).
+      if (data.strategyId) {
+        const strat = await db.strategy.findFirst({
+          where: { id: data.strategyId, userId: user.id },
+          include: {
+            checklistConfig: {
+              include: {
+                versions: { orderBy: { effectiveDate: "desc" }, take: 1 },
               },
             },
-          });
-          if (strat?.checklistConfig?.versions?.[0]) {
-            evalChecklistVersionId = strat.checklistConfig.versions[0].id;
-            // Use the ChecklistVersion's thresholds if available (authoritative).
-            const cvItems = parseChecklistItems(
-              strat.checklistConfig.versions[0].itemsJson,
-            );
-            if (cvItems.length > 0) {
-              items = cvItems;
-            }
-            thresholds = parseGradingThresholds(
-              strat.checklistConfig.versions[0].gradingThresholdsJson,
-            );
+          },
+        });
+        if (strat?.checklistConfig?.versions?.[0]) {
+          evalChecklistVersionId = strat.checklistConfig.versions[0].id;
+          // Use the ChecklistVersion's thresholds if available (authoritative).
+          const cvItems = parseChecklistItems(
+            strat.checklistConfig.versions[0].itemsJson,
+          );
+          if (cvItems.length > 0) {
+            items = cvItems;
           }
+          thresholds = parseGradingThresholds(
+            strat.checklistConfig.versions[0].gradingThresholdsJson,
+          );
         }
-        evalStrategyVersionId = sv.id;
       }
+      evalStrategyVersionId = activeSv.id;
     }
 
     // Path B: explicit checklistVersionId (ChecklistConfig path).
@@ -527,7 +536,7 @@ export async function POST(req: NextRequest) {
       pendingEvaluation = {
         checklistVersionId: evalChecklistVersionId,
         strategyVersionId: evalStrategyVersionId,
-        rawAnswersJson: serializeAnswers(answers),
+        rawAnswersJson: serializeAnswers(answers, items),
         weightedScore: String(result.score),
         finalGrade: result.grade,
       };
@@ -583,7 +592,18 @@ export async function POST(req: NextRequest) {
         entryTime: data.entryTime ?? (data.executions.find((e) => e.kind === "entry")?.timestamp ?? null),
         exitTime: data.exitTime ?? (data.executions.find((e) => e.kind === "exit")?.timestamp ?? null),
         tradingTimezone: data.tradingTimezone,
-        setupJson: (data.setup || idempotencyKey) ? JSON.stringify({ ...(data.setup || {}), ...(idempotencyKey ? { _idempotencyKey: idempotencyKey } : {}) }) : null,
+        setupJson: (data.setup || idempotencyKey || activeSv) ? JSON.stringify({
+          ...(data.setup || {}),
+          ...(idempotencyKey ? { _idempotencyKey: idempotencyKey } : {}),
+          ...(activeSv ? {
+            strategySnapshot: {
+              versionId: activeSv.id,
+              versionLabel: activeSv.versionLabel,
+              rulesJson: activeSv.rulesJson,
+              capturedAt: new Date().toISOString(),
+            },
+          } : {}),
+        }) : null,
         thesisJson: data.thesis ? JSON.stringify(data.thesis) : null,
         notes: data.notes,
         lessons: data.lessons,

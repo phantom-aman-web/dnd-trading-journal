@@ -15,9 +15,12 @@ import { dToNumber } from "@/lib/decimal";
 import {
   parseChecklistItems,
   parseAnswers,
+  parseSnapshotItems,
+  extractChecklist,
   type ChecklistItem,
   type ChecklistAnswer,
 } from "@/lib/checklist-evaluation";
+import { isSyntheticSampleTrade } from "@/lib/prop-firm-engine";
 import {
   ArrowLeft,
   Copy,
@@ -88,6 +91,8 @@ export function TradeDetailView({ tradeId, onBack }: { tradeId?: string; onBack?
   // checked/unchecked state of each item) once here so the Setup tab can
   // render the full evaluation breakdown. Declared before the early-return
   // guards so the hook ordering stays stable across renders.
+  const setup = useMemo(() => safeJson(trade?.setupJson, {}), [trade?.setupJson]);
+
   const checklistEvaluation = useMemo(() => {
     if (!trade) return null;
     const evals = Array.isArray(trade.checklistEvaluations)
@@ -95,25 +100,41 @@ export function TradeDetailView({ tradeId, onBack }: { tradeId?: string; onBack?
       : [];
     if (evals.length === 0) return null;
     const latest = evals[0];
-    const version = latest?.checklistVersion;
-    if (!version) return null;
-    const items: ChecklistItem[] = parseChecklistItems(version.itemsJson);
+
+    // Priority 1: Snapshot items embedded in evaluation record at trade time
+    const snapshotItems = parseSnapshotItems(latest.rawAnswersJson);
+
+    // Priority 2: ChecklistVersion items if separate checklist entity
+    const cvItems = latest.checklistVersion ? parseChecklistItems(latest.checklistVersion.itemsJson) : [];
+
+    // Priority 3: Strategy rules items from setup snapshot, or latest strategy version
+    const rulesSource = setup?.strategySnapshot?.rulesJson ?? latest.strategyVersion?.rulesJson ?? trade.strategyVersion?.rulesJson;
+    const svItems = rulesSource ? extractChecklist(rulesSource) : [];
+
+    const items: ChecklistItem[] = (snapshotItems && snapshotItems.length > 0)
+      ? snapshotItems
+      : (cvItems.length > 0 ? cvItems : svItems);
+
     const answers: ChecklistAnswer = parseAnswers(latest.rawAnswersJson);
-    const checklistName = version.checklist?.name ?? "Checklist";
+    const checklistName = latest.checklistVersion?.checklist?.name ?? trade.strategy?.name ?? "Checklist";
+    const versionLabel = latest.checklistVersion?.versionLabel ?? setup?.strategySnapshot?.versionLabel ?? latest.strategyVersion?.versionLabel ?? trade.strategyVersion?.versionLabel ?? "1.0";
+
     return {
       checklistName,
-      versionLabel: version.versionLabel,
+      versionLabel,
       weightedScore: latest.weightedScore,
       finalGrade: latest.finalGrade,
       evaluatedAt: latest.evaluatedAt,
       items,
       answers,
     };
-  }, [trade]);
+  }, [trade, setup]);
 
   const strategyCustomFields = useMemo(() => {
-    return extractCustomFields(trade?.strategyVersion?.rulesJson);
-  }, [trade?.strategyVersion?.rulesJson]);
+    // Prefer snapshot from setupJson if recorded at execution time so historical trades never drift
+    const rulesSource = setup?.strategySnapshot?.rulesJson ?? trade?.strategyVersion?.rulesJson;
+    return extractCustomFields(rulesSource);
+  }, [setup?.strategySnapshot?.rulesJson, trade?.strategyVersion?.rulesJson]);
 
   if (isLoading) {
     return (
@@ -128,7 +149,6 @@ export function TradeDetailView({ tradeId, onBack }: { tradeId?: string; onBack?
   if (!trade) return null;
 
   const pnl = formatSignedCents(trade.netPnlCents);
-  const setup = safeJson(trade.setupJson, {});
   const thesis = safeJson(trade.thesisJson, {});
   const psychBefore = safeJson(trade.psychBeforeJson, {});
   const psychAfter = safeJson(trade.psychAfterJson, {});
@@ -190,6 +210,11 @@ export function TradeDetailView({ tradeId, onBack }: { tradeId?: string; onBack?
             >
               {trade.status}
             </Badge>
+            {isSyntheticSampleTrade(trade) && (
+              <Badge variant="outline" className="bg-amber-500/10 text-amber-500 border-amber-500/30 text-[10px] font-semibold">
+                DEMO / SAMPLE RECORD
+              </Badge>
+            )}
           </div>
           <div className="mt-1 text-sm text-muted-foreground flex items-center gap-2 flex-wrap">
             <span>{trade.entryTime ? new Date(trade.entryTime).toLocaleString() : "Open"} · {trade.session ?? "-"}</span>
@@ -299,6 +324,7 @@ export function TradeDetailView({ tradeId, onBack }: { tradeId?: string; onBack?
                 if (res.ok) {
                   toast.success("Trade archived safely. You can restore it anytime in Archived Records.");
                   qc.invalidateQueries({ queryKey: ["trades"] });
+                  qc.invalidateQueries({ queryKey: ["prop-challenges"] });
                   navigate("tradesLog");
                 } else {
                   toast.error("Failed to archive trade.");
@@ -316,6 +342,8 @@ export function TradeDetailView({ tradeId, onBack }: { tradeId?: string; onBack?
                 const res = await fetch(`/api/trades/${id}`, { method: "DELETE" });
                 if (res.ok) {
                   toast.success("Trade deleted.");
+                  qc.invalidateQueries({ queryKey: ["trades"] });
+                  qc.invalidateQueries({ queryKey: ["prop-challenges"] });
                   navigate("tradesLog");
                 } else {
                   toast.error("Failed to delete.");
