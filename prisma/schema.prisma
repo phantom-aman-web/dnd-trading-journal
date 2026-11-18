@@ -47,6 +47,10 @@ model User {
   tradingTasks       TradingTask[]
   noTrades           NoTradeEntry[]
   dictionaryEntries  StrategyDictionaryEntry[]
+  telegramIntegration TelegramIntegration?
+  telegramReminderSettings TelegramReminderSettings?
+  telegramDeliveries  TelegramDelivery[]
+  telegramReminders   TelegramReminder[]
 }
 
 // ---------------------------------------------------------------------------
@@ -294,6 +298,7 @@ model Trade {
   media          TradeMedia[]
   checklistEvaluations TradeChecklistEvaluation[]
   reviewLinks    ReviewTradeLink[]
+  telegramDeliveries TelegramDelivery[]
 
   @@index([userId])
   @@index([accountId])
@@ -785,6 +790,8 @@ model TradingTask {
   updatedAt        DateTime  @updatedAt
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  telegramReminders  TelegramReminder[]
+  telegramDeliveries TelegramDelivery[]
 
   @@index([userId, status])
   @@index([userId, listName])
@@ -879,6 +886,167 @@ model StrategyDictionaryEntry {
   @@index([category])
   @@index([isFavorite])
 }
+
+// ---------------------------------------------------------------------------
+// Trade Idempotency Cache
+// ---------------------------------------------------------------------------
+
+model TradeIdempotency {
+  id          String   @id
+  userId      String
+  key         String
+  payloadHash String
+  tradeId     String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @default(now())
+
+  @@unique([userId, key], map: "trade_idempotency_user_key_idx")
+  @@index([userId, createdAt], map: "trade_idempotency_user_created_idx")
+  @@map("trade_idempotency")
+}
+
+// ---------------------------------------------------------------------------
+// Telegram Integration, Publishing & Durable Outbox Engine
+// ---------------------------------------------------------------------------
+
+model TelegramIntegration {
+  id                    String    @id @default(cuid())
+  userId                String    @unique
+  encryptedBotToken     String    // AES-256-GCM encrypted
+  botTokenIv            String
+  botTokenTag           String
+  botId                 String?
+  botUsername           String?
+  botFirstName          String?
+  channelId             String?   // e.g. -1001234567890 or @channel
+  channelTitle          String?
+  channelUsername       String?
+  channelVerified       Boolean   @default(false)
+  channelVerifiedAt     DateTime?
+  privateChatId         String?   // user's personal chat ID for To-Do reminders
+  privateChatUsername   String?
+  privateFirstName      String?
+  isPrivateLinked       Boolean   @default(false)
+  privateLinkedAt       DateTime?
+  linkingToken          String?   @unique
+  linkingTokenExpiresAt DateTime?
+  webhookSecret         String?
+  status                String    @default("disconnected") // disconnected | configured | active | error
+  lastError             String?
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+
+  publishingSettings    TelegramPublishingSettings?
+  deliveries            TelegramDelivery[]
+
+  user                  User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+model TelegramPublishingSettings {
+  id                   String    @id @default(cuid())
+  integrationId        String    @unique
+  enabled              Boolean   @default(false)
+  templateType         String    @default("standard") // standard | ict2022 | custom
+  customTemplateJson   String?   // JSON configuration for custom sections and placeholders
+  includeScreenshots   Boolean   @default(true)
+  maxScreenshots       Int       @default(10)
+  includeTags          Boolean   @default(true)
+  includeDescription   Boolean   @default(true)
+  includeRisk          Boolean   @default(true)
+  includePerformance   Boolean   @default(true)
+  includeAccountName   Boolean   @default(false)
+  autoPublishNewTrades Boolean   @default(true)
+  publishTradeClosure  Boolean   @default(true)
+  createdAt            DateTime  @default(now())
+  updatedAt            DateTime  @updatedAt
+
+  integration          TelegramIntegration @relation(fields: [integrationId], references: [id], onDelete: Cascade)
+}
+
+model TelegramReminderSettings {
+  id                  String    @id @default(cuid())
+  userId              String    @unique
+  enabled             Boolean   @default(true)
+  defaultIntervalMins Int       @default(15) // 0 (at due), 5, 15, 30, 60
+  overdueBehavior     String    @default("once") // none | once | repeat_hourly
+  quietHoursEnabled   Boolean   @default(false)
+  quietHoursStart     String?   @default("22:00") // HH:mm
+  quietHoursEnd       String?   @default("07:00") // HH:mm
+  timezone            String    @default("UTC")
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+
+  user                User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+model TelegramDelivery {
+  id                 String    @id @default(cuid())
+  userId             String
+  integrationId      String?
+  jobType            String    // trade_publish | trade_closure | todo_reminder | test_message
+  status             String    @default("pending") // pending | processing | delivered | failed | uncertain | cancelled
+  idempotencyKey     String    @unique
+  tradeId            String?
+  taskId             String?
+  channelId          String?
+  chatId             String?
+  scheduledFor       DateTime  @default(now())
+  attempts           Int       @default(0)
+  maxAttempts        Int       @default(5)
+  lastError          String?
+  nextAttemptAt      DateTime?
+  leaseExpiresAt     DateTime?
+  payloadJson        String?   // snapshot payload of formatted message, media, etc.
+  telegramMessageIds String?   // JSON array of sent message IDs e.g. [123, 124]
+  deliveredAt        DateTime?
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+
+  user               User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  integration        TelegramIntegration? @relation(fields: [integrationId], references: [id], onDelete: SetNull)
+  trade              Trade?    @relation(fields: [tradeId], references: [id], onDelete: SetNull)
+  task               TradingTask? @relation(fields: [taskId], references: [id], onDelete: SetNull)
+
+  @@index([status, scheduledFor])
+  @@index([userId, createdAt])
+  @@index([tradeId])
+  @@index([taskId])
+}
+
+model TelegramReminder {
+  id              String    @id @default(cuid())
+  userId          String
+  taskId          String
+  reminderTime    DateTime  // UTC execution time
+  intervalMinutes Int       @default(0) // 0, 5, 15, 30, 60, or custom offset
+  status          String    @default("pending") // pending | processing | sent | cancelled | snoozed
+  snoozeUntil     DateTime?
+  dedupKey        String    @unique // e.g. "reminder:${taskId}:${intervalMinutes}:${reminderTime.toISOString()}"
+  deliveryId      String?
+  sentAt          DateTime?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  user            User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  task            TradingTask @relation(fields: [taskId], references: [id], onDelete: Cascade)
+
+  @@index([userId, status, reminderTime])
+  @@index([taskId])
+}
+
+model TelegramWebhookUpdate {
+  id          String   @id @default(cuid())
+  updateId    String   @unique
+  action      String?
+  processedAt DateTime @default(now())
+
+  @@index([processedAt])
+}
+
 
 
 

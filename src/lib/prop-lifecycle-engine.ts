@@ -713,6 +713,56 @@ export function generateDefaultPhasesForModel(
     return phases;
   }
 
+  if (model === "custom") {
+    const phaseCount = Math.max(1, baseConfig.customPhaseCount || 1);
+    const phases: PropPhaseConfig[] = [];
+    for (let i = 1; i <= phaseCount; i++) {
+      phases.push({
+        id: `phase_custom_${i}`,
+        sequence: i,
+        name: phaseCount === 1 ? "Custom Evaluation Phase" : `Custom Phase ${i}`,
+        phaseType: "evaluation",
+        status: i === 1 ? "in_progress" : "awaiting_activation",
+        startingBalanceCents: balance,
+        profitTargetCents: baseConfig.profitTargetCents ?? Math.round(balance * 0.1),
+        profitTargetPct: baseConfig.profitTargetCents ? Math.round((baseConfig.profitTargetCents / balance) * 100) : 10,
+        dailyLossLimitCents: baseConfig.dailyLossLimitCents ?? Math.round(balance * 0.05),
+        dailyLossLimitPct: baseConfig.dailyLossLimitPct ?? 5,
+        maxDrawdownCents: baseConfig.maxDrawdownCents ?? Math.round(balance * 0.1),
+        maxDrawdownPct: baseConfig.maxDrawdownPct ?? 10,
+        drawdownType: baseConfig.drawdownType ?? "static",
+        drawdownBasis: baseConfig.drawdownBasis ?? "balance",
+        minTradingDays: baseConfig.minTradingDays ?? 4,
+        maxTradingDays: baseConfig.maxTradingDays ?? null,
+        startDate: start,
+        rules: generateDefaultRulesForPhase("evaluation", balance, baseConfig),
+      });
+    }
+    phases.push({
+      id: `phase_funded_${phaseCount + 1}`,
+      sequence: phaseCount + 1,
+      name: "Funded Stage",
+      phaseType: "funded",
+      status: "awaiting_activation",
+      startingBalanceCents: balance,
+      profitTargetCents: null,
+      dailyLossLimitCents: baseConfig.dailyLossLimitCents ?? Math.round(balance * 0.05),
+      dailyLossLimitPct: baseConfig.dailyLossLimitPct ?? 5,
+      maxDrawdownCents: baseConfig.maxDrawdownCents ?? Math.round(balance * 0.1),
+      maxDrawdownPct: baseConfig.maxDrawdownPct ?? 10,
+      drawdownType: baseConfig.drawdownType ?? "static",
+      drawdownBasis: baseConfig.drawdownBasis ?? "balance",
+      minTradingDays: null,
+      maxTradingDays: null,
+      startDate: start,
+      rules: generateDefaultRulesForPhase("funded", balance, {
+        ...baseConfig,
+        profitTargetCents: null,
+      }),
+    });
+    return phases;
+  }
+
   // Default: two_step (FTMO standard)
   return [
     {
@@ -1029,6 +1079,81 @@ export interface PropLifecycleEvaluationResult {
   events: PropLifecycleEvent[];
 }
 
+export function ensurePhaseSnapshot(
+  phase: PropPhaseConfig,
+  allTrades: TradeForLifecycle[],
+  nextPhaseStartDate?: string | null,
+  timezone = "America/New_York",
+  resetHour = 17
+): PropPhaseSnapshot {
+  const pStartMs = new Date(phase.startDate).getTime();
+  const pEndMs = nextPhaseStartDate
+    ? new Date(nextPhaseStartDate).getTime()
+    : phase.completedAt
+    ? new Date(phase.completedAt).getTime()
+    : Infinity;
+
+  const phaseTrades = allTrades.filter((t) => {
+    if (t.isDraft || t.status === "planned" || isSyntheticSampleTrade(t)) return false;
+    const time = t.exitTime ? new Date(t.exitTime).getTime() : t.entryTime ? new Date(t.entryTime).getTime() : 0;
+    if (phase.sequence > 1 && time < pStartMs) return false;
+    if (time > pEndMs) return false;
+    return true;
+  });
+
+  let balanceCents = phase.startingBalanceCents;
+  let grossWin = 0;
+  let grossLoss = 0;
+  let winCount = 0;
+  const cycleKeys = new Set<string>();
+
+  for (const t of phaseTrades) {
+    if (t.status !== "open" && t.exitTime) {
+      balanceCents += t.netPnlCents;
+    }
+    const time = t.exitTime ? new Date(t.exitTime) : new Date(t.entryTime || 0);
+    cycleKeys.add(getTradingCycleKey(time, timezone, resetHour));
+    if (t.netPnlCents > 0 || t.status === "win") {
+      winCount++;
+      grossWin += t.netPnlCents;
+    } else if (t.netPnlCents < 0 || t.status === "loss") {
+      grossLoss += Math.abs(t.netPnlCents);
+    }
+  }
+
+  const netProfitCents = balanceCents - phase.startingBalanceCents;
+  const tradeCount = phaseTrades.length;
+  const winRate = tradeCount > 0 ? Math.round((winCount / tradeCount) * 100) : 0;
+  const profitFactor = grossLoss > 0 ? Math.round((grossWin / grossLoss) * 100) / 100 : grossWin > 0 ? 99.99 : null;
+
+  return {
+    phaseId: phase.id,
+    phaseName: phase.name,
+    sequence: phase.sequence,
+    completedAt: phase.completedAt || nextPhaseStartDate || new Date().toISOString(),
+    startingBalanceCents: phase.startingBalanceCents,
+    finalBalanceCents: balanceCents,
+    finalEquityCents: balanceCents,
+    netProfitCents,
+    tradeCount,
+    winRate,
+    profitFactor,
+    tradingDaysCount: cycleKeys.size,
+    status: "passed",
+    rulesPassedCount: phase.rules?.filter((r) => r.status === "passed").length || phase.rules?.length || 0,
+    rulesTotalCount: phase.rules?.length || 0,
+    rules: phase.rules,
+    calculationMethods: {
+      drawdownType: phase.drawdownType || "static",
+      drawdownBasis: phase.drawdownBasis || "balance",
+    },
+    resetConfig: {
+      timezone,
+      resetHour,
+    },
+  };
+}
+
 export function evaluatePropLifecycle(
   challenge: {
     id: string;
@@ -1059,10 +1184,11 @@ export function evaluatePropLifecycle(
     }
   }
 
-  const phaseStartMs = new Date(activePhase.startDate || challenge.startDate).getTime();
+  const isFirstPhase = activePhase.sequence === 1 || meta?.phases?.findIndex((p) => p.id === activePhase.id) === 0;
+  const phaseStartMs = isFirstPhase ? 0 : new Date(activePhase.startDate || challenge.startDate).getTime();
   const phaseEndMs = activePhase.endDate ? new Date(activePhase.endDate).getTime() : null;
 
-  // Filter valid executed trades for this phase (strictly excluding drafts, planned, and isolated synthetic demo records)
+  // Filter valid executed trades for this phase (strictly excluding drafts, planned)
   const validTrades = trades
     .filter((t) => !t.isDraft && t.status !== "planned" && !isSyntheticSampleTrade(t))
     .filter((t) => {
@@ -1456,10 +1582,10 @@ export function evaluatePropLifecycle(
   if (isTerminated) {
     overallStatus = activePhase.status;
     statusReason = `Account has been ${activePhase.status} by firm administration.`;
-  } else if (meta.isFirmDispute && meta.firmRejectionDetails) {
+  } else if (meta.isFirmDispute) {
     overallStatus = "failed";
-    statusReason = meta.firmRejectionDetails.undisclosedRuleName
-      ? `Firm rejection: ${meta.firmRejectionDetails.undisclosedRuleName} — ${meta.firmRejectionDetails.firmCommunication}`
+    statusReason = meta.firmRejectionDetails?.undisclosedRuleName
+      ? `Firm rejection: ${meta.firmRejectionDetails.undisclosedRuleName} — ${meta.firmRejectionDetails.firmCommunication || "no violation established by currently configured rules."}`
       : "Firm rejection — no violation established by currently configured rules.";
   } else if (hasHardBreach || dailyLossBreached || drawdownBreached) {
     overallStatus = "breached";
@@ -1521,13 +1647,21 @@ export function evaluatePropLifecycle(
     }
   }
 
-  // Update active phase rules and status in memory
-  const updatedAllPhases = meta.phases.map((p) => {
+  // Update active phase rules and status in memory, and ensure completed phases have valid historical snapshots
+  const updatedAllPhases = meta.phases.map((p, idx) => {
     if (p.id === activePhase.id) {
       return {
         ...p,
         status: overallStatus,
         rules: evaluatedRules,
+      };
+    }
+    if ((p.status === "passed" || p.completedAt) && !p.snapshot) {
+      const nextPhase = meta.phases[idx + 1];
+      const snapshot = ensurePhaseSnapshot(p, trades, nextPhase?.startDate, timezone, resetHour);
+      return {
+        ...p,
+        snapshot,
       };
     }
     return p;

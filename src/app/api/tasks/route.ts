@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { db } from "@/lib/db";
 import { requireUser } from "@/lib/auth";
+import { syncTaskReminders } from "@/lib/telegram/reminder-scheduler";
 
 const CreateTaskSchema = z.object({
   title: z.string().min(1, "Title is required").max(300),
@@ -118,6 +119,20 @@ export async function POST(req: Request) {
         completedAt: body.status === "completed" ? new Date() : null,
       },
     });
+
+    // Sync Telegram To-Do reminders (non-fatal)
+    await syncTaskReminders(
+      {
+        id: task.id,
+        title: task.title,
+        status: task.status,
+        dueDate: task.dueDate,
+        dueTime: task.dueTime,
+        reminderMinutesBefore: (json as any)?.reminderMinutesBefore,
+      },
+      user.id,
+      (json as any)?.reminderMinutesBefore
+    ).catch(() => {});
 
     return NextResponse.json({
       item: {

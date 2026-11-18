@@ -101,7 +101,7 @@ describe("AlphaPips — Prop Firm Account Lifecycle, Compliance & Failure Diagno
     const p2Trades: TradeForLifecycle[] = [
       ...p1Trades,
       { id: "t5", netPnlCents: 150000, entryTime: new Date(p2Start + 1000).toISOString(), exitTime: new Date(p2Start + 5000).toISOString(), status: "win" },
-      { id: "t6", netPnlCents: 150000, entryTime: new Date(p2Start + 86400000).toISOString(), exitTime: new Date(p2Start + 90000000).toISOString(), status: "win" },
+      { id: "t6", netPnlCents: 150000, entryTime: new Date(p2Start + 86400000).toISOString(), exitTime: new Date(p2Start + 86400000 + 4000).toISOString(), status: "win" },
       { id: "t7", netPnlCents: 120000, entryTime: new Date(p2Start + 2 * 86400000).toISOString(), exitTime: new Date(p2Start + 2 * 86400000 + 4000).toISOString(), status: "win" },
       { id: "t8", netPnlCents: 100000, entryTime: new Date(p2Start + 3 * 86400000).toISOString(), exitTime: new Date(p2Start + 3 * 86400000 + 4000).toISOString(), status: "win" },
     ];
@@ -724,5 +724,251 @@ describe("AlphaPips — Prop Firm Account Lifecycle, Compliance & Failure Diagno
     expect(step2.newPhase?.fundedAccountName).toBe("FTMO Funded Master #9999");
     expect(step2.newPhase?.activationDate).toBe(activationDate);
     expect(step2.newPhase?.fundedStatus).toBe("active");
+  });
+
+  // -------------------------------------------------------------------------
+  // Scenario 21: Direct-funded account (zero evaluation phases)
+  // -------------------------------------------------------------------------
+  it("Scenario 21: Direct-funded account starts immediately in funded stage", () => {
+    const meta = parsePropLifecycleMetadata(null, null, {
+      startingBalanceCents: 5000000, // $50k
+      accountModel: "direct_funded",
+      startDate: START_DATE,
+    });
+    meta.phases = generateDefaultPhasesForModel("direct_funded", {
+      startingBalanceCents: 5000000,
+      startDate: START_DATE,
+    });
+    meta.currentPhaseId = meta.phases[0].id;
+
+    expect(meta.phases.length).toBe(1);
+    expect(meta.phases[0].phaseType).toBe("funded");
+    expect(meta.phases[0].profitTargetCents).toBeNull(); // No profit target ceiling
+
+    const trades: TradeForLifecycle[] = [
+      { id: "df_t1", netPnlCents: 150000, entryTime: "2026-10-02T12:00:00Z", exitTime: "2026-10-02T14:00:00Z", status: "win" },
+      { id: "df_t2", netPnlCents: 200000, entryTime: "2026-10-03T12:00:00Z", exitTime: "2026-10-03T14:00:00Z", status: "win" },
+    ];
+
+    const res = evaluatePropLifecycle(
+      { id: "c_df", propFirm: "Direct Funding Corp", startDate: START_DATE },
+      meta,
+      trades
+    );
+
+    expect(res.status).toBe("funded");
+    expect(res.netProfitCents).toBe(350000);
+    expect(res.activePhase.phaseType).toBe("funded");
+  });
+
+  // -------------------------------------------------------------------------
+  // Scenario 22: Phase 1 only configuration does NOT automatically activate next phase
+  // -------------------------------------------------------------------------
+  it("Scenario 22: Phase 1 only configuration requires explicit verification and does not auto-activate subsequent phases", () => {
+    const meta = parsePropLifecycleMetadata(null, null, {
+      startingBalanceCents: 10000000,
+      profitTargetCents: 1000000, // $10k
+      minTradingDays: 2,
+      accountModel: "two_step",
+      startDate: START_DATE,
+    });
+
+    const trades: TradeForLifecycle[] = [
+      { id: "p1_1", netPnlCents: 500000, entryTime: "2026-10-02T12:00:00Z", exitTime: "2026-10-02T14:00:00Z", status: "win" },
+      { id: "p1_2", netPnlCents: 600000, entryTime: "2026-10-03T12:00:00Z", exitTime: "2026-10-03T14:00:00Z", status: "win" },
+    ];
+
+    const res = evaluatePropLifecycle(
+      { id: "c_p1", propFirm: "FTMO", startDate: START_DATE },
+      meta,
+      trades
+    );
+
+    // Target reached + min days met -> passed, BUT active phase remains phase_1 until manually transitioned
+    expect(res.status).toBe("passed");
+    expect(res.activePhase.id).toBe("phase_1");
+    expect(res.allPhases[1].status).toBe("awaiting_activation"); // Phase 2 is NOT active yet
+  });
+
+  // -------------------------------------------------------------------------
+  // Scenario 23: Custom firm-defined stages
+  // -------------------------------------------------------------------------
+  it("Scenario 23: Custom firm-defined stage model with custom parameters", () => {
+    const phases = generateDefaultPhasesForModel("custom", {
+      startingBalanceCents: 20000000, // $200k
+      profitTargetCents: 1600000, // 8% target
+      dailyLossLimitCents: 1000000, // 5% daily loss
+      maxDrawdownCents: 2000000, // 10% max DD
+      customPhaseCount: 2,
+      startDate: START_DATE,
+    });
+
+    expect(phases.length).toBe(3); // 2 custom eval phases + 1 funded stage
+    expect(phases[0].name).toBe("Custom Phase 1");
+    expect(phases[1].name).toBe("Custom Phase 2");
+    expect(phases[2].name).toBe("Funded Stage");
+    expect(phases[2].phaseType).toBe("funded");
+  });
+
+  // -------------------------------------------------------------------------
+  // Scenario 24: Firm rejection without established rule violation displays exact mandatory text
+  // -------------------------------------------------------------------------
+  it("Scenario 24: Firm rejection without established violation displays exact mandatory text", () => {
+    let meta = parsePropLifecycleMetadata(null, null, {
+      startingBalanceCents: 10000000,
+      profitTargetCents: 1000000,
+      minTradingDays: 2,
+      startDate: START_DATE,
+    });
+
+    const trades: TradeForLifecycle[] = [
+      { id: "t_pass_1", netPnlCents: 600000, entryTime: "2026-10-02T12:00:00Z", exitTime: "2026-10-02T14:00:00Z", status: "win" },
+      { id: "t_pass_2", netPnlCents: 500000, entryTime: "2026-10-03T12:00:00Z", exitTime: "2026-10-03T14:00:00Z", status: "win" },
+    ];
+
+    // Firm rejects account with no established rule breach
+    meta = recordManualFirmRejection(meta, {
+      firmCommunication: "Internal risk management discretionary decline.",
+      userVerified: true,
+    });
+
+    const res = evaluatePropLifecycle(
+      { id: "c_rej", propFirm: "Alpha Pro Firm", startDate: START_DATE },
+      meta,
+      trades
+    );
+
+    expect(res.status).toBe("failed");
+    expect(res.statusReason).toBe("Firm rejection — no violation established by currently configured rules.");
+  });
+
+  // -------------------------------------------------------------------------
+  // Scenario 25: Segregation of No-Trade Observations
+  // -------------------------------------------------------------------------
+  it("Scenario 25: Segregation of No-Trade Observations from challenge metrics", () => {
+    const meta = parsePropLifecycleMetadata(null, null, {
+      startingBalanceCents: 10000000,
+      profitTargetCents: 1000000,
+      startDate: START_DATE,
+    });
+
+    const realTrades: TradeForLifecycle[] = [
+      { id: "real_1", netPnlCents: 300000, entryTime: "2026-10-02T12:00:00Z", exitTime: "2026-10-02T14:00:00Z", status: "win" },
+    ];
+
+    const resBefore = evaluatePropLifecycle(
+      { id: "c_nt", propFirm: "FTMO", startDate: START_DATE },
+      meta,
+      realTrades
+    );
+
+    // Draft or planned entries (such as planned setups or non-execution observations) must not count
+    const tradesWithDrafts: TradeForLifecycle[] = [
+      ...realTrades,
+      { id: "draft_entry", netPnlCents: 500000, entryTime: "2026-10-02T15:00:00Z", exitTime: "2026-10-02T16:00:00Z", status: "planned", isDraft: true },
+      { id: "planned_entry", netPnlCents: -400000, entryTime: "2026-10-03T12:00:00Z", exitTime: null, status: "planned" },
+    ];
+
+    const resAfter = evaluatePropLifecycle(
+      { id: "c_nt", propFirm: "FTMO", startDate: START_DATE },
+      meta,
+      tradesWithDrafts
+    );
+
+    expect(resAfter.tradeCount).toBe(resBefore.tradeCount);
+    expect(resAfter.netProfitCents).toBe(resBefore.netProfitCents);
+    expect(resAfter.currentBalanceCents).toBe(resBefore.currentBalanceCents);
+    expect(resAfter.winRate).toBe(resBefore.winRate);
+  });
+
+  // -------------------------------------------------------------------------
+  // Scenario 26: Historical snapshot immutability
+  // -------------------------------------------------------------------------
+  it("Scenario 26: Completing a phase preserves historical snapshot immutably", () => {
+    let meta = parsePropLifecycleMetadata(null, null, {
+      startingBalanceCents: 10000000,
+      profitTargetCents: 1000000,
+      minTradingDays: 2,
+      startDate: START_DATE,
+    });
+
+    const trades: TradeForLifecycle[] = [
+      { id: "t_snap_1", netPnlCents: 500000, entryTime: "2026-10-02T12:00:00Z", exitTime: "2026-10-02T14:00:00Z", status: "win" },
+      { id: "t_snap_2", netPnlCents: 550000, entryTime: "2026-10-03T12:00:00Z", exitTime: "2026-10-03T14:00:00Z", status: "win" },
+    ];
+
+    const evalRes = evaluatePropLifecycle({ id: "c_snap", propFirm: "FTMO", startDate: START_DATE }, meta, trades);
+
+    // Transition with snapshot
+    const transition = transitionToNextPhase(meta, true, {
+      policy: "carry_forward",
+      currentSnapshot: {
+        phaseId: "phase_1",
+        phaseName: "Phase 1: Student",
+        sequence: 1,
+        completedAt: "2026-10-03T15:00:00Z",
+        startingBalanceCents: 10000000,
+        finalBalanceCents: 11050000,
+        finalEquityCents: 11050000,
+        netProfitCents: 1050000,
+        tradeCount: 2,
+        winRate: 100,
+        profitFactor: 99.99,
+        status: "passed",
+        rulesPassedCount: 10,
+        rulesTotalCount: 10,
+      },
+    });
+
+    const updatedMeta = transition.updatedMeta;
+    const p1 = updatedMeta.phases.find((p) => p.id === "phase_1");
+    expect(p1?.snapshot?.netProfitCents).toBe(1050000);
+    expect(p1?.snapshot?.finalBalanceCents).toBe(11050000);
+
+    // Mutating active phase does not alter Phase 1's completed snapshot
+    const activePhase = updatedMeta.phases.find((p) => p.id === updatedMeta.currentPhaseId);
+    if (activePhase) {
+      activePhase.profitTargetCents = 2500000;
+    }
+    expect(p1?.snapshot?.netProfitCents).toBe(1050000);
+  });
+
+  // -------------------------------------------------------------------------
+  // Scenario 27: Consistency rule dilution required calculation
+  // -------------------------------------------------------------------------
+  it("Scenario 27: Consistency rule triggers at_risk and dilution requirement", () => {
+    const meta = parsePropLifecycleMetadata(null, 50, {
+      startingBalanceCents: 10000000,
+      profitTargetCents: 1000000,
+      minTradingDays: 2,
+      startDate: START_DATE,
+    });
+
+    // Configure 50% consistency with dilution required
+    const p1 = meta.phases[0];
+    const cRule = p1.rules.find((r) => r.ruleKey === "consistency");
+    if (cRule) {
+      cRule.config.threshold = 50;
+      cRule.config.consistencyAction = "dilution_required";
+    }
+
+    // Day 1 makes $8,000, Day 2 makes $2,000 -> Total $10,000, best day is 80% (exceeds 50%)
+    const trades: TradeForLifecycle[] = [
+      { id: "t_c1", netPnlCents: 800000, entryTime: "2026-10-02T12:00:00Z", exitTime: "2026-10-02T14:00:00Z", status: "win" },
+      { id: "t_c2", netPnlCents: 200000, entryTime: "2026-10-03T12:00:00Z", exitTime: "2026-10-03T14:00:00Z", status: "win" },
+    ];
+
+    const res = evaluatePropLifecycle(
+      { id: "c_consist", propFirm: "FundedNext", startDate: START_DATE },
+      meta,
+      trades
+    );
+
+    // Target is reached, but consistency dilution is required
+    expect(res.profitTargetReached).toBe(true);
+    expect(res.consistencyBreached).toBe(true);
+    expect(res.bestDayPctOfTotal).toBe(80);
+    expect(res.status).toBe("in_progress"); // Blocked from passing until diluted
+    expect(res.statusReason).toContain("consistency dilution is required");
   });
 });

@@ -84,9 +84,10 @@ interface PropChallengeWithMetrics {
 interface PropChallengesSectionProps {
   accounts: { id: string; name: string; accountType: string; startingBalanceCents: number }[];
   hideHeader?: boolean;
+  accountId?: string;
 }
 
-export function PropChallengesSection({ accounts: rawAccounts, hideHeader = false }: PropChallengesSectionProps) {
+export function PropChallengesSection({ accounts: rawAccounts, hideHeader = false, accountId: propAccountId }: PropChallengesSectionProps) {
   const accounts: any[] = Array.isArray(rawAccounts)
     ? rawAccounts
     : Array.isArray((rawAccounts as any)?.items)
@@ -95,7 +96,8 @@ export function PropChallengesSection({ accounts: rawAccounts, hideHeader = fals
     ? (rawAccounts as any).accounts
     : [];
   const queryClient = useQueryClient();
-  const { navigate } = useNav();
+  const { navigate, selectedAccountId } = useNav();
+  const effectiveAccountId = propAccountId !== undefined ? propAccountId : (selectedAccountId || "");
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
 
@@ -125,9 +127,12 @@ export function PropChallengesSection({ accounts: rawAccounts, hideHeader = fals
     items: PropChallengeWithMetrics[];
     aggregates?: PropAggregateStatistics;
   }>({
-    queryKey: ["prop-challenges"],
+    queryKey: ["prop-challenges", effectiveAccountId],
     queryFn: async () => {
-      const res = await fetch("/api/prop-challenges", { cache: "no-store" });
+      const url = effectiveAccountId
+        ? `/api/prop-challenges?accountId=${encodeURIComponent(effectiveAccountId)}`
+        : `/api/prop-challenges`;
+      const res = await fetch(url, { cache: "no-store" });
       if (!res.ok) {
         const err = await res.json().catch(() => null);
         throw new Error(err?.error || "Failed to load prop challenges");
@@ -383,14 +388,18 @@ export function PropChallengesSection({ accounts: rawAccounts, hideHeader = fals
     }
   }
 
-  function getStatusBadge(metrics: PropChallengeMetrics) {
-    switch (metrics.status) {
+  function getStatusBadge(metrics?: PropChallengeMetrics, lifecycleStatus?: string) {
+    const status = lifecycleStatus || metrics?.status || "safe";
+    switch (status) {
       case "passed":
         return <Badge className="bg-profit/15 text-profit border-profit/30 gap-1"><CheckCircle2 className="h-3 w-3" /> Passed</Badge>;
       case "breached":
+      case "failed":
         return <Badge className="bg-rose-500/15 text-rose-600 dark:text-rose-400 border-rose-500/30 gap-1"><AlertTriangle className="h-3 w-3" /> Breached</Badge>;
       case "at_risk":
         return <Badge className="bg-orange-500/15 text-orange-600 dark:text-orange-400 border-orange-500/30 gap-1"><ShieldAlert className="h-3 w-3" /> At Risk</Badge>;
+      case "funded":
+        return <Badge className="bg-amber-500/15 text-amber-600 dark:text-amber-400 border-amber-500/30 gap-1"><Trophy className="h-3 w-3" /> Funded</Badge>;
       case "approaching_limit":
         return <Badge className="bg-amber-500/15 text-amber-600 dark:text-amber-400 border-amber-500/30 gap-1"><AlertTriangle className="h-3 w-3" /> Warning (75%)</Badge>;
       default:
@@ -669,7 +678,38 @@ export function PropChallengesSection({ accounts: rawAccounts, hideHeader = fals
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           {challenges.map((c) => {
-            const m = c.metrics;
+            const m = c.metrics || {
+              status: "safe",
+              statusReason: "All rules within normal boundaries",
+              startingBalanceCents: c.startingBalanceCents || 10000000,
+              currentBalanceCents: c.startingBalanceCents || 10000000,
+              netProfitCents: 0,
+              profitTargetProgressPct: 0,
+              profitTargetReached: false,
+              todayLossCents: 0,
+              dailyLossLimitCents: c.dailyLossLimitCents,
+              dailyLossBreached: false,
+              dailyLossUsedPct: 0,
+              highWaterMarkCents: c.startingBalanceCents || 10000000,
+              currentDrawdownCents: 0,
+              maxDrawdownLimitCents: c.maxDrawdownCents,
+              drawdownBreached: false,
+              drawdownUsedPct: 0,
+              tradeCount: 0,
+              winCount: 0,
+              lossCount: 0,
+              breakevenCount: 0,
+              winRate: 0,
+              profitFactor: null,
+              tradingDaysCount: 0,
+              minDaysMet: true,
+              daysRemaining: null,
+              bestDayProfitCents: 0,
+              bestDayPctOfTotal: null,
+              consistencyBreached: false,
+              rules: [],
+              violations: [],
+            };
             const currency = c.account?.currency || "USD";
             const targetPct = m.profitTargetProgressPct ?? 0;
             const dailyPct = m.dailyLossUsedPct ?? 0;
@@ -694,7 +734,7 @@ export function PropChallengesSection({ accounts: rawAccounts, hideHeader = fals
                       >
                         {c.name}
                       </h3>
-                      {getStatusBadge(m)}
+                      {getStatusBadge(m, c.lifecycle?.status)}
                       {c.meta?.isFirmDispute && (
                         <Badge
                           variant="outline"

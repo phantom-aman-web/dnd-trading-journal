@@ -7,6 +7,13 @@ import { PropChallengeDetail } from "@/components/accounts/prop-challenge-detail
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
 import { useNav } from "@/lib/nav-store";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 
 interface TradingAccount {
   id: string;
@@ -18,7 +25,7 @@ interface TradingAccount {
 }
 
 export function PropChallengesView() {
-  const { params, navigate } = useNav();
+  const { params, navigate, selectedAccountId, setSelectedAccountId } = useNav();
   const selectedChallengeId = params.challengeId;
 
   const { data: accountsData, isLoading } = useQuery({
@@ -67,6 +74,29 @@ export function PropChallengesView() {
             Monitor evaluation phases, configurable account models, compliance rules, failure diagnosis, and payout disbursements.
           </p>
         </div>
+
+        {/* Account Filter Selector */}
+        {accounts.length > 0 && (
+          <div className="flex items-center gap-2 self-start sm:self-auto">
+            <span className="text-xs text-muted-foreground font-medium hidden sm:inline">Filter Account:</span>
+            <Select
+              value={selectedAccountId || "all"}
+              onValueChange={(val) => setSelectedAccountId(val === "all" ? "" : val)}
+            >
+              <SelectTrigger className="h-9 text-xs w-48 sm:w-56">
+                <SelectValue placeholder="All Trading Accounts" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Trading Accounts</SelectItem>
+                {accounts.map((acc) => (
+                  <SelectItem key={acc.id} value={acc.id}>
+                    {acc.name} ({acc.currency})
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        )}
       </div>
 
       {/* Scope distinction banner */}
@@ -95,7 +125,7 @@ export function PropChallengesView() {
           <Skeleton className="h-48 w-full rounded-xl" />
         </div>
       ) : (
-        <PropChallengesSection accounts={accounts} hideHeader={true} />
+        <PropChallengesSection accounts={accounts} hideHeader={true} accountId={selectedAccountId} />
       )}
     </div>
   );

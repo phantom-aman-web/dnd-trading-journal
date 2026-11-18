@@ -17,6 +17,7 @@ import {
 import { buildSignedUrl } from "@/lib/storage";
 import { audit } from "@/lib/audit";
 import { invalidateCache, getCached, setCached } from "@/lib/server-cache";
+import { queueTradeClosure } from "@/lib/telegram/delivery-engine";
 
 export async function GET(_req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
   let user;
@@ -381,6 +382,20 @@ export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: strin
     invalidateCache(`dashboard:${user.id}`);
     invalidateCache(`analytics:${user.id}`);
     invalidateCache(`trade:${user.id}:${id}`);
+
+    // Telegram Trade Closure Update Hook (Spec Part 4.5)
+    // Non-fatal: failures never roll back or disrupt trade update.
+    if (trade.status === "open" && updated.status !== "open") {
+      try {
+        await queueTradeClosure({
+          tradeId: updated.id,
+          userId: user.id,
+        });
+      } catch (telegramErr) {
+        console.warn("Non-fatal: Telegram trade closure queue failed:", telegramErr);
+      }
+    }
+
     return ok(updated);
   } catch (err: any) {
     if (err?.code === "P2003") {

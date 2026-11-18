@@ -64,6 +64,7 @@ import { useNav } from "@/lib/nav-store";
 import { TimezoneSelect } from "@/components/common/timezone-select";
 import { toast } from "sonner";
 import { PreferencesCenterTab } from "@/components/settings/preferences-center-tab";
+import { TelegramSettingsTab } from "@/components/settings/telegram-settings-tab";
 import {
   LogOut,
   Save,
@@ -79,6 +80,7 @@ import {
   UserX,
   ArrowLeft,
   ChevronRight,
+  Send,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { FieldLabel } from "@/components/common/field-label";
@@ -421,6 +423,26 @@ export function SettingsView() {
                 </div>
                 <ChevronRight className="h-4 w-4 text-muted-foreground shrink-0" />
               </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setMobileTab("telegram");
+                  setActiveTab("telegram");
+                }}
+                className="w-full flex items-center justify-between p-4 hover:bg-muted/50 active:bg-muted text-left transition-colors"
+              >
+                <div className="flex items-center gap-3">
+                  <div className="p-2 rounded-lg bg-sky-500/10 text-sky-500">
+                    <Send className="h-5 w-5" />
+                  </div>
+                  <div>
+                    <div className="text-sm font-semibold text-foreground">Telegram Integration</div>
+                    <div className="text-xs text-muted-foreground mt-0.5">Automated Trade Publishing &amp; To-Do Reminders</div>
+                  </div>
+                </div>
+                <ChevronRight className="h-4 w-4 text-muted-foreground shrink-0" />
+              </button>
             </div>
 
             <div className="pt-2">
@@ -462,6 +484,7 @@ export function SettingsView() {
               <SettingsTabTrigger value="profile" icon={User}>Profile</SettingsTabTrigger>
               <SettingsTabTrigger value="trading" icon={Sliders}>Trading</SettingsTabTrigger>
               <SettingsTabTrigger value="preferences" icon={SlidersHorizontal}>Preferences</SettingsTabTrigger>
+              <SettingsTabTrigger value="telegram" icon={Send}>Telegram</SettingsTabTrigger>
               <SettingsTabTrigger value="legal" icon={Shield}>Legal</SettingsTabTrigger>
             </TabsList>
           </div>
@@ -1037,6 +1060,11 @@ export function SettingsView() {
           {/* Backward-compatible alias for appearance */}
           <TabsContent value="appearance" className="mt-6 space-y-6 focus-visible:outline-none">
             <PreferencesCenterTab />
+          </TabsContent>
+
+          {/* TELEGRAM TAB ------------------------------------------------ */}
+          <TabsContent value="telegram" className="mt-6 space-y-6 focus-visible:outline-none">
+            <TelegramSettingsTab />
           </TabsContent>
 
           {/* LEGAL TAB -------------------------------------------------- */}

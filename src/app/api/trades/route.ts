@@ -17,6 +17,7 @@ import {
   type ChecklistAnswer,
 } from "@/lib/checklist-evaluation";
 import { audit } from "@/lib/audit";
+import { queueTradePublication } from "@/lib/telegram/delivery-engine";
 import {
   computeTradePayloadHash,
   claimIdempotencyKey,
@@ -683,6 +684,20 @@ export async function POST(req: NextRequest) {
   invalidateCache(`dashboard:${user.id}`);
   invalidateCache(`analytics:${user.id}`);
   invalidateCache(`trades:${user.id}`);
+
+  // Telegram Auto-Publish Hook (Spec Part 4)
+  // Non-fatal: failures never roll back or disrupt trade creation.
+  if (!trade.isDraft && (body as any)?.publishToTelegram !== false) {
+    try {
+      await queueTradePublication({
+        tradeId: trade.id,
+        userId: user.id,
+        isNewTrade: true,
+      });
+    } catch (telegramErr) {
+      console.warn("Non-fatal: Telegram trade publishing queue failed:", telegramErr);
+    }
+  }
 
   return ok(trade);
 }

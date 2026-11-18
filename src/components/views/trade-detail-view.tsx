@@ -42,6 +42,7 @@ import {
   Archive,
   BookOpen,
   MoreHorizontal,
+  Send,
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -83,6 +84,55 @@ export function TradeDetailView({ tradeId, onBack }: { tradeId?: string; onBack?
   const [viewerIndex, setViewerIndex] = useState(0);
   const [closeTradeOpen, setCloseTradeOpen] = useState(false);
   const [executeTradeOpen, setExecuteTradeOpen] = useState(false);
+  const [publishingTelegram, setPublishingTelegram] = useState(false);
+
+  const handlePublishTelegram = async () => {
+    // Generate one unique request ID for this intentional publishing action
+    const requestId =
+      typeof crypto !== "undefined" && crypto.randomUUID
+        ? crypto.randomUUID()
+        : `pub_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
+
+    setPublishingTelegram(true);
+
+    // Reuse the same request ID if an HTTP attempt fails transiently and needs retry
+    const executeAttempt = async (attempt = 1): Promise<any> => {
+      try {
+        const res = await fetch("/api/telegram/publish", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "x-request-id": requestId,
+          },
+          body: JSON.stringify({ tradeId: id, requestId }),
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || "Failed to publish to Telegram");
+        return data;
+      } catch (err: any) {
+        if (
+          attempt === 1 &&
+          !err.message?.includes("Draft") &&
+          !err.message?.includes("not found") &&
+          !err.message?.includes("not configured")
+        ) {
+          await new Promise((r) => setTimeout(r, 600));
+          return executeAttempt(2);
+        }
+        throw err;
+      }
+    };
+
+    try {
+      await executeAttempt(1);
+      toast.success("Trade publication queued for Telegram channel!");
+      qc.invalidateQueries({ queryKey: ["telegram-deliveries"] });
+    } catch (err: any) {
+      toast.error(err.message);
+    } finally {
+      setPublishingTelegram(false);
+    }
+  };
 
   // Latest checklist evaluation for the trade (Fix 3). The trade-detail GET
   // returns `checklistEvaluations` ordered by `evaluatedAt` desc, so the
@@ -335,6 +385,14 @@ export function TradeDetailView({ tradeId, onBack }: { tradeId?: string; onBack?
               <Archive className="h-3.5 w-3.5 mr-2" />
               <span>Archive Record</span>
             </DropdownMenuItem>
+            <DropdownMenuItem
+              onClick={handlePublishTelegram}
+              disabled={publishingTelegram}
+              className="cursor-pointer text-xs py-2 text-sky-500 hover:text-sky-400"
+            >
+              <Send className="h-3.5 w-3.5 mr-2" />
+              <span>{publishingTelegram ? "Publishing..." : "Publish to Telegram"}</span>
+            </DropdownMenuItem>
             <DropdownMenuSeparator />
             <DropdownMenuItem
               onClick={async () => {
@@ -399,6 +457,16 @@ export function TradeDetailView({ tradeId, onBack }: { tradeId?: string; onBack?
         )}
         <Button variant="outline" size="sm" onClick={() => navigate("tradeNew", { id })}>
           <Edit className="h-4 w-4" /> Edit
+        </Button>
+        <Button
+          variant="outline"
+          size="sm"
+          disabled={publishingTelegram}
+          onClick={handlePublishTelegram}
+          className="text-sky-500 border-sky-500/30 hover:bg-sky-500/10 gap-1.5"
+          title="Publish or republish this trade to your Telegram channel"
+        >
+          <Send className="h-4 w-4" /> {publishingTelegram ? "Publishing..." : "Telegram"}
         </Button>
         <Button
           variant="outline"

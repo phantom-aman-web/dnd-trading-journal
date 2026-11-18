@@ -70,6 +70,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Switch } from "@/components/ui/switch";
 import { FieldLabel } from "@/components/common/field-label";
 import { ImageAnnotator, type ImageAnnotation } from "@/components/common/image-annotator";
 import { toast } from "sonner";
@@ -94,6 +95,7 @@ import {
   TrendingUp,
   TrendingDown,
   ListChecks,
+  Send,
 } from "lucide-react";
 import { InstrumentSelector } from "@/components/common/instrument-selector";
 import {
@@ -361,6 +363,7 @@ export function TradeFormView() {
   const [entryMode, setEntryMode] = useState<"quick" | "advanced">(editingId ? "advanced" : "quick");
   const [activeStep, setActiveStep] = useState<StepKey>("trade-info");
   const [saving, setSaving] = useState(false);
+  const [publishToTelegram, setPublishToTelegram] = useState(true);
   const [advancedOpen, setAdvancedOpen] = useState(false);
   const [autosaveState, setAutosaveState] = useState<"idle" | "saving" | "saved" | "error">("idle");
   const [lastSavedAt, setLastSavedAt] = useState<Date | null>(null);
@@ -1446,6 +1449,7 @@ export function TradeFormView() {
       }
 
       const payload: any = {
+        publishToTelegram,
         accountId: form.accountId,
         instrumentSymbol: normalizeSymbol(form.instrumentSymbol),
         // Derive market from the static catalog when possible (covers
@@ -4144,7 +4148,19 @@ export function TradeFormView() {
             <ArrowRight className="h-4 w-4 ml-1 shrink-0" />
           </Button>
         ) : (
-          <div className="flex gap-2">
+          <div className="flex items-center gap-2">
+            <div className="hidden sm:flex items-center gap-1.5 px-2 py-1 rounded bg-muted/30 border border-border/40 text-xs text-muted-foreground mr-1">
+              <Switch
+                id="publish-telegram-toggle"
+                checked={publishToTelegram}
+                onCheckedChange={setPublishToTelegram}
+                className="scale-75"
+              />
+              <label htmlFor="publish-telegram-toggle" className="cursor-pointer hover:text-foreground flex items-center gap-1">
+                <Send className="h-3 w-3 text-sky-500" />
+                <span>Telegram</span>
+              </label>
+            </div>
             <Button
               type="button"
               variant="outline"

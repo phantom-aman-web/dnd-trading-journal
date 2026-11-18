@@ -27,6 +27,7 @@ import {
   ListChecks,
   ChevronDown,
   ChevronRight,
+  Bell,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -196,6 +197,7 @@ export function TradingTodoView() {
   const [formIsPinned, setFormIsPinned] = useState<boolean>(false);
   const [formSubtasks, setFormSubtasks] = useState<Subtask[]>([]);
   const [newSubtaskTitle, setNewSubtaskTitle] = useState<string>("");
+  const [formReminderMins, setFormReminderMins] = useState<string>("15");
 
   // Template pre-fill
   const [selectedTemplate, setSelectedTemplate] = useState<string>("none");
@@ -349,6 +351,7 @@ export function TradingTodoView() {
     setFormIsPinned(false);
     setFormSubtasks([]);
     setNewSubtaskTitle("");
+    setFormReminderMins("15");
     setSelectedTemplate("none");
   }
 
@@ -450,6 +453,7 @@ export function TradingTodoView() {
       isPinned: formIsPinned,
       subtasks: formSubtasks,
       templateKind: selectedTemplate !== "none" ? selectedTemplate : null,
+      reminderMinutesBefore: formReminderMins === "none" ? null : Number(formReminderMins),
     };
 
     if (editingTask) {
@@ -1229,6 +1233,33 @@ export function TradingTodoView() {
                   className="h-8 text-xs font-mono"
                 />
               </div>
+            </div>
+
+            {/* Telegram Private Reminder */}
+            <div className="flex items-center justify-between p-2.5 rounded-md border border-border/60 bg-muted/20">
+              <div className="flex items-center gap-2">
+                <Bell className="h-4 w-4 text-sky-500 shrink-0" />
+                <div>
+                  <div className="text-xs font-medium text-foreground">Telegram Private Reminder</div>
+                  <div className="text-[11px] text-muted-foreground">Receive an alert on your personal Telegram before scheduled time</div>
+                </div>
+              </div>
+              <Select
+                value={formReminderMins}
+                onValueChange={setFormReminderMins}
+              >
+                <SelectTrigger className="h-7 text-xs w-[130px]">
+                  <SelectValue placeholder="Reminder" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">No reminder</SelectItem>
+                  <SelectItem value="0">At due time</SelectItem>
+                  <SelectItem value="5">5 mins before</SelectItem>
+                  <SelectItem value="15">15 mins before</SelectItem>
+                  <SelectItem value="30">30 mins before</SelectItem>
+                  <SelectItem value="60">1 hour before</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
 
             {/* Description */}

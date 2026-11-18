@@ -64,10 +64,6 @@ export async function GET(req: NextRequest) {
         const earliestTime = earliestTrade.entryTime || earliestTrade.exitTime;
         if (earliestTime && new Date(earliestTime).getTime() < new Date(c.startDate).getTime()) {
           effectiveStartDate = earliestTime;
-          await db.propChallenge.update({
-            where: { id: c.id },
-            data: { startDate: earliestTime },
-          }).catch(() => null);
         }
       }
 
@@ -76,15 +72,11 @@ export async function GET(req: NextRequest) {
           userId: user.id,
           accountId: c.accountId,
           isArchived: false,
-          OR: [
-            { exitTime: { gte: effectiveStartDate } },
-            { entryTime: { gte: effectiveStartDate } },
-            { exitTime: null }, // open trades
-          ],
           ...(c.endDate ? {
             OR: [
               { exitTime: { lte: c.endDate } },
               { entryTime: { lte: c.endDate } },
+              { exitTime: null },
             ],
           } : {}),
         },

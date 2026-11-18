@@ -1570,6 +1570,57 @@ export function PropChallengeDetail({ challengeId, onBack }: PropChallengeDetail
             </div>
           ) : (
             <div className="space-y-4">
+              {isFirmDispute && (
+                <Card className="border-loss/50 bg-card overflow-hidden shadow-xs">
+                  <CardHeader className="bg-loss/10 pb-3 border-b border-loss/20">
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="space-y-1">
+                        <CardTitle className="text-sm font-semibold text-loss flex items-center gap-2">
+                          <AlertOctagon className="h-4 w-4" />
+                          {challenge.meta?.firmRejectionDetails?.undisclosedRuleName
+                            ? `Firm Rejection: ${challenge.meta.firmRejectionDetails.undisclosedRuleName}`
+                            : "Firm rejection — no violation established by currently configured rules."}
+                        </CardTitle>
+                        <CardDescription className="text-xs">
+                          Category: <strong>Proprietary / External Firm Review</strong> • Severity:{" "}
+                          <strong className="uppercase font-mono text-loss">DISPUTE / REJECTION</strong>
+                        </CardDescription>
+                      </div>
+                      {challenge.meta?.firmRejectionDetails?.date && (
+                        <div className="text-right text-[11px] font-mono text-muted-foreground">
+                          {new Date(challenge.meta.firmRejectionDetails.date).toLocaleString()} ({challenge.resetTimezone || "America/New_York"})
+                        </div>
+                      )}
+                    </div>
+                  </CardHeader>
+                  <CardContent className="p-4 space-y-3 text-xs">
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 bg-muted/40 p-3 rounded-xl border border-border/50">
+                      <div>
+                        <div className="text-[10px] font-mono uppercase text-muted-foreground">Local Rule Compliance</div>
+                        <div className="font-mono font-bold text-profit text-sm">All Configured Rules Passed</div>
+                      </div>
+                      <div>
+                        <div className="text-[10px] font-mono uppercase text-muted-foreground">Firm Outcome</div>
+                        <div className="font-mono font-bold text-loss text-sm">Account Rejected / Suspended</div>
+                      </div>
+                      <div>
+                        <div className="text-[10px] font-mono uppercase text-muted-foreground">Dispute Status</div>
+                        <div className="font-mono font-bold text-foreground text-sm">
+                          {challenge.meta?.firmRejectionDetails?.userVerified ? "Verified by Trader" : "Under Investigation"}
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="space-y-1">
+                      <div className="font-semibold text-foreground text-[11px]">Firm Explanation & Communication Record</div>
+                      <p className="text-muted-foreground leading-relaxed text-xs bg-muted/20 p-3 rounded-lg border border-border/60">
+                        {challenge.meta?.firmRejectionDetails?.firmCommunication ||
+                          "Firm rejected the account under discretionary or undisclosed review terms, despite all configured risk and drawdown rules passing."}
+                      </p>
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
               {violations.map((violation) => (
                 <Card key={violation.id} className="border-loss/40 bg-card overflow-hidden">
                   <CardHeader className="bg-loss/5 pb-3 border-b border-loss/20">

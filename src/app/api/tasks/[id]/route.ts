@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { db } from "@/lib/db";
 import { requireUser } from "@/lib/auth";
+import { syncTaskReminders, cancelTaskReminders } from "@/lib/telegram/reminder-scheduler";
 
 const UpdateTaskSchema = z.object({
   title: z.string().min(1).max(300).optional(),
@@ -113,6 +114,20 @@ export async function PATCH(
       data,
     });
 
+    // Sync Telegram To-Do reminders (non-fatal)
+    await syncTaskReminders(
+      {
+        id: updated.id,
+        title: updated.title,
+        status: updated.status,
+        dueDate: updated.dueDate,
+        dueTime: updated.dueTime,
+        reminderMinutesBefore: (json as any)?.reminderMinutesBefore,
+      },
+      user.id,
+      (json as any)?.reminderMinutesBefore
+    ).catch(() => {});
+
     return NextResponse.json({
       item: {
         ...updated,
@@ -151,6 +166,9 @@ export async function DELETE(
     await (db as any).tradingTask.delete({
       where: { id },
     });
+
+    // Cancel pending Telegram reminders
+    await cancelTaskReminders(id, user.id).catch(() => {});
 
     return NextResponse.json({ success: true, id });
   } catch (err: any) {
