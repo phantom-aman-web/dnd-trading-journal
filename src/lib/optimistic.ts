@@ -136,14 +136,62 @@ export function optimisticDelete(
 
 /**
  * Reconcile a temporary ID with the confirmed canonical record from the server.
+ * Supports both:
+ *   reconcileTempId(cache, tempId, canonicalItem)
+ *   reconcileTempId(cache, tempId, canonicalId, canonicalItem)
  */
 export function reconcileTempId<T = any>(
   cacheData: any,
   tempId: string,
-  canonicalItem: T
+  arg3: string | T,
+  arg4?: T
 ): any {
+  const canonicalItem: any = arg4 !== undefined ? arg4 : arg3;
+  const canonicalId =
+    typeof arg3 === "string" && arg4 !== undefined ? arg3 : (canonicalItem as any)?.id;
+
   return updateCacheList(cacheData, (items) =>
-    items.map((it: any) => (it.id === tempId ? canonicalItem : it))
+    items.map((it: any) => {
+      if (it.id === tempId) {
+        if (typeof canonicalItem === "object" && canonicalItem !== null) {
+          return {
+            ...canonicalItem,
+            id: canonicalId || (canonicalItem as any).id,
+          };
+        }
+        return canonicalItem;
+      }
+      return it;
+    })
+  );
+}
+
+/**
+ * Safely roll back an optimistic insertion by removing only the temporary record,
+ * preserving any concurrent or subsequent mutations on the cache.
+ */
+export function rollbackOptimisticInsert(
+  queryClient: QueryClient,
+  queryKey: any[],
+  tempId: string
+) {
+  queryClient.setQueriesData({ queryKey }, (current: any) =>
+    optimisticDelete(current, tempId)
+  );
+}
+
+/**
+ * Safely roll back an optimistic update by restoring only that specific record's
+ * previous fields, preserving other concurrent records.
+ */
+export function rollbackOptimisticUpdate(
+  queryClient: QueryClient,
+  queryKey: any[],
+  id: string,
+  previousSnapshot: any
+) {
+  queryClient.setQueriesData({ queryKey }, (current: any) =>
+    optimisticUpdate(current, id, previousSnapshot)
   );
 }
 

@@ -202,6 +202,65 @@ class OfflineSyncEngine {
     return record;
   }
 
+  async queueCreateAccount(accountPayload: any, userId?: string): Promise<any> {
+    const effectiveUserId = userId || this.currentUserId || "current_user";
+    const localId = accountPayload.id || `local_account_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
+    const record = {
+      ...accountPayload,
+      id: localId,
+      userId: effectiveUserId,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      _isOfflineLocal: true,
+    };
+
+    await offlineDb.put("accounts", record);
+    await offlineDb.enqueueOperation({
+      userId: effectiveUserId,
+      entity: "account",
+      action: "create",
+      recordId: localId,
+      payload: record,
+      idempotencyKey: `create_account_${localId}`,
+    });
+
+    await this.refreshPendingCount();
+    if (navigator.onLine) {
+      this.processQueue();
+    }
+    return record;
+  }
+
+  async queueCreateTask(taskPayload: any, userId?: string): Promise<any> {
+    const effectiveUserId = userId || this.currentUserId || "current_user";
+    const localId = taskPayload.id || `local_task_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
+    const record = {
+      ...taskPayload,
+      id: localId,
+      userId: effectiveUserId,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      _isOfflineLocal: true,
+    };
+
+    await offlineDb.enqueueOperation({
+      userId: effectiveUserId,
+      entity: "task",
+      action: "create",
+      recordId: localId,
+      payload: record,
+      idempotencyKey: `create_task_${localId}`,
+    });
+
+    await this.refreshPendingCount();
+    if (navigator.onLine) {
+      this.processQueue();
+    }
+    return record;
+  }
+
+
+
   async queueCreateNoTrade(noTradePayload: any, userId?: string): Promise<any> {
     const effectiveUserId = userId || this.currentUserId || "current_user";
     const localId = noTradePayload.id || `local_notrade_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
@@ -259,6 +318,8 @@ class OfflineSyncEngine {
     }
     return record;
   }
+
+
 
   // -------------------------------------------------------------------------
   // Cache incoming online data into IndexedDB
@@ -417,6 +478,78 @@ class OfflineSyncEngine {
       const created = await res.json();
       await offlineDb.delete("dictionary", item.recordId);
       await offlineDb.put("dictionary", created);
+    } else if (item.entity === "account" && item.action === "create") {
+      const payload = { ...item.payload };
+      delete payload._isOfflineLocal;
+      const res = await fetch("/api/accounts", {
+        method: "POST",
+        headers,
+        body: JSON.stringify(payload),
+      });
+      if (!res.ok) {
+        const errorData = await res.json().catch(() => ({}));
+        throw Object.assign(new Error(errorData?.error || "Failed to sync account"), { status: res.status });
+      }
+      const created = await res.json();
+      await offlineDb.delete("accounts", item.recordId);
+      await offlineDb.put("accounts", created);
+    } else if (item.entity === "account" && item.action === "update") {
+      const payload = { ...item.payload };
+      delete payload._isOfflineLocal;
+      const res = await fetch(`/api/accounts/${item.recordId}`, {
+        method: "PATCH",
+        headers,
+        body: JSON.stringify(payload),
+      });
+      if (!res.ok) {
+        const errorData = await res.json().catch(() => ({}));
+        throw Object.assign(new Error(errorData?.error || "Failed to update account"), { status: res.status });
+      }
+      const updated = await res.json();
+      await offlineDb.put("accounts", updated);
+    } else if (item.entity === "account" && item.action === "delete") {
+      const res = await fetch(`/api/accounts/${item.recordId}`, {
+        method: "DELETE",
+        headers,
+      });
+      if (!res.ok && res.status !== 404) {
+        const errorData = await res.json().catch(() => ({}));
+        throw Object.assign(new Error(errorData?.error || "Failed to delete account"), { status: res.status });
+      }
+      await offlineDb.delete("accounts", item.recordId);
+    } else if (item.entity === "task" && item.action === "create") {
+      const payload = { ...item.payload };
+      delete payload._isOfflineLocal;
+      const res = await fetch("/api/tasks", {
+        method: "POST",
+        headers,
+        body: JSON.stringify(payload),
+      });
+      if (!res.ok) {
+        const errorData = await res.json().catch(() => ({}));
+        throw Object.assign(new Error(errorData?.error || "Failed to sync task"), { status: res.status });
+      }
+    } else if (item.entity === "task" && item.action === "update") {
+      const payload = { ...item.payload };
+      delete payload._isOfflineLocal;
+      const res = await fetch(`/api/tasks/${item.recordId}`, {
+        method: "PATCH",
+        headers,
+        body: JSON.stringify(payload),
+      });
+      if (!res.ok) {
+        const errorData = await res.json().catch(() => ({}));
+        throw Object.assign(new Error(errorData?.error || "Failed to update task"), { status: res.status });
+      }
+    } else if (item.entity === "task" && item.action === "delete") {
+      const res = await fetch(`/api/tasks/${item.recordId}`, {
+        method: "DELETE",
+        headers,
+      });
+      if (!res.ok && res.status !== 404) {
+        const errorData = await res.json().catch(() => ({}));
+        throw Object.assign(new Error(errorData?.error || "Failed to delete task"), { status: res.status });
+      }
     }
   }
 

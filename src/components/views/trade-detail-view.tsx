@@ -9,6 +9,10 @@ import { Button } from "@/components/ui/button";
 import { useConfirm } from "@/components/ui/confirm-dialog";
 import {
   optimisticDelete,
+  optimisticInsert,
+  reconcileTempId,
+  rollbackOptimisticInsert,
+  generateTempId,
   notifyOptimisticFailure,
 } from "@/lib/optimistic";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -91,6 +95,94 @@ export function TradeDetailView({ tradeId, onBack }: { tradeId?: string; onBack?
   const [closeTradeOpen, setCloseTradeOpen] = useState(false);
   const [executeTradeOpen, setExecuteTradeOpen] = useState(false);
   const [publishingTelegram, setPublishingTelegram] = useState(false);
+  const [duplicating, setDuplicating] = useState(false);
+  const [archiving, setArchiving] = useState(false);
+
+  const handleDuplicateTrade = async () => {
+    if (!trade || !id || duplicating) return;
+    setDuplicating(true);
+    const tempId = generateTempId("trade");
+    const optimisticDraft = {
+      ...trade,
+      id: tempId,
+      status: "draft",
+      notes: trade.notes ? `Copy of ${trade.instrumentSymbol} - ${trade.notes}` : `Copy of ${trade.instrumentSymbol}`,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+
+    qc.setQueriesData({ queryKey: ["trades"] }, (old: any) =>
+      optimisticInsert(old, optimisticDraft)
+    );
+    qc.setQueriesData({ queryKey: ["trades-log"] }, (old: any) =>
+      optimisticInsert(old, optimisticDraft)
+    );
+    toast.success("Trade duplicated as draft.");
+
+    try {
+      const res = await fetch(`/api/trades/${id}/duplicate`, { method: "POST" });
+      if (!res.ok) {
+        const errorData = await res.json().catch(() => ({}));
+        throw new Error(errorData.error || "Failed to duplicate trade.");
+      }
+      const data = await res.json();
+      const realTrade = data?.item || data?.trade || data;
+      if (realTrade?.id) {
+        qc.setQueriesData({ queryKey: ["trades"] }, (old: any) =>
+          reconcileTempId(old, tempId, realTrade.id, realTrade)
+        );
+        qc.setQueriesData({ queryKey: ["trades-log"] }, (old: any) =>
+          reconcileTempId(old, tempId, realTrade.id, realTrade)
+        );
+      }
+      qc.invalidateQueries({ queryKey: ["trades"] });
+      qc.invalidateQueries({ queryKey: ["trades-log"] });
+    } catch (err: any) {
+      rollbackOptimisticInsert(qc, ["trades"], tempId);
+      rollbackOptimisticInsert(qc, ["trades-log"], tempId);
+      notifyOptimisticFailure(err?.message || "Failed to duplicate trade.");
+    } finally {
+      setDuplicating(false);
+    }
+  };
+
+  const handleArchiveTrade = async () => {
+    if (!trade || !id || archiving) return;
+    setArchiving(true);
+    const prevTrades = qc.getQueriesData({ queryKey: ["trades"] });
+    const prevTradesLog = qc.getQueriesData({ queryKey: ["trades-log"] });
+
+    qc.setQueriesData({ queryKey: ["trades"] }, (old: any) =>
+      optimisticDelete(old, id)
+    );
+    qc.setQueriesData({ queryKey: ["trades-log"] }, (old: any) =>
+      optimisticDelete(old, id)
+    );
+
+    toast.success("Trade archived safely. You can restore it anytime in Archived Records.");
+    navigate("tradesLog");
+
+    try {
+      const res = await fetch("/api/archive", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ entityType: "trade", id, action: "archive" }),
+      });
+      if (!res.ok) {
+        const errorData = await res.json().catch(() => ({}));
+        throw new Error(errorData.error || "Failed to archive trade.");
+      }
+      qc.invalidateQueries({ queryKey: ["trades"] });
+      qc.invalidateQueries({ queryKey: ["trades-log"] });
+      qc.invalidateQueries({ queryKey: ["prop-challenges"] });
+    } catch (err: any) {
+      prevTrades.forEach(([queryKey, data]) => qc.setQueryData(queryKey, data));
+      prevTradesLog.forEach(([queryKey, data]) => qc.setQueryData(queryKey, data));
+      notifyOptimisticFailure(err?.message || "Failed to archive trade.");
+    } finally {
+      setArchiving(false);
+    }
+  };
 
   const handlePublishTelegram = async () => {
     // Generate one unique request ID for this intentional publishing action
@@ -347,19 +439,12 @@ export function TradeDetailView({ tradeId, onBack }: { tradeId?: string; onBack?
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="w-48 bg-card border-border shadow-lg">
             <DropdownMenuItem
-              onClick={async () => {
-                const res = await fetch(`/api/trades/${id}/duplicate`, { method: "POST" });
-                if (res.ok) {
-                  toast.success("Trade duplicated as draft.");
-                  qc.invalidateQueries({ queryKey: ["trades"] });
-                } else {
-                  toast.error("Failed to duplicate.");
-                }
-              }}
+              onClick={handleDuplicateTrade}
+              disabled={duplicating}
               className="cursor-pointer text-xs py-2"
             >
               <Copy className="h-3.5 w-3.5 mr-2" />
-              <span>Duplicate as Draft</span>
+              <span>{duplicating ? "Duplicating..." : "Duplicate as Draft"}</span>
             </DropdownMenuItem>
             {trade.strategyId && (
               <DropdownMenuItem
@@ -371,25 +456,12 @@ export function TradeDetailView({ tradeId, onBack }: { tradeId?: string; onBack?
               </DropdownMenuItem>
             )}
             <DropdownMenuItem
-              onClick={async () => {
-                const res = await fetch("/api/archive", {
-                  method: "POST",
-                  headers: { "Content-Type": "application/json" },
-                  body: JSON.stringify({ entityType: "trade", id, action: "archive" }),
-                });
-                if (res.ok) {
-                  toast.success("Trade archived safely. You can restore it anytime in Archived Records.");
-                  qc.invalidateQueries({ queryKey: ["trades"] });
-                  qc.invalidateQueries({ queryKey: ["prop-challenges"] });
-                  navigate("tradesLog");
-                } else {
-                  toast.error("Failed to archive trade.");
-                }
-              }}
+              onClick={handleArchiveTrade}
+              disabled={archiving}
               className="cursor-pointer text-xs py-2 text-muted-foreground hover:text-amber-500"
             >
               <Archive className="h-3.5 w-3.5 mr-2" />
-              <span>Archive Record</span>
+              <span>{archiving ? "Archiving..." : "Archive Record"}</span>
             </DropdownMenuItem>
             <DropdownMenuItem
               onClick={handlePublishTelegram}
@@ -507,39 +579,20 @@ export function TradeDetailView({ tradeId, onBack }: { tradeId?: string; onBack?
         <Button
           variant="outline"
           size="sm"
-          onClick={async () => {
-            const res = await fetch(`/api/trades/${id}/duplicate`, { method: "POST" });
-            if (res.ok) {
-              toast.success("Trade duplicated as draft.");
-              qc.invalidateQueries({ queryKey: ["trades"] });
-            } else {
-              toast.error("Failed to duplicate.");
-            }
-          }}
+          disabled={duplicating}
+          onClick={handleDuplicateTrade}
         >
-          <Copy className="h-4 w-4" /> Duplicate
+          <Copy className="h-4 w-4" /> {duplicating ? "Duplicating..." : "Duplicate"}
         </Button>
         <Button
           variant="outline"
           size="sm"
+          disabled={archiving}
           className="text-muted-foreground hover:text-amber-500"
-          onClick={async () => {
-            const res = await fetch("/api/archive", {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ entityType: "trade", id, action: "archive" }),
-            });
-            if (res.ok) {
-              toast.success("Trade archived safely. You can restore it anytime in Archived Records.");
-              qc.invalidateQueries({ queryKey: ["trades"] });
-              navigate("tradesLog");
-            } else {
-              toast.error("Failed to archive trade.");
-            }
-          }}
+          onClick={handleArchiveTrade}
           title="Safely archive this trade (reversible)"
         >
-          <Archive className="h-4 w-4" /> Archive
+          <Archive className="h-4 w-4" /> {archiving ? "Archiving..." : "Archive"}
         </Button>
         {trade.strategyId && (
           <Button

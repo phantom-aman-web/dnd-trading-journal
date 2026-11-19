@@ -221,13 +221,34 @@ export function TelegramSettingsTab() {
       if (!res.ok) throw new Error(data.error || "Failed to update settings");
       return data;
     },
+    onMutate: async (newSettings: any) => {
+      await queryClient.cancelQueries({ queryKey: ["telegram-settings"] });
+      const previous = queryClient.getQueryData(["telegram-settings"]);
+      queryClient.setQueryData(["telegram-settings"], (old: any) => {
+        if (!old) return old;
+        return {
+          ...old,
+          ...newSettings,
+          reminders: {
+            ...(old.reminders || {}),
+            ...(newSettings.reminders || {}),
+          },
+        };
+      });
+      return { previous };
+    },
     onSuccess: () => {
       toast.success("Settings saved.");
+    },
+    onError: (err: any, _vars, context: any) => {
+      if (context?.previous) {
+        queryClient.setQueryData(["telegram-settings"], context.previous);
+      }
+      toast.error(err.message);
+    },
+    onSettled: () => {
       queryClient.invalidateQueries({ queryKey: ["telegram-settings"] });
       queryClient.invalidateQueries({ queryKey: ["telegram-connection"] });
-    },
-    onError: (err: any) => {
-      toast.error(err.message);
     },
   });
 

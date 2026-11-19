@@ -98,6 +98,14 @@ import {
   ListChecks,
   Send,
 } from "lucide-react";
+import {
+  generateTempId,
+  optimisticInsert,
+  optimisticUpdate,
+  reconcileTempId,
+  rollbackOptimisticInsert,
+  notifyOptimisticFailure,
+} from "@/lib/optimistic";
 import { InstrumentSelector } from "@/components/common/instrument-selector";
 import {
   findInstrument,
@@ -1587,7 +1595,7 @@ export function TradeFormView() {
         }
       }
 
-      // 4. Save the trade data (with offline support)
+      // 4. Save the trade data (with offline & optimistic update support)
       if (typeof window !== "undefined" && !navigator.onLine && !editingId) {
         try {
           const { offlineSyncEngine } = await import("@/lib/offline-sync-engine");
@@ -1600,6 +1608,27 @@ export function TradeFormView() {
         } catch (offErr) {
           console.error("Offline queue failed", offErr);
         }
+      }
+
+      const tempId = !editingId ? generateTempId("trade") : null;
+      const prevTradeDetail = editingId ? qc.getQueryData(["trade", editingId]) : null;
+
+      if (!editingId && tempId) {
+        const optimisticTrade = {
+          ...payload,
+          id: tempId,
+          userId: meta?.user?.id || "local",
+          status: asDraft ? "draft" : payload.status || "open",
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+          _isProvisional: true,
+        };
+        qc.setQueriesData({ queryKey: ["trades"] }, (old: any) => optimisticInsert(old, optimisticTrade));
+        qc.setQueriesData({ queryKey: ["trades-log"] }, (old: any) => optimisticInsert(old, optimisticTrade));
+      } else if (editingId) {
+        qc.setQueriesData({ queryKey: ["trades"] }, (old: any) => optimisticUpdate(old, editingId, payload));
+        qc.setQueriesData({ queryKey: ["trades-log"] }, (old: any) => optimisticUpdate(old, editingId, payload));
+        qc.setQueryData(["trade", editingId], (old: any) => (old ? { ...old, ...payload } : old));
       }
 
       const url = editingId ? `/api/trades/${editingId}` : "/api/trades";
@@ -1621,13 +1650,30 @@ export function TradeFormView() {
           navigate("tradesLog");
           return;
         }
+        if (tempId) {
+          rollbackOptimisticInsert(qc, ["trades"], tempId);
+          rollbackOptimisticInsert(qc, ["trades-log"], tempId);
+        } else if (editingId && prevTradeDetail) {
+          qc.setQueryData(["trade", editingId], prevTradeDetail);
+        }
         throw netErr;
       }
       const data = await res.json();
       if (!res.ok) {
-        toast.error(data?.error ?? "Failed to save trade.");
+        if (tempId) {
+          rollbackOptimisticInsert(qc, ["trades"], tempId);
+          rollbackOptimisticInsert(qc, ["trades-log"], tempId);
+        } else if (editingId && prevTradeDetail) {
+          qc.setQueryData(["trade", editingId], prevTradeDetail);
+        }
+        notifyOptimisticFailure(data?.error ?? "Failed to save trade.");
         setSaving(false);
         return;
+      }
+
+      if (tempId && data?.id) {
+        qc.setQueriesData({ queryKey: ["trades"] }, (old: any) => reconcileTempId(old, tempId, data.id, data));
+        qc.setQueriesData({ queryKey: ["trades-log"] }, (old: any) => reconcileTempId(old, tempId, data.id, data));
       }
 
       // 5. If creating a new trade, link newly uploaded media to the created trade
