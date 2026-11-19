@@ -20,6 +20,10 @@ import { formatSignedCents, formatR } from "@/lib/money";
 import { dToNumber } from "@/lib/decimal";
 import { useQueryClient } from "@tanstack/react-query";
 import { resolveInstrument } from "@/lib/instrument-catalog";
+import {
+  optimisticUpdate,
+  notifyOptimisticFailure,
+} from "@/lib/optimistic";
 
 interface CloseTradeModalProps {
   tradeId: string | null;
@@ -193,34 +197,67 @@ export function CloseTradeModal({ tradeId, onClose }: CloseTradeModalProps) {
         swapCents: Math.round(parseFloat(swap || "0") * 100),
         slippageCents: Math.round(parseFloat(slippage || "0") * 100),
         exitTime: exitTimestamp,
-        status: summary.isFullClose ? undefined : undefined, // Let server derive from executions
       };
 
-      const res = await fetch(`/api/trades/${trade.id}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      });
+      // Snapshot caches for rollback
+      const prevTrade = qc.getQueryData(["trade", trade.id]);
+      const prevTrades = qc.getQueriesData({ queryKey: ["trades"] });
+      const prevTradesLog = qc.getQueriesData({ queryKey: ["trades-log"] });
 
-      if (!res.ok) {
-        const data = await res.json().catch(() => null);
-        toast.error(data?.error ?? "Failed to close trade.");
-        setSaving(false);
-        return;
-      }
+      // Optimistic trade update
+      const optimisticPatch = {
+        status: summary.isFullClose ? "closed" : "open",
+        exitPriceAvg: String(summary.exitPrice),
+        exitTime: exitTimestamp,
+        netPnlCents: Math.round(summary.estimatedPnl * 100),
+        actualR: String(summary.estimatedR),
+        executions: allExecutions,
+        updatedAt: new Date().toISOString(),
+      };
 
-      const result = await res.json();
+      qc.setQueryData(["trade", trade.id], (old: any) =>
+        old ? { ...old, ...optimisticPatch } : old
+      );
+      qc.setQueriesData({ queryKey: ["trades"] }, (old: any) =>
+        optimisticUpdate(old, trade.id, optimisticPatch)
+      );
+      qc.setQueriesData({ queryKey: ["trades-log"] }, (old: any) =>
+        optimisticUpdate(old, trade.id, optimisticPatch)
+      );
+
       toast.success(summary.isFullClose ? "Trade closed." : "Partial exit recorded.");
-
-      // Invalidate all relevant queries
-      qc.invalidateQueries({ queryKey: ["trades"] });
-      qc.invalidateQueries({ queryKey: ["dashboard"] });
-      qc.invalidateQueries({ queryKey: ["analytics"] });
-      qc.invalidateQueries({ queryKey: ["calendar"] });
-      qc.invalidateQueries({ queryKey: ["prop-challenges"] });
-      qc.invalidateQueries({ queryKey: ["trade", trade.id] });
-
       onClose();
+
+      try {
+        const res = await fetch(`/api/trades/${trade.id}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        });
+
+        if (!res.ok) {
+          const data = await res.json().catch(() => null);
+          throw new Error(data?.error ?? "Failed to close trade.");
+        }
+
+        // Reconcile and refresh
+        qc.invalidateQueries({ queryKey: ["trades"] });
+        qc.invalidateQueries({ queryKey: ["trades-log"] });
+        qc.invalidateQueries({ queryKey: ["dashboard"] });
+        qc.invalidateQueries({ queryKey: ["analytics"] });
+        qc.invalidateQueries({ queryKey: ["calendar"] });
+        qc.invalidateQueries({ queryKey: ["prop-challenges"] });
+        qc.invalidateQueries({ queryKey: ["trade", trade.id] });
+      } catch (err: any) {
+        if (prevTrade) qc.setQueryData(["trade", trade.id], prevTrade);
+        if (prevTrades) {
+          for (const [k, v] of prevTrades) qc.setQueryData(k, v);
+        }
+        if (prevTradesLog) {
+          for (const [k, v] of prevTradesLog) qc.setQueryData(k, v);
+        }
+        notifyOptimisticFailure(err, "Failed to close trade.");
+      }
     } catch {
       toast.error("Network error while closing trade.");
       setSaving(false);

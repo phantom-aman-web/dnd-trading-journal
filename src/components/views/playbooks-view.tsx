@@ -30,6 +30,15 @@ import { cn } from "@/lib/utils";
 import { useNav } from "@/lib/nav-store";
 import { StrategyVersionComparisonModal } from "@/components/strategies/strategy-version-comparison-modal";
 import { StrategyDetailView } from "@/components/strategies/strategy-detail-view";
+import { useConfirm } from "@/components/ui/confirm-dialog";
+import {
+  generateTempId,
+  optimisticInsert,
+  optimisticUpdate,
+  optimisticDelete,
+  reconcileTempId,
+  notifyOptimisticFailure,
+} from "@/lib/optimistic";
 
 /* ------------------------------------------------------------------ */
 /* Types & helpers                                                     */
@@ -270,6 +279,8 @@ function SetupCard({
   onCompare: () => void;
   onDeleted: () => void;
 }) {
+  const confirm = useConfirm();
+  const qc = useQueryClient();
   const marketLabel = strategy.market ? MARKET_LABELS[strategy.market] ?? strategy.market : null;
   const versionsCount = (strategy.versions ?? []).length;
   const tradesCount = strategy._count?.trades ?? strategy.tradeCount;
@@ -361,16 +372,35 @@ function SetupCard({
         </div>
         <button
           onClick={async () => {
-            if (!confirm("Delete this setup? Trades that reference it will keep their data, but the setup itself will be removed.")) return;
-            const res = await fetch(`/api/strategies/${strategy.id}`, { method: "DELETE" });
-            if (res.ok) {
-              toast.success("Setup deleted.");
-              onDeleted();
-            } else {
-              toast.error("Failed to delete setup.");
+            const ok = await confirm({
+              title: "Delete Setup",
+              description: "Delete this setup? Trades that reference it will keep their data, but the setup itself will be removed.",
+              confirmText: "Delete Setup",
+              cancelText: "Cancel",
+              variant: "destructive",
+            });
+            if (!ok) return;
+
+            // Optimistic deletion
+            const prev = qc.getQueryData(["strategies"]);
+            qc.setQueryData(["strategies"], (old: any) =>
+              optimisticDelete(old, strategy.id)
+            );
+            toast.success("Setup deleted.");
+            onDeleted();
+
+            try {
+              const res = await fetch(`/api/strategies/${strategy.id}`, { method: "DELETE" });
+              if (!res.ok) {
+                throw new Error("Failed to delete setup.");
+              }
+              qc.invalidateQueries({ queryKey: ["strategies"] });
+            } catch (err: any) {
+              if (prev) qc.setQueryData(["strategies"], prev);
+              notifyOptimisticFailure(err, "Failed to delete setup.");
             }
           }}
-          className="text-xs text-muted-foreground hover:text-loss inline-flex items-center gap-1"
+          className="text-xs text-muted-foreground hover:text-loss inline-flex items-center gap-1 cursor-pointer"
         >
           <Trash2 className="h-3 w-3" /> Delete
         </button>
@@ -481,11 +511,43 @@ function SetupDialog({ open, onOpenChange, strategyId, onSaved }: SetupDialogPro
       .filter((it) => it.title.length > 0);
 
     setLoading(true);
+    const prevStrategies = qc.getQueryData(["strategies"]);
+    const prevDetail = strategyId ? qc.getQueryData(["strategy", strategyId]) : null;
+
     try {
       if (isEdit && strategyId) {
         const latestLabel = latest?.versionLabel ?? "1.0";
         const [maj, min] = latestLabel.split(".");
         const nextLabel = `${maj}.${Number(min ?? 0) + 1}`;
+
+        // Optimistic update
+        qc.setQueryData(["strategies"], (old: any) =>
+          optimisticUpdate(old, strategyId, {
+            name: name.trim(),
+            description: description.trim() || null,
+            market,
+            rules: cleanItems,
+            updatedAt: new Date().toISOString(),
+          })
+        );
+        qc.setQueryData(["strategy", strategyId], (old: any) => {
+          if (!old) return old;
+          return {
+            ...old,
+            name: name.trim(),
+            description: description.trim() || null,
+            market,
+            rules: cleanItems,
+            updatedAt: new Date().toISOString(),
+          };
+        });
+
+        toast.success(
+          !isUpgrade
+            ? `Saved changes to current version v${latestLabel}.`
+            : `Upgraded setup to version v${nextLabel} (v${latestLabel} preserved).`
+        );
+        onSaved();
 
         if (!isUpgrade) {
           // Save in-place to current version
@@ -503,11 +565,8 @@ function SetupDialog({ open, onOpenChange, strategyId, onSaved }: SetupDialogPro
             }),
           });
           if (!patchRes.ok) {
-            toast.error("Failed to update setup.");
-            setLoading(false);
-            return;
+            throw new Error("Failed to update setup.");
           }
-          toast.success(`Saved changes to current version v${latestLabel}.`);
         } else {
           // Upgrade to next version
           const patchRes = await fetch(`/api/strategies/${strategyId}`, {
@@ -520,9 +579,7 @@ function SetupDialog({ open, onOpenChange, strategyId, onSaved }: SetupDialogPro
             }),
           });
           if (!patchRes.ok) {
-            toast.error("Failed to update setup metadata.");
-            setLoading(false);
-            return;
+            throw new Error("Failed to update setup metadata.");
           }
           const versionRes = await fetch(`/api/strategies/${strategyId}`, {
             method: "PUT",
@@ -535,18 +592,31 @@ function SetupDialog({ open, onOpenChange, strategyId, onSaved }: SetupDialogPro
             }),
           });
           if (!versionRes.ok) {
-            toast.error("Failed to save checklist.");
-            setLoading(false);
-            return;
+            throw new Error("Failed to save checklist version.");
           }
-          toast.success(`Upgraded setup to version v${nextLabel} (v${latestLabel} preserved).`);
         }
 
         qc.invalidateQueries({ queryKey: ["strategies"] });
         qc.invalidateQueries({ queryKey: ["strategy", strategyId] });
-        onSaved();
       } else {
-        // Create new strategy with a flat-array rules JSON (v1.0).
+        // Create new strategy with temporary ID
+        const tempId = generateTempId("strategy");
+        const optimisticItem: any = {
+          id: tempId,
+          name: name.trim(),
+          description: description.trim() || null,
+          market,
+          rules: cleanItems,
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        };
+
+        qc.setQueryData(["strategies"], (old: any) =>
+          optimisticInsert(old, optimisticItem)
+        );
+        toast.success("Setup created.");
+        onSaved();
+
         const res = await fetch("/api/strategies", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -558,16 +628,20 @@ function SetupDialog({ open, onOpenChange, strategyId, onSaved }: SetupDialogPro
           }),
         });
         if (!res.ok) {
-          toast.error("Failed to create setup.");
-          setLoading(false);
-          return;
+          throw new Error("Failed to create setup.");
         }
-        toast.success("Setup created.");
+        const data = await res.json();
+        if (data?.id) {
+          qc.setQueryData(["strategies"], (old: any) =>
+            reconcileTempId(old, tempId, data)
+          );
+        }
         qc.invalidateQueries({ queryKey: ["strategies"] });
-        onSaved();
       }
-    } catch {
-      toast.error("Network error");
+    } catch (err: any) {
+      if (prevStrategies) qc.setQueryData(["strategies"], prevStrategies);
+      if (prevDetail && strategyId) qc.setQueryData(["strategy", strategyId], prevDetail);
+      notifyOptimisticFailure(err, isEdit ? "Failed to update setup." : "Failed to create setup.");
     } finally {
       setLoading(false);
     }

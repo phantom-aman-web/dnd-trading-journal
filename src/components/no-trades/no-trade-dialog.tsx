@@ -19,6 +19,12 @@ import { useAuth } from "@/lib/auth-store";
 import { syncEngine } from "@/lib/offline-sync-engine";
 import { toast } from "sonner";
 import {
+  generateTempId,
+  optimisticInsert,
+  reconcileTempId,
+  notifyOptimisticFailure,
+} from "@/lib/optimistic";
+import {
   EyeOff,
   CheckCircle2,
   AlertTriangle,
@@ -128,10 +134,36 @@ export function NoTradeDialog({ open, onOpenChange, initialData, onSuccess }: No
         await syncEngine.queueCreateNoTrade(payload, user?.id || "offline_user");
         toast.success("Saved observation locally in Offline Mode.");
         queryClient.invalidateQueries({ queryKey: ["no-trades"] });
+        queryClient.invalidateQueries({ queryKey: ["no-trades-in-log"] });
         onOpenChange(false);
         onSuccess?.();
         return;
       }
+
+      // Optimistic insertion
+      const prevNoTrades = queryClient.getQueriesData({ queryKey: ["no-trades"] });
+      const prevInLog = queryClient.getQueriesData({ queryKey: ["no-trades-in-log"] });
+      const tempId = generateTempId("notrade");
+      const optimisticObservation = {
+        id: tempId,
+        userId: user?.id || "local",
+        ...payload,
+        timestamp: new Date().toISOString(),
+        isArchived: false,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      };
+
+      queryClient.setQueriesData({ queryKey: ["no-trades"] }, (old: any) =>
+        optimisticInsert(old, optimisticObservation)
+      );
+      queryClient.setQueriesData({ queryKey: ["no-trades-in-log"] }, (old: any) =>
+        optimisticInsert(old, optimisticObservation)
+      );
+
+      toast.success("No-Trade observation recorded successfully.");
+      onOpenChange(false);
+      onSuccess?.();
 
       const res = await fetch("/api/no-trades", {
         method: "POST",
@@ -140,16 +172,23 @@ export function NoTradeDialog({ open, onOpenChange, initialData, onSuccess }: No
       });
 
       if (!res.ok) {
-        const error = await res.json();
-        throw new Error(error.error || "Failed to save observation");
+        const error = await res.json().catch(() => null);
+        throw new Error(error?.error || "Failed to save observation");
       }
 
-      toast.success("No-Trade observation recorded successfully.");
+      const realData = await res.json();
+      if (realData?.id) {
+        queryClient.setQueriesData({ queryKey: ["no-trades"] }, (old: any) =>
+          reconcileTempId(old, tempId, realData)
+        );
+        queryClient.setQueriesData({ queryKey: ["no-trades-in-log"] }, (old: any) =>
+          reconcileTempId(old, tempId, realData)
+        );
+      }
       queryClient.invalidateQueries({ queryKey: ["no-trades"] });
-      onOpenChange(false);
-      onSuccess?.();
+      queryClient.invalidateQueries({ queryKey: ["no-trades-in-log"] });
     } catch (err: any) {
-      toast.error(err.message || "Failed to record observation");
+      notifyOptimisticFailure(err, "Failed to record observation.");
     } finally {
       setLoading(false);
     }

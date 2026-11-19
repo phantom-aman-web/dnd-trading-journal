@@ -13,6 +13,7 @@
 import { useRef, useState, useMemo } from "react";
 import { useQueryClient, useQuery } from "@tanstack/react-query";
 import { useNavStore } from "@/lib/nav-store";
+import { useConfirm } from "@/components/ui/confirm-dialog";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -154,6 +155,7 @@ function autoMapHeaders(headers: string[]): Record<string, string> {
 
 export function BackupView() {
   const qc = useQueryClient();
+  const confirm = useConfirm();
   const setSelectedAccountId = useNavStore((s) => s.setSelectedAccountId);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const csvInputRef = useRef<HTMLInputElement>(null);
@@ -214,9 +216,14 @@ export function BackupView() {
   const [rollingBackId, setRollingBackId] = useState<string | null>(null);
 
   async function handleRollbackImport(importId: string, filename: string) {
-    if (!window.confirm(`Are you sure you want to rollback the import batch for "${filename}"?\n\nThis will safely remove ONLY the records created by this batch. Any manually recorded trades or subsequently modified/linked trades will remain protected.`)) {
-      return;
-    }
+    const ok = await confirm({
+      title: "Rollback Import Batch",
+      description: `Are you sure you want to rollback the import batch for "${filename}"?\n\nThis will safely remove ONLY the records created by this batch. Any manually recorded trades or subsequently modified/linked trades will remain protected.`,
+      confirmText: "Rollback Batch",
+      cancelText: "Cancel",
+      variant: "destructive",
+    });
+    if (!ok) return;
     setRollingBackId(importId);
     try {
       const res = await fetch(`/api/imports/${importId}`, {

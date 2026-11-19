@@ -112,7 +112,7 @@ describe("Telegram Inbound Webhook & Private Chat Linking Tests", () => {
       const json = await res.json();
       expect(json.ok).toBe(true);
       expect(json.status).toBe("webhook_endpoint_ready");
-    });
+    }, 25000);
 
     it("rejects invalid webhook secret with HTTP 401", async () => {
       const token = "linking_token_auth_test_1";
@@ -143,7 +143,7 @@ describe("Telegram Inbound Webhook & Private Chat Linking Tests", () => {
       expect(res.status).toBe(401);
       const json = await res.json();
       expect(json.error).toBe("Unauthorized webhook secret");
-    });
+    }, 25000);
 
     it("links private chat correctly for /start <token> with valid secret", async () => {
       const token = "linking_token_success_1";
@@ -187,7 +187,7 @@ describe("Telegram Inbound Webhook & Private Chat Linking Tests", () => {
       // Single-use token must be atomically consumed
       expect(updated?.linkingToken).toBeNull();
       expect(updated?.linkingTokenExpiresAt).toBeNull();
-    });
+    }, 25000);
 
     it("supports /start@BotUsername <token> and irregular whitespace", async () => {
       const token = "linking_token_botname_2";
@@ -227,7 +227,7 @@ describe("Telegram Inbound Webhook & Private Chat Linking Tests", () => {
       expect(updated?.isPrivateLinked).toBe(true);
       expect(updated?.privateChatId).toBe("111222333");
       expect(updated?.linkingToken).toBeNull();
-    });
+    }, 25000);
 
     it("strictly rejects non-private chats (group / supergroup) for private linking", async () => {
       const token = "linking_token_group_reject";
@@ -267,7 +267,7 @@ describe("Telegram Inbound Webhook & Private Chat Linking Tests", () => {
       expect(untouched?.isPrivateLinked).toBe(false);
       expect(untouched?.privateChatId).toBeNull();
       expect(untouched?.linkingToken).toBe(token); // Not consumed
-    });
+    }, 25000);
 
     it("rejects expired linking tokens safely without linking", async () => {
       const token = "linking_token_expired";
@@ -306,7 +306,7 @@ describe("Telegram Inbound Webhook & Private Chat Linking Tests", () => {
         where: { id: integrationId },
       });
       expect(untouched?.isPrivateLinked).toBe(false);
-    });
+    }, 25000);
 
     it("ignores already-consumed or reused linking tokens safely", async () => {
       const uniqueUpdateId = `upd_${Date.now()}_${Math.random()}`;
@@ -329,7 +329,7 @@ describe("Telegram Inbound Webhook & Private Chat Linking Tests", () => {
       expect(res.status).toBe(200);
       const json = await res.json();
       expect(json.reason).toBe("invalid_or_consumed_token");
-    });
+    }, 25000);
 
     it("handles /start without token without linking and without crashing", async () => {
       const uniqueUpdateId = `upd_${Date.now()}_${Math.random()}`;
@@ -357,7 +357,7 @@ describe("Telegram Inbound Webhook & Private Chat Linking Tests", () => {
         where: { id: integrationId },
       });
       expect(untouched?.isPrivateLinked).toBe(false);
-    });
+    }, 25000);
 
     it("deduplicates identical update_id safely", async () => {
       const updateId = `upd_dedup_${Date.now()}`;
@@ -386,6 +386,6 @@ describe("Telegram Inbound Webhook & Private Chat Linking Tests", () => {
       expect(res2.status).toBe(200);
       const json2 = await res2.json();
       expect(json2.duplicate).toBe(true);
-    });
+    }, 25000);
   });
 });

@@ -6,6 +6,11 @@ import { useFavorites } from "@/lib/favorites-store";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { useConfirm } from "@/components/ui/confirm-dialog";
+import {
+  optimisticDelete,
+  notifyOptimisticFailure,
+} from "@/lib/optimistic";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Separator } from "@/components/ui/separator";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -71,6 +76,7 @@ async function fetchTrade(id: string) {
 
 export function TradeDetailView({ tradeId, onBack }: { tradeId?: string; onBack?: () => void } = {}) {
   const { params, navigate } = useNav();
+  const confirm = useConfirm();
   const qc = useQueryClient();
   const id = tradeId || params.id;
   const { isFavorite, toggleFavorite } = useFavorites();
@@ -396,15 +402,45 @@ export function TradeDetailView({ tradeId, onBack }: { tradeId?: string; onBack?
             <DropdownMenuSeparator />
             <DropdownMenuItem
               onClick={async () => {
-                if (!confirm("Delete this trade? This cannot be undone.")) return;
-                const res = await fetch(`/api/trades/${id}`, { method: "DELETE" });
-                if (res.ok) {
-                  toast.success("Trade deleted.");
+                const ok = await confirm({
+                  title: "Delete Trade",
+                  description: "Delete this trade? This cannot be undone.",
+                  confirmText: "Delete Trade",
+                  cancelText: "Cancel",
+                  variant: "destructive",
+                });
+                if (!ok) return;
+
+                // Optimistically remove trade from caches
+                const prevTrades = qc.getQueriesData({ queryKey: ["trades"] });
+                const prevTradesLog = qc.getQueriesData({ queryKey: ["trades-log"] });
+
+                qc.setQueriesData({ queryKey: ["trades"] }, (old: any) =>
+                  optimisticDelete(old, id)
+                );
+                qc.setQueriesData({ queryKey: ["trades-log"] }, (old: any) =>
+                  optimisticDelete(old, id)
+                );
+
+                toast.success("Trade deleted.");
+                navigate("tradesLog");
+
+                try {
+                  const res = await fetch(`/api/trades/${id}`, { method: "DELETE" });
+                  if (!res.ok) throw new Error("Failed to delete trade.");
                   qc.invalidateQueries({ queryKey: ["trades"] });
+                  qc.invalidateQueries({ queryKey: ["trades-log"] });
+                  qc.invalidateQueries({ queryKey: ["dashboard"] });
+                  qc.invalidateQueries({ queryKey: ["analytics"] });
                   qc.invalidateQueries({ queryKey: ["prop-challenges"] });
-                  navigate("tradesLog");
-                } else {
-                  toast.error("Failed to delete.");
+                } catch (err: any) {
+                  if (prevTrades) {
+                    for (const [k, v] of prevTrades) qc.setQueryData(k, v);
+                  }
+                  if (prevTradesLog) {
+                    for (const [k, v] of prevTradesLog) qc.setQueryData(k, v);
+                  }
+                  notifyOptimisticFailure(err, "Failed to delete trade.");
                 }
               }}
               className="cursor-pointer text-xs py-2 text-loss focus:text-loss"
@@ -521,13 +557,45 @@ export function TradeDetailView({ tradeId, onBack }: { tradeId?: string; onBack?
           size="sm"
           className="text-loss hover:text-loss"
           onClick={async () => {
-            if (!confirm("Delete this trade? This cannot be undone.")) return;
-            const res = await fetch(`/api/trades/${id}`, { method: "DELETE" });
-            if (res.ok) {
-              toast.success("Trade deleted.");
-              navigate("tradesLog");
-            } else {
-              toast.error("Failed to delete.");
+            const ok = await confirm({
+              title: "Delete Trade",
+              description: "Delete this trade? This cannot be undone.",
+              confirmText: "Delete Trade",
+              cancelText: "Cancel",
+              variant: "destructive",
+            });
+            if (!ok) return;
+
+            // Optimistically remove trade from caches
+            const prevTrades = qc.getQueriesData({ queryKey: ["trades"] });
+            const prevTradesLog = qc.getQueriesData({ queryKey: ["trades-log"] });
+
+            qc.setQueriesData({ queryKey: ["trades"] }, (old: any) =>
+              optimisticDelete(old, id)
+            );
+            qc.setQueriesData({ queryKey: ["trades-log"] }, (old: any) =>
+              optimisticDelete(old, id)
+            );
+
+            toast.success("Trade deleted.");
+            navigate("tradesLog");
+
+            try {
+              const res = await fetch(`/api/trades/${id}`, { method: "DELETE" });
+              if (!res.ok) throw new Error("Failed to delete trade.");
+              qc.invalidateQueries({ queryKey: ["trades"] });
+              qc.invalidateQueries({ queryKey: ["trades-log"] });
+              qc.invalidateQueries({ queryKey: ["dashboard"] });
+              qc.invalidateQueries({ queryKey: ["analytics"] });
+              qc.invalidateQueries({ queryKey: ["prop-challenges"] });
+            } catch (err: any) {
+              if (prevTrades) {
+                for (const [k, v] of prevTrades) qc.setQueryData(k, v);
+              }
+              if (prevTradesLog) {
+                for (const [k, v] of prevTradesLog) qc.setQueryData(k, v);
+              }
+              notifyOptimisticFailure(err, "Failed to delete trade.");
             }
           }}
         >

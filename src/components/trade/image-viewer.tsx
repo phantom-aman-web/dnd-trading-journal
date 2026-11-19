@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { useConfirm, usePrompt } from "@/components/ui/confirm-dialog";
 import {
   ChevronLeft, ChevronRight, X, ZoomIn, ZoomOut, Maximize,
   Pencil, Undo, Redo, Trash2, MousePointer2, Type,
@@ -57,6 +58,8 @@ const COLORS = [
 const STROKE_WIDTHS = [1, 2, 3, 5];
 
 export function ImageViewer({ mediaItems, initialIndex, onClose }: ImageViewerProps) {
+  const confirm = useConfirm();
+  const prompt = usePrompt();
   const [index, setIndex] = useState(initialIndex);
   const [zoom, setZoom] = useState(1);
   const [tool, setTool] = useState<Tool>("select");
@@ -197,7 +200,7 @@ export function ImageViewer({ mediaItems, initialIndex, onClose }: ImageViewerPr
     };
   }
 
-  function onPointerDown(e: React.PointerEvent) {
+  async function onPointerDown(e: React.PointerEvent) {
     if (!url) return;
     const p = pointerPos(e);
     (e.target as HTMLElement).setPointerCapture(e.pointerId);
@@ -229,7 +232,11 @@ export function ImageViewer({ mediaItems, initialIndex, onClose }: ImageViewerPr
     }
 
     if (tool === "text") {
-      const text = prompt("Enter text:");
+      const text = await prompt({
+        title: "Add Text Annotation",
+        description: "Enter text for the annotation:",
+        placeholder: "Enter label...",
+      });
       if (text) {
         pushHistory();
         const newAnn: Annotation = {
@@ -404,9 +411,13 @@ export function ImageViewer({ mediaItems, initialIndex, onClose }: ImageViewerPr
       else setIndex(target);
       return;
     }
-    const choice = window.confirm(
-      "You have unsaved annotations. Save before leaving?",
-    );
+    const choice = await confirm({
+      title: "Unsaved Annotations",
+      description: "You have unsaved annotations. Save before leaving?",
+      confirmText: "Save",
+      cancelText: "Cancel",
+      variant: "default",
+    });
     if (choice) {
       const saved = await saveAnnotations();
       if (saved) {

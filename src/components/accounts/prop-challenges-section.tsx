@@ -3,6 +3,14 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
+  generateTempId,
+  optimisticInsert,
+  optimisticUpdate,
+  optimisticDelete,
+  reconcileTempId,
+  notifyOptimisticFailure,
+} from "@/lib/optimistic";
+import {
   Trophy,
   AlertTriangle,
   ShieldAlert,
@@ -25,6 +33,7 @@ import {
   ChevronUp,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { useConfirm } from "@/components/ui/confirm-dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -96,6 +105,7 @@ export function PropChallengesSection({ accounts: rawAccounts, hideHeader = fals
     ? (rawAccounts as any).accounts
     : [];
   const queryClient = useQueryClient();
+  const confirm = useConfirm();
   const { navigate, selectedAccountId } = useNav();
   const effectiveAccountId = propAccountId !== undefined ? propAccountId : (selectedAccountId || "");
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -160,14 +170,53 @@ export function PropChallengesSection({ accounts: rawAccounts, hideHeader = fals
       }
       return res.json();
     },
-    onSuccess: () => {
+    onMutate: async (payload: any) => {
+      await queryClient.cancelQueries({ queryKey: ["prop-challenges"] });
+      const previous = queryClient.getQueryData(["prop-challenges"]);
+
+      const tempId = generateTempId("challenge");
+      const optimisticItem = {
+        id: tempId,
+        name: payload.name || "New Challenge",
+        propFirm: payload.propFirm || "Custom",
+        stepType: payload.stepType || "two_step",
+        currentPhase: payload.currentPhase || "phase_1",
+        status: "active",
+        startingBalanceCents: payload.startingBalanceCents || 1000000,
+        currentBalanceCents: payload.startingBalanceCents || 1000000,
+        profitTargetCents: payload.profitTargetCents || null,
+        maxDrawdownCents: payload.maxDrawdownCents || null,
+        dailyLossLimitCents: payload.dailyLossLimitCents || null,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        ...payload,
+      };
+
+      queryClient.setQueryData(["prop-challenges"], (old: any) =>
+        optimisticInsert(old, optimisticItem)
+      );
+
       toast.success("Prop firm challenge created");
-      queryClient.invalidateQueries({ queryKey: ["prop-challenges"] });
       setIsModalOpen(false);
       resetForm();
+
+      return { previous, tempId };
     },
-    onError: (err: any) => {
-      toast.error(err.message);
+    onError: (err: any, _vars: any, context: any) => {
+      if (context?.previous) {
+        queryClient.setQueryData(["prop-challenges"], context.previous);
+      }
+      notifyOptimisticFailure(err, "Failed to create challenge.");
+    },
+    onSuccess: (data: any, _vars: any, context: any) => {
+      if (context?.tempId && data?.id) {
+        queryClient.setQueryData(["prop-challenges"], (old: any) =>
+          reconcileTempId(old, context.tempId, data)
+        );
+      }
+    },
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: ["prop-challenges"] });
     },
   });
 
@@ -184,14 +233,32 @@ export function PropChallengesSection({ accounts: rawAccounts, hideHeader = fals
       }
       return res.json();
     },
-    onSuccess: () => {
+    onMutate: async ({ id, payload }: { id: string; payload: any }) => {
+      await queryClient.cancelQueries({ queryKey: ["prop-challenges"] });
+      const previous = queryClient.getQueryData(["prop-challenges"]);
+
+      queryClient.setQueryData(["prop-challenges"], (old: any) =>
+        optimisticUpdate(old, id, (item: any) => ({
+          ...item,
+          ...payload,
+          updatedAt: new Date().toISOString(),
+        }))
+      );
+
       toast.success("Prop firm challenge updated");
-      queryClient.invalidateQueries({ queryKey: ["prop-challenges"] });
       setIsModalOpen(false);
       resetForm();
+
+      return { previous };
     },
-    onError: (err: any) => {
-      toast.error(err.message);
+    onError: (err: any, _vars: any, context: any) => {
+      if (context?.previous) {
+        queryClient.setQueryData(["prop-challenges"], context.previous);
+      }
+      notifyOptimisticFailure(err, "Failed to update challenge.");
+    },
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: ["prop-challenges"] });
     },
   });
 
@@ -201,8 +268,25 @@ export function PropChallengesSection({ accounts: rawAccounts, hideHeader = fals
       if (!res.ok) throw new Error("Failed to delete challenge");
       return res.json();
     },
-    onSuccess: () => {
+    onMutate: async (id: string) => {
+      await queryClient.cancelQueries({ queryKey: ["prop-challenges"] });
+      const previous = queryClient.getQueryData(["prop-challenges"]);
+
+      queryClient.setQueryData(["prop-challenges"], (old: any) =>
+        optimisticDelete(old, id)
+      );
+
       toast.success("Challenge tracker deleted");
+
+      return { previous };
+    },
+    onError: (err: any, _vars: any, context: any) => {
+      if (context?.previous) {
+        queryClient.setQueryData(["prop-challenges"], context.previous);
+      }
+      notifyOptimisticFailure(err, "Failed to delete challenge.");
+    },
+    onSettled: () => {
       queryClient.invalidateQueries({ queryKey: ["prop-challenges"] });
     },
   });
@@ -786,8 +870,15 @@ export function PropChallengesSection({ accounts: rawAccounts, hideHeader = fals
                       <PencilLine className="h-4 w-4" />
                     </button>
                     <button
-                      onClick={() => {
-                        if (confirm(`Delete challenge tracker "${c.name}"?`)) {
+                      onClick={async () => {
+                        const ok = await confirm({
+                          title: "Delete Challenge Tracker",
+                          description: `Delete challenge tracker "${c.name}"? This action cannot be undone.`,
+                          confirmText: "Delete Tracker",
+                          cancelText: "Cancel",
+                          variant: "destructive",
+                        });
+                        if (ok) {
                           deleteMutation.mutate(c.id);
                         }
                       }}

@@ -4,6 +4,7 @@ import React, { useEffect } from "react";
 import { useNav, type ViewKey } from "@/lib/nav-store";
 import { useAuth } from "@/lib/auth-store";
 import { cn } from "@/lib/utils";
+import { BrandLogo } from "@/components/brand/brand-logo";
 import {
   LayoutDashboard,
   CalendarDays,
@@ -138,23 +139,7 @@ export function MobileDrawer({ open, onClose }: MobileDrawerProps) {
       >
         {/* Header */}
         <div className="h-14 px-4 border-b border-sidebar-border flex items-center justify-between shrink-0">
-          <div className="flex items-center gap-2.5">
-            <div className="h-8 w-8 rounded-lg bg-gradient-to-br from-blue-600 via-cyan-500 to-blue-700 flex items-center justify-center text-white font-bold text-xs tracking-wider shadow-sm border border-white/10">
-              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4">
-                <path d="M12 3 L20 20 L15.5 20 L12 11 L8.5 20 L4 20 Z" fill="currentColor" fillOpacity="0.3" />
-                <circle cx="12" cy="8" r="1.5" fill="#34D399" stroke="#34D399" />
-              </svg>
-            </div>
-            <div>
-              <div className="font-bold text-sm tracking-tight text-sidebar-foreground flex items-center gap-1.5 font-jakarta">
-                <span>AlphaPips</span>
-                <span className="text-[9px] font-mono px-1.5 py-0.2 rounded bg-cyan-500/20 text-cyan-400 font-semibold border border-cyan-500/30">
-                  PRO
-                </span>
-              </div>
-              <div className="text-[9px] text-sidebar-foreground/60 leading-none mt-0.5">Performance OS</div>
-            </div>
-          </div>
+          <BrandLogo size="md" showBadge={true} subtitle="Performance OS" />
 
           <button
             onClick={onClose}

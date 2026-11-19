@@ -21,6 +21,15 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Badge } from "@/components/ui/badge";
+import { useConfirm } from "@/components/ui/confirm-dialog";
+import {
+  generateTempId,
+  optimisticInsert,
+  optimisticUpdate,
+  optimisticDelete,
+  reconcileTempId,
+  notifyOptimisticFailure,
+} from "@/lib/optimistic";
 
 export interface FilterState {
   accountId?: string;
@@ -59,6 +68,7 @@ export function SavedFilterPresets({
   availableStrategyIds = [],
 }: SavedFilterPresetsProps) {
   const queryClient = useQueryClient();
+  const confirm = useConfirm();
   const [activePresetId, setActivePresetId] = useState<string | null>(null);
   const [isSaveModalOpen, setIsSaveModalOpen] = useState(false);
   const [presetName, setPresetName] = useState("");
@@ -93,13 +103,52 @@ export function SavedFilterPresets({
       if (!res.ok) throw new Error("Failed to create preset");
       return res.json();
     },
-    onSuccess: (newPreset: FilterPresetItem) => {
-      queryClient.invalidateQueries({ queryKey: ["filter-presets", targetView] });
-      setActivePresetId(newPreset.id);
+    onMutate: async (payload) => {
+      await queryClient.cancelQueries({ queryKey: ["filter-presets", targetView] });
+      const previous = queryClient.getQueryData(["filter-presets", targetView]);
+
+      const tempId = generateTempId("preset");
+      const optimisticPreset: FilterPresetItem = {
+        id: tempId,
+        userId: "local",
+        name: payload.name,
+        description: null,
+        targetView,
+        filtersJson: payload.filtersJson,
+        isDefault: payload.isDefault,
+        isPinned: payload.isPinned,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      };
+
+      queryClient.setQueryData(["filter-presets", targetView], (old: any) =>
+        optimisticInsert(old, optimisticPreset)
+      );
+
+      setActivePresetId(tempId);
       setIsSaveModalOpen(false);
       setPresetName("");
       setIsDefault(false);
       setIsPinned(false);
+
+      return { previous, tempId };
+    },
+    onError: (err: any, _vars, context) => {
+      if (context?.previous) {
+        queryClient.setQueryData(["filter-presets", targetView], context.previous);
+      }
+      notifyOptimisticFailure(err, "Failed to create preset.");
+    },
+    onSuccess: (newPreset: FilterPresetItem, _vars, context) => {
+      if (context?.tempId) {
+        queryClient.setQueryData(["filter-presets", targetView], (old: any) =>
+          reconcileTempId(old, context.tempId, newPreset)
+        );
+        setActivePresetId(newPreset.id);
+      }
+    },
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: ["filter-presets", targetView] });
     },
   });
 
@@ -114,7 +163,27 @@ export function SavedFilterPresets({
       if (!res.ok) throw new Error("Failed to update preset");
       return res.json();
     },
-    onSuccess: () => {
+    onMutate: async ({ id, data }) => {
+      await queryClient.cancelQueries({ queryKey: ["filter-presets", targetView] });
+      const previous = queryClient.getQueryData(["filter-presets", targetView]);
+
+      queryClient.setQueryData(["filter-presets", targetView], (old: any) =>
+        optimisticUpdate(old, id, (item: any) => ({
+          ...item,
+          ...data,
+          updatedAt: new Date().toISOString(),
+        }))
+      );
+
+      return { previous };
+    },
+    onError: (err: any, _vars, context) => {
+      if (context?.previous) {
+        queryClient.setQueryData(["filter-presets", targetView], context.previous);
+      }
+      notifyOptimisticFailure(err, "Failed to update preset.");
+    },
+    onSettled: () => {
       queryClient.invalidateQueries({ queryKey: ["filter-presets", targetView] });
     },
   });
@@ -128,11 +197,28 @@ export function SavedFilterPresets({
       if (!res.ok) throw new Error("Failed to delete preset");
       return res.json();
     },
-    onSuccess: (_, deletedId) => {
-      queryClient.invalidateQueries({ queryKey: ["filter-presets", targetView] });
-      if (activePresetId === deletedId) {
+    onMutate: async (id: string) => {
+      await queryClient.cancelQueries({ queryKey: ["filter-presets", targetView] });
+      const previous = queryClient.getQueryData(["filter-presets", targetView]);
+
+      queryClient.setQueryData(["filter-presets", targetView], (old: any) =>
+        optimisticDelete(old, id)
+      );
+
+      if (activePresetId === id) {
         setActivePresetId(null);
       }
+
+      return { previous };
+    },
+    onError: (err: any, _vars, context) => {
+      if (context?.previous) {
+        queryClient.setQueryData(["filter-presets", targetView], context.previous);
+      }
+      notifyOptimisticFailure(err, "Failed to delete preset.");
+    },
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: ["filter-presets", targetView] });
     },
   });
 
@@ -309,8 +395,15 @@ export function SavedFilterPresets({
           <Button
             variant="ghost"
             size="sm"
-            onClick={() => {
-              if (confirm(`Delete preset "${activePreset.name}"?`)) {
+            onClick={async () => {
+              const ok = await confirm({
+                title: "Delete Preset",
+                description: `Delete preset "${activePreset.name}"?`,
+                confirmText: "Delete Preset",
+                cancelText: "Cancel",
+                variant: "destructive",
+              });
+              if (ok) {
                 deleteMutation.mutate(activePreset.id);
               }
             }}

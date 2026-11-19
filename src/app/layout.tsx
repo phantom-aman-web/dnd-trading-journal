@@ -5,6 +5,7 @@ import { Toaster } from "@/components/ui/toaster";
 import { Toaster as SonnerToaster } from "@/components/ui/sonner";
 import { ThemeProvider } from "@/components/theme-provider";
 import { QueryProvider } from "@/components/query-provider";
+import { ConfirmDialogProvider } from "@/components/ui/confirm-dialog";
 
 export const metadata: Metadata = {
   title: "AlphaPips — Trading Journal & Performance Analytics",
@@ -57,7 +58,9 @@ export default function RootLayout({
         />
         <ThemeProvider>
           <QueryProvider>
-            {children}
+            <ConfirmDialogProvider>
+              {children}
+            </ConfirmDialogProvider>
             <Toaster />
             <SonnerToaster richColors position="top-right" />
           </QueryProvider>

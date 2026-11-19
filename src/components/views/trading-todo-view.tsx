@@ -3,6 +3,14 @@
 import { useState, useMemo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
+  generateTempId,
+  optimisticInsert,
+  optimisticUpdate,
+  optimisticDelete,
+  reconcileTempId,
+  notifyOptimisticFailure,
+} from "@/lib/optimistic";
+import {
   CheckSquare,
   Plus,
   Kanban,
@@ -276,7 +284,7 @@ export function TradingTodoView() {
   const activeTasks = useMemo(() => filteredTasks.filter((t) => t.status !== "completed"), [filteredTasks]);
   const completedTasks = useMemo(() => filteredTasks.filter((t) => t.status === "completed"), [filteredTasks]);
 
-  // Mutations
+  // Mutations with Optimistic UI updates
   const createTaskMutation = useMutation({
     mutationFn: async (payload: any) => {
       const res = await fetch("/api/tasks", {
@@ -290,14 +298,78 @@ export function TradingTodoView() {
       }
       return res.json();
     },
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["trading-tasks"] });
+    onMutate: async (payload: any) => {
+      await qc.cancelQueries({ queryKey: ["trading-tasks"] });
+      const previous = qc.getQueriesData({ queryKey: ["trading-tasks"] });
+      const previousAll = qc.getQueryData(["trading-tasks-all-lists"]);
+
+      const tempId = generateTempId("task");
+      const optimisticTask: TradingTask = {
+        id: tempId,
+        title: payload.title || "Untitled Task",
+        description: payload.description || null,
+        notes: payload.notes || null,
+        priority: payload.priority || "medium",
+        status: payload.status || "pending",
+        listName: payload.listName || "Inbox",
+        dueDate: payload.dueDate || null,
+        dueTime: payload.dueTime || null,
+        accountId: payload.accountId || null,
+        strategyId: payload.strategyId || null,
+        tags: payload.tags || [],
+        subtasks: payload.subtasks || [],
+        isArchived: false,
+        isPinned: false,
+        createdAt: new Date().toISOString(),
+      };
+
+      qc.setQueriesData({ queryKey: ["trading-tasks"] }, (old: any) =>
+        optimisticInsert(old, optimisticTask)
+      );
+      qc.setQueryData(["trading-tasks-all-lists"], (old: any) =>
+        optimisticInsert(old, optimisticTask)
+      );
+
       setModalOpen(false);
       resetForm();
       toast.success("Task created");
+
+      return { previous, previousAll, tempId, submittedPayload: payload };
     },
-    onError: (err: any) => {
-      toast.error(err.message);
+    onError: (err: any, _vars: any, context: any) => {
+      if (context?.previous) {
+        for (const [key, val] of context.previous) {
+          qc.setQueryData(key, val);
+        }
+      }
+      if (context?.previousAll) {
+        qc.setQueryData(["trading-tasks-all-lists"], context.previousAll);
+      }
+      if (context?.submittedPayload) {
+        setFormTitle(context.submittedPayload.title || "");
+        setFormDescription(context.submittedPayload.description || "");
+        setFormNotes(context.submittedPayload.notes || "");
+        setFormPriority(context.submittedPayload.priority || "medium");
+        setFormListName(context.submittedPayload.listName || "Inbox");
+        setFormDueDate(context.submittedPayload.dueDate || "");
+        setFormDueTime(context.submittedPayload.dueTime || "");
+        setModalOpen(true);
+      }
+      notifyOptimisticFailure(err, "Failed to create task.");
+    },
+    onSuccess: (serverTask: any, _vars: any, context: any) => {
+      if (context?.tempId && serverTask?.id) {
+        qc.setQueriesData({ queryKey: ["trading-tasks"] }, (old: any) =>
+          reconcileTempId(old, context.tempId, serverTask)
+        );
+        qc.setQueryData(["trading-tasks-all-lists"], (old: any) =>
+          reconcileTempId(old, context.tempId, serverTask)
+        );
+      }
+    },
+    onSettled: () => {
+      qc.invalidateQueries({ queryKey: ["trading-tasks"] });
+      qc.invalidateQueries({ queryKey: ["trading-tasks-all-lists"] });
     },
   });
 
@@ -311,12 +383,44 @@ export function TradingTodoView() {
       if (!res.ok) throw new Error("Failed to update task");
       return res.json();
     },
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["trading-tasks"] });
+    onMutate: async ({ id, updates }: { id: string; updates: any }) => {
+      await qc.cancelQueries({ queryKey: ["trading-tasks"] });
+      const previous = qc.getQueriesData({ queryKey: ["trading-tasks"] });
+      const previousAll = qc.getQueryData(["trading-tasks-all-lists"]);
+
+      qc.setQueriesData({ queryKey: ["trading-tasks"] }, (old: any) =>
+        optimisticUpdate(old, id, (item: any) => ({
+          ...item,
+          ...updates,
+          updatedAt: new Date().toISOString(),
+        }))
+      );
+      qc.setQueryData(["trading-tasks-all-lists"], (old: any) =>
+        optimisticUpdate(old, id, (item: any) => ({
+          ...item,
+          ...updates,
+          updatedAt: new Date().toISOString(),
+        }))
+      );
+
       if (modalOpen) setModalOpen(false);
+
+      return { previous, previousAll };
     },
-    onError: (err: any) => {
-      toast.error(err.message);
+    onError: (err: any, _vars: any, context: any) => {
+      if (context?.previous) {
+        for (const [key, val] of context.previous) {
+          qc.setQueryData(key, val);
+        }
+      }
+      if (context?.previousAll) {
+        qc.setQueryData(["trading-tasks-all-lists"], context.previousAll);
+      }
+      notifyOptimisticFailure(err, "Failed to update task.");
+    },
+    onSettled: () => {
+      qc.invalidateQueries({ queryKey: ["trading-tasks"] });
+      qc.invalidateQueries({ queryKey: ["trading-tasks-all-lists"] });
     },
   });
 
@@ -326,12 +430,36 @@ export function TradingTodoView() {
       if (!res.ok) throw new Error("Failed to delete task");
       return res.json();
     },
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["trading-tasks"] });
+    onMutate: async (id: string) => {
+      await qc.cancelQueries({ queryKey: ["trading-tasks"] });
+      const previous = qc.getQueriesData({ queryKey: ["trading-tasks"] });
+      const previousAll = qc.getQueryData(["trading-tasks-all-lists"]);
+
+      qc.setQueriesData({ queryKey: ["trading-tasks"] }, (old: any) =>
+        optimisticDelete(old, id)
+      );
+      qc.setQueryData(["trading-tasks-all-lists"], (old: any) =>
+        optimisticDelete(old, id)
+      );
+
       toast.success("Task deleted");
+
+      return { previous, previousAll };
     },
-    onError: (err: any) => {
-      toast.error(err.message);
+    onError: (err: any, _vars: any, context: any) => {
+      if (context?.previous) {
+        for (const [key, val] of context.previous) {
+          qc.setQueryData(key, val);
+        }
+      }
+      if (context?.previousAll) {
+        qc.setQueryData(["trading-tasks-all-lists"], context.previousAll);
+      }
+      notifyOptimisticFailure(err, "Failed to delete task.");
+    },
+    onSettled: () => {
+      qc.invalidateQueries({ queryKey: ["trading-tasks"] });
+      qc.invalidateQueries({ queryKey: ["trading-tasks-all-lists"] });
     },
   });
 

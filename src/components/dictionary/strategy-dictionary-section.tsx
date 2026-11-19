@@ -17,6 +17,15 @@ import {
 } from "@/components/ui/dialog";
 import { useAuth } from "@/lib/auth-store";
 import { syncEngine } from "@/lib/offline-sync-engine";
+import { useConfirm } from "@/components/ui/confirm-dialog";
+import {
+  generateTempId,
+  optimisticInsert,
+  optimisticUpdate,
+  optimisticDelete,
+  reconcileTempId,
+  notifyOptimisticFailure,
+} from "@/lib/optimistic";
 import {
   BookOpen,
   Plus,
@@ -55,6 +64,7 @@ interface StrategyDictionarySectionProps {
 
 export function StrategyDictionarySection({ strategyId, strategyName }: StrategyDictionarySectionProps) {
   const queryClient = useQueryClient();
+  const confirm = useConfirm();
   const { user } = useAuth();
 
   const [search, setSearch] = useState("");
@@ -111,12 +121,57 @@ export function StrategyDictionarySection({ strategyId, strategyName }: Strategy
       }
       return res.json();
     },
-    onSuccess: () => {
+    onMutate: async (payload: any) => {
+      await queryClient.cancelQueries({ queryKey: ["dictionary"] });
+      const previous = queryClient.getQueriesData({ queryKey: ["dictionary"] });
+
+      const tempId = generateTempId("dict");
+      const optimisticConcept: any = editingEntry
+        ? { ...editingEntry, ...payload, updatedAt: new Date().toISOString() }
+        : {
+            id: tempId,
+            userId: user?.id || "local",
+            term: payload.term,
+            abbreviation: payload.abbreviation || null,
+            definition: payload.definition,
+            category: payload.category || "General",
+            rules: payload.rules || [],
+            examples: payload.examples || [],
+            tags: payload.tags || [],
+            isFavorite: false,
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+          };
+
+      queryClient.setQueriesData({ queryKey: ["dictionary"] }, (old: any) =>
+        editingEntry
+          ? optimisticUpdate(old, editingEntry.id, optimisticConcept)
+          : optimisticInsert(old, optimisticConcept)
+      );
+
       toast.success(editingEntry ? "Concept updated." : "Concept added to dictionary.");
-      queryClient.invalidateQueries({ queryKey: ["dictionary"] });
       closeModal();
+
+      return { previous, tempId, isEditing: !!editingEntry };
     },
-    onError: (err: any) => toast.error(err.message || "Failed to save entry"),
+    onError: (err: any, _vars: any, context: any) => {
+      if (context?.previous) {
+        for (const [key, val] of context.previous) {
+          queryClient.setQueryData(key, val);
+        }
+      }
+      notifyOptimisticFailure(err, "Failed to save concept.");
+    },
+    onSuccess: (data: any, _vars: any, context: any) => {
+      if (!context?.isEditing && context?.tempId && data?.id) {
+        queryClient.setQueriesData({ queryKey: ["dictionary"] }, (old: any) =>
+          reconcileTempId(old, context.tempId, data)
+        );
+      }
+    },
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: ["dictionary"] });
+    },
   });
 
   const deleteMutation = useMutation({
@@ -125,11 +180,29 @@ export function StrategyDictionarySection({ strategyId, strategyName }: Strategy
       if (!res.ok) throw new Error("Failed to delete concept");
       return res.json();
     },
-    onSuccess: () => {
+    onMutate: async (id: string) => {
+      await queryClient.cancelQueries({ queryKey: ["dictionary"] });
+      const previous = queryClient.getQueriesData({ queryKey: ["dictionary"] });
+
+      queryClient.setQueriesData({ queryKey: ["dictionary"] }, (old: any) =>
+        optimisticDelete(old, id)
+      );
+
       toast.success("Concept removed from dictionary.");
+
+      return { previous };
+    },
+    onError: (err: any, _vars: any, context: any) => {
+      if (context?.previous) {
+        for (const [key, val] of context.previous) {
+          queryClient.setQueryData(key, val);
+        }
+      }
+      notifyOptimisticFailure(err, "Failed to delete concept.");
+    },
+    onSettled: () => {
       queryClient.invalidateQueries({ queryKey: ["dictionary"] });
     },
-    onError: (err: any) => toast.error(err.message || "Failed to delete entry"),
   });
 
   const toggleFavoriteMutation = useMutation({
@@ -142,7 +215,25 @@ export function StrategyDictionarySection({ strategyId, strategyName }: Strategy
       if (!res.ok) throw new Error("Failed to toggle favorite");
       return res.json();
     },
-    onSuccess: () => {
+    onMutate: async ({ id, isFavorite }: { id: string; isFavorite: boolean }) => {
+      await queryClient.cancelQueries({ queryKey: ["dictionary"] });
+      const previous = queryClient.getQueriesData({ queryKey: ["dictionary"] });
+
+      queryClient.setQueriesData({ queryKey: ["dictionary"] }, (old: any) =>
+        optimisticUpdate(old, id, { isFavorite })
+      );
+
+      return { previous };
+    },
+    onError: (err: any, _vars: any, context: any) => {
+      if (context?.previous) {
+        for (const [key, val] of context.previous) {
+          queryClient.setQueryData(key, val);
+        }
+      }
+      notifyOptimisticFailure(err, "Failed to toggle favorite.");
+    },
+    onSettled: () => {
       queryClient.invalidateQueries({ queryKey: ["dictionary"] });
     },
   });
@@ -389,8 +480,15 @@ export function StrategyDictionarySection({ strategyId, strategyName }: Strategy
                       </button>
                       <button
                         type="button"
-                        onClick={() => {
-                          if (confirm(`Delete concept "${entry.term}"?`)) {
+                        onClick={async () => {
+                          const ok = await confirm({
+                            title: "Delete Concept",
+                            description: `Delete concept "${entry.term}"?`,
+                            confirmText: "Delete Concept",
+                            cancelText: "Cancel",
+                            variant: "destructive",
+                          });
+                          if (ok) {
                             deleteMutation.mutate(entry.id);
                           }
                         }}

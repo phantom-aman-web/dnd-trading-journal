@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { notifyOptimisticFailure } from "@/lib/optimistic";
 import {
   Trophy,
   ArrowLeft,
@@ -38,6 +39,7 @@ import { FundedPhaseDetailModal } from "./funded-phase-detail-modal";
 import { useNav } from "@/lib/nav-store";
 import { usePrivacyStore, maskAccountName } from "@/lib/privacy-store";
 import { Button } from "@/components/ui/button";
+import { useConfirm } from "@/components/ui/confirm-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -302,6 +304,7 @@ function RuleSimulatorWidget({
 // ---------------------------------------------------------------------------
 export function PropChallengeDetail({ challengeId, onBack }: PropChallengeDetailProps) {
   const queryClient = useQueryClient();
+  const confirm = useConfirm();
   const { params, navigate } = useNav();
   const { isPrivate } = usePrivacyStore();
 
@@ -375,25 +378,55 @@ export function PropChallengeDetail({ challengeId, onBack }: PropChallengeDetail
       }
       return res.json();
     },
-    onSuccess: (data, variables) => {
-      queryClient.invalidateQueries({ queryKey: ["prop-challenge", challengeId] });
-      queryClient.invalidateQueries({ queryKey: ["prop-challenges"] });
-      if (variables.action === "transition_phase") {
+    onMutate: async (payload: any) => {
+      await queryClient.cancelQueries({ queryKey: ["prop-challenge", challengeId] });
+      await queryClient.cancelQueries({ queryKey: ["prop-challenges"] });
+      const previous = queryClient.getQueryData(["prop-challenge", challengeId]);
+
+      // Optimistically update challenge detail in cache
+      queryClient.setQueryData(["prop-challenge", challengeId], (old: any) => {
+        if (!old) return old;
+        const updated = { ...old, updatedAt: new Date().toISOString() };
+        if (payload.action === "transition_phase") {
+          updated.currentPhase = payload.nextPhase || old.currentPhase;
+        } else if (payload.action === "request_payout") {
+          updated.payouts = [
+            ...(old.payouts || []),
+            { amount: payload.amount, date: new Date().toISOString(), status: "pending" },
+          ];
+        } else if (payload.linkedAccountId !== undefined) {
+          updated.linkedAccountId = payload.linkedAccountId;
+        } else {
+          Object.assign(updated, payload);
+        }
+        return updated;
+      });
+
+      if (payload.action === "transition_phase") {
         toast.success("Successfully transitioned to next phase!");
         setIsTransitionModalOpen(false);
-      } else if (variables.action === "record_firm_rejection") {
+      } else if (payload.action === "record_firm_rejection") {
         toast.warning("Firm rejection investigation recorded.");
         setIsDisputeModalOpen(false);
-      } else if (variables.action === "request_payout") {
+      } else if (payload.action === "request_payout") {
         toast.success("Payout request submitted successfully!");
         setIsPayoutModalOpen(false);
         setPayoutAmount("");
       } else {
         toast.success("Challenge settings updated.");
       }
+
+      return { previous };
     },
-    onError: (err: any) => {
-      toast.error(err.message || "Operation failed");
+    onError: (err: any, _vars: any, context: any) => {
+      if (context?.previous) {
+        queryClient.setQueryData(["prop-challenge", challengeId], context.previous);
+      }
+      notifyOptimisticFailure(err, "Failed to update challenge.");
+    },
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: ["prop-challenge", challengeId] });
+      queryClient.invalidateQueries({ queryKey: ["prop-challenges"] });
     },
   });
 
@@ -1853,8 +1886,15 @@ export function PropChallengeDetail({ challengeId, onBack }: PropChallengeDetail
                   <Button
                     size="sm"
                     disabled={!selectedAccountId || selectedAccountId === challenge.account?.id || patchMutation.isPending}
-                    onClick={() => {
-                      if (confirm(`Switch linked account for "${challenge.name}" to the selected account?`)) {
+                    onClick={async () => {
+                      const ok = await confirm({
+                        title: "Switch Linked Account",
+                        description: `Switch linked account for "${challenge.name}" to the selected account?`,
+                        confirmText: "Switch Account",
+                        cancelText: "Cancel",
+                        variant: "default",
+                      });
+                      if (ok) {
                         patchMutation.mutate({ accountId: selectedAccountId });
                       }
                     }}

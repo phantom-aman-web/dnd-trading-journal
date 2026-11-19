@@ -386,6 +386,7 @@
 
 html, body {
   height: 100%;
+  overscroll-behavior-y: none;
 }
 
 body {
@@ -393,6 +394,12 @@ body {
   color: var(--foreground);
   font-feature-settings: "rlig" 1, "calt" 1, "tnum" 1;
   -webkit-font-smoothing: antialiased;
+}
+
+/* Prevent momentum chaining and elastic bounce dragging past container boundaries */
+.overscroll-y-contain,
+main.overscroll-y-contain {
+  overscroll-behavior-y: contain;
 }
 
 /* Tabular numbers for financial data */
@@ -505,6 +512,10 @@ body {
 }
 
 /* Custom scrollbar */
+.scroll-thin {
+  scrollbar-width: thin;
+  overscroll-behavior-y: contain;
+}
 .scroll-thin::-webkit-scrollbar { width: 8px; height: 8px; }
 .scroll-thin::-webkit-scrollbar-track { background: transparent; }
 .scroll-thin::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }

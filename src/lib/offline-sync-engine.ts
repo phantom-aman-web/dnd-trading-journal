@@ -50,18 +50,57 @@ export const useSyncStore = create<SyncState>((set, get) => ({
 class OfflineSyncEngine {
   private isSyncing = false;
   private currentUserId: string | null = null;
+  private hasSetupListeners = false;
+  private lastFocusCheck = 0;
 
-  init(userId: string) {
-    this.currentUserId = userId;
-    if (typeof window === "undefined") return;
+  setupGlobalListeners() {
+    if (typeof window === "undefined" || this.hasSetupListeners) return;
+    this.hasSetupListeners = true;
+
+    // Detect actual initial status
+    const initialOnline = typeof navigator !== "undefined" ? navigator.onLine : true;
+    useSyncStore.setState({ isOnline: initialOnline });
 
     window.addEventListener("online", () => this.handleNetworkChange(true));
     window.addEventListener("offline", () => this.handleNetworkChange(false));
 
+    // Handle tab regaining focus / visibility
+    const handleVisibility = () => {
+      if (typeof document === "undefined") return;
+      if (document.visibilityState === "visible") {
+        this.handleFocusRecheck();
+      }
+    };
+    document.addEventListener("visibilitychange", handleVisibility);
+    window.addEventListener("focus", () => this.handleFocusRecheck());
+  }
+
+  private handleFocusRecheck() {
+    if (typeof navigator === "undefined") return;
+    const isCurrentlyOnline = typeof navigator.onLine === "boolean" ? navigator.onLine : true;
+    const storeOnline = useSyncStore.getState().isOnline;
+
+    // If connectivity state transitioned while tab was backgrounded or asleep:
+    if (isCurrentlyOnline !== storeOnline) {
+      this.handleNetworkChange(isCurrentlyOnline);
+      return;
+    }
+
+    // If online, do a sensible throttled recheck (at most once every 30 seconds)
+    const now = Date.now();
+    if (isCurrentlyOnline && now - this.lastFocusCheck > 30000) {
+      this.lastFocusCheck = now;
+      this.refreshPendingCount();
+    }
+  }
+
+  init(userId: string) {
+    this.currentUserId = userId;
+    this.setupGlobalListeners();
     this.refreshPendingCount();
 
     // If online on start, process any pending queue
-    if (navigator.onLine) {
+    if (typeof navigator !== "undefined" && navigator.onLine) {
       this.processQueue();
     }
   }
@@ -74,19 +113,24 @@ class OfflineSyncEngine {
   }
 
   async refreshPendingCount() {
-    if (!this.currentUserId) return;
     try {
-      const queue = await offlineDb.getPendingQueue(this.currentUserId);
       const conflicts = await offlineDb.getConflicts();
-      useSyncStore.getState().setPendingCount(queue.length);
       useSyncStore.getState().setConflicts(conflicts);
+
+      const queue = this.currentUserId
+        ? await offlineDb.getPendingQueue(this.currentUserId)
+        : [];
+      useSyncStore.getState().setPendingCount(queue.length);
+
+      const isOnline = typeof navigator !== "undefined" ? navigator.onLine : true;
+      useSyncStore.setState({ isOnline });
 
       if (conflicts.length > 0) {
         useSyncStore.getState().setStatus("conflict");
       } else if (queue.length > 0) {
-        useSyncStore.getState().setStatus(navigator.onLine ? "pending_sync" : "saved_locally");
+        useSyncStore.getState().setStatus(isOnline ? "pending_sync" : "saved_locally");
       } else {
-        useSyncStore.getState().setStatus("synced");
+        useSyncStore.getState().setStatus(isOnline ? "synced" : "saved_locally");
       }
     } catch {
       // Storage unavailable
@@ -94,13 +138,34 @@ class OfflineSyncEngine {
   }
 
   private handleNetworkChange(online: boolean) {
+    const prevOnline = useSyncStore.getState().isOnline;
     useSyncStore.setState({ isOnline: online });
+
     if (online) {
-      toast.info("Connection restored. Synchronizing pending operations...", { duration: 3000 });
-      this.processQueue();
+      // Immediately clear offline mode indicator state
+      const currentConflicts = useSyncStore.getState().conflicts;
+      const currentPending = useSyncStore.getState().pendingCount;
+      if (currentConflicts.length > 0) {
+        useSyncStore.getState().setStatus("conflict");
+      } else if (currentPending > 0) {
+        useSyncStore.getState().setStatus("pending_sync");
+      } else {
+        useSyncStore.getState().setStatus("synced");
+      }
+
+      if (!prevOnline) {
+        toast.info("Connection restored. Synchronizing pending operations...", { duration: 3000 });
+      }
+
+      // Small debounce allowing network adapter to stabilize
+      setTimeout(() => {
+        this.processQueue();
+      }, 300);
     } else {
-      toast.warning("Working in Offline Mode. Actions will be saved locally.", { duration: 4000 });
       useSyncStore.getState().setStatus("saved_locally");
+      if (prevOnline) {
+        toast.warning("Working in Offline Mode. Actions will be saved locally.", { duration: 4000 });
+      }
     }
   }
 
@@ -225,17 +290,42 @@ class OfflineSyncEngine {
   // -------------------------------------------------------------------------
 
   async processQueue() {
-    if (this.isSyncing || !navigator.onLine || !this.currentUserId) return;
+    if (this.isSyncing) return;
+    if (typeof navigator !== "undefined" && !navigator.onLine) {
+      useSyncStore.getState().setStatus("saved_locally");
+      useSyncStore.setState({ isOnline: false });
+      return;
+    }
 
     this.isSyncing = true;
     useSyncStore.getState().setStatus("synchronizing");
 
     try {
       // 1. Check live reachability with ping
-      const pingRes = await fetch("/api/me", { cache: "no-store" }).catch(() => null);
-      if (!pingRes || !pingRes.ok) {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 4000);
+      const pingRes = await fetch("/api/me", { cache: "no-store", signal: controller.signal }).catch(() => null);
+      clearTimeout(timeout);
+
+      // Check if browser went offline during fetch
+      if (typeof navigator !== "undefined" && !navigator.onLine) {
         useSyncStore.getState().setStatus("saved_locally");
-        this.isSyncing = false;
+        useSyncStore.setState({ isOnline: false });
+        return;
+      }
+
+      // If ping failed but navigator.onLine is true, do not reset to saved_locally
+      if (!pingRes || !pingRes.ok) {
+        const queueCount = this.currentUserId
+          ? (await offlineDb.getPendingQueue(this.currentUserId).catch(() => [])).length
+          : 0;
+        useSyncStore.getState().setStatus(queueCount > 0 ? "pending_sync" : "synced");
+        return;
+      }
+
+      if (!this.currentUserId) {
+        useSyncStore.getState().setStatus("synced");
+        useSyncStore.getState().setLastSyncedAt(new Date());
         return;
       }
 
@@ -243,7 +333,6 @@ class OfflineSyncEngine {
       if (queue.length === 0) {
         useSyncStore.getState().setStatus("synced");
         useSyncStore.getState().setLastSyncedAt(new Date());
-        this.isSyncing = false;
         return;
       }
 
@@ -370,3 +459,7 @@ class OfflineSyncEngine {
 
 export const syncEngine = new OfflineSyncEngine();
 export const offlineSyncEngine = syncEngine;
+
+if (typeof window !== "undefined") {
+  syncEngine.setupGlobalListeners();
+}

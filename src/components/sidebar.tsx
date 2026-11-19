@@ -5,6 +5,7 @@ import { useNav, type ViewKey } from "@/lib/nav-store";
 import { useAuth } from "@/lib/auth-store";
 import { useFavorites } from "@/lib/favorites-store";
 import { Button } from "@/components/ui/button";
+import { BrandLogo } from "@/components/brand/brand-logo";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -147,25 +148,20 @@ export function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
       )}
     >
       {/* Header */}
-      <div className="px-3 h-16 flex items-center gap-2.5 border-b border-sidebar-border">
-        <div className="h-9 w-9 rounded-xl bg-gradient-to-br from-indigo-500 via-purple-600 to-indigo-700 flex items-center justify-center text-white font-bold text-sm tracking-wider shadow-md shrink-0 border border-white/10">
-          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="h-5 w-5">
-            <path d="M12 3 L20 20 L15.5 20 L12 11 L8.5 20 L4 20 Z" fill="currentColor" fillOpacity="0.3" />
-            <circle cx="12" cy="8" r="1.5" fill="#10B981" stroke="#10B981" />
-          </svg>
-        </div>
-        {!sidebarCollapsed && (
-          <div className="min-w-0 flex-1">
-            <div className="font-bold text-sm tracking-tight text-sidebar-foreground flex items-center gap-1.5 font-jakarta">
-              <span>AlphaPips</span>
-              <span className="text-[9px] font-mono px-1.5 py-0.2 rounded bg-purple-500/20 text-purple-400 font-semibold border border-purple-500/30">
-                PRO
-              </span>
-            </div>
-            <div className="text-[10px] text-sidebar-foreground/60 leading-none mt-0.5">Performance OS</div>
-          </div>
+      <div
+        className={cn(
+          "h-16 flex items-center border-b border-sidebar-border",
+          sidebarCollapsed ? "justify-center px-2" : "px-3 gap-2.5"
         )}
-        {onNavigate && (
+      >
+        <BrandLogo
+          size="md"
+          collapsed={sidebarCollapsed}
+          showBadge={true}
+          subtitle="Performance OS"
+          className={sidebarCollapsed ? "justify-center" : ""}
+        />
+        {onNavigate && !sidebarCollapsed && (
           <button
             onClick={onNavigate}
             className="md:hidden p-1.5 rounded-md text-muted-foreground/70 hover:text-sidebar-foreground ml-auto"

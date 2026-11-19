@@ -48,6 +48,7 @@ import {
   getTimeframeLabel,
 } from "@/lib/timeframes";
 import { Button } from "@/components/ui/button";
+import { useConfirm } from "@/components/ui/confirm-dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
@@ -256,6 +257,7 @@ function uid(): string {
 
 export function TradeFormView() {
   const { params, navigate } = useNav();
+  const confirm = useConfirm();
   const qc = useQueryClient();
   const editingId = params.id;
 
@@ -1831,8 +1833,15 @@ export function TradeFormView() {
                 variant="outline"
                 size="sm"
                 className="h-7 text-xs bg-background hover:bg-muted"
-                onClick={() => {
-                  if (window.confirm("Are you sure you want to discard this unsaved draft and start fresh? All draft progress will be cleared.")) {
+                onClick={async () => {
+                  const ok = await confirm({
+                    title: "Discard Draft",
+                    description: "Are you sure you want to discard this unsaved draft and start fresh? All draft progress will be cleared.",
+                    confirmText: "Discard Draft",
+                    cancelText: "Keep Draft",
+                    variant: "destructive",
+                  });
+                  if (ok) {
                     discardDraft();
                   }
                 }}
@@ -1887,8 +1896,15 @@ export function TradeFormView() {
                 variant="outline"
                 size="sm"
                 className="flex-1 h-8 text-xs bg-background hover:bg-muted"
-                onClick={() => {
-                  if (window.confirm("Are you sure you want to discard this unsaved draft and start fresh? All draft progress will be cleared.")) {
+                onClick={async () => {
+                  const ok = await confirm({
+                    title: "Discard Draft",
+                    description: "Are you sure you want to discard this unsaved draft and start fresh? All draft progress will be cleared.",
+                    confirmText: "Discard Draft",
+                    cancelText: "Keep Draft",
+                    variant: "destructive",
+                  });
+                  if (ok) {
                     discardDraft();
                   }
                 }}
@@ -2154,9 +2170,16 @@ export function TradeFormView() {
                 type="button"
                 variant="ghost"
                 size="sm"
-                onClick={() => {
+                onClick={async () => {
                   if (autosaveState === "saving" || form.instrumentSymbol || form.plannedEntryPrice) {
-                    if (!window.confirm("Discard current trade entry and return to Trades Log?")) return;
+                    const ok = await confirm({
+                      title: "Discard Trade Entry",
+                      description: "Discard current trade entry and return to Trades Log?",
+                      confirmText: "Discard & Exit",
+                      cancelText: "Continue Editing",
+                      variant: "destructive",
+                    });
+                    if (!ok) return;
                   }
                   navigate("tradesLog");
                 }}

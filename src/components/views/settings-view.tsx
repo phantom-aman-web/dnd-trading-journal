@@ -18,6 +18,7 @@
 
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState, useEffect, useMemo } from "react";
+import { notifyOptimisticFailure } from "@/lib/optimistic";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { InstrumentSelector } from "@/components/common/instrument-selector";
@@ -274,44 +275,60 @@ export function SettingsView() {
   }
 
   async function saveSettings() {
-    const res = await fetch("/api/settings", {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        name,
-        theme,
-        density,
-        largerText,
-        reducedMotion,
-        defaultRiskPct,
-        defaultSession,
-        defaultTimeframe,
-        timezone,
-        dateFormat,
-        timeFormat,
-        weekStartsOn,
-        // Use __none sentinel as null on the API side.
-        defaultAccountId: defaultAccountId === "__none" ? null : defaultAccountId,
-        defaultInstrument: defaultInstrument.trim() || null,
-        maxTradesPerDay: maxTradesPerDay === "" ? null : maxTradesPerDay,
-        dailyLossLimitPct: dailyLossLimitPct.trim() === "" ? null : dailyLossLimitPct,
-        maxRiskPerTradePct:
-          maxRiskPerTradePct.trim() === "" ? null : Number(maxRiskPerTradePct),
-        preferredInstruments: JSON.stringify(preferredInstruments),
-        normalRiskMaxPct: Number(normalRiskMaxPct),
-        warningRiskMaxPct: Number(warningRiskMaxPct),
-        criticalRiskMaxPct: Number(criticalRiskMaxPct),
-      }),
-    });
-    if (res.ok) {
-      toast.success("Settings saved.");
-      setTheme(theme as any);
-      setDensity(density as any);
-      setLargerText(largerText);
-      setReducedMotion(reducedMotion);
+    const payload = {
+      name,
+      theme,
+      density,
+      largerText,
+      reducedMotion,
+      defaultRiskPct,
+      defaultSession,
+      defaultTimeframe,
+      timezone,
+      dateFormat,
+      timeFormat,
+      weekStartsOn,
+      defaultAccountId: defaultAccountId === "__none" ? null : defaultAccountId,
+      defaultInstrument: defaultInstrument.trim() || null,
+      maxTradesPerDay: maxTradesPerDay === "" ? null : maxTradesPerDay,
+      dailyLossLimitPct: dailyLossLimitPct.trim() === "" ? null : dailyLossLimitPct,
+      maxRiskPerTradePct:
+        maxRiskPerTradePct.trim() === "" ? null : Number(maxRiskPerTradePct),
+      preferredInstruments: JSON.stringify(preferredInstruments),
+      normalRiskMaxPct: Number(normalRiskMaxPct),
+      warningRiskMaxPct: Number(warningRiskMaxPct),
+      criticalRiskMaxPct: Number(criticalRiskMaxPct),
+    };
+
+    // Snapshot previous settings
+    const prevSettings = qc.getQueryData(["settings"]);
+
+    // Optimistically update theme and DOM preferences immediately
+    setTheme(theme as any);
+    setDensity(density as any);
+    setLargerText(largerText);
+    setReducedMotion(reducedMotion);
+    qc.setQueryData(["settings"], (old: any) => ({ ...old, ...payload }));
+
+    toast.success("Settings saved.");
+
+    try {
+      const res = await fetch("/api/settings", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+
+      if (!res.ok) {
+        throw new Error("Failed to save settings.");
+      }
+
       qc.invalidateQueries({ queryKey: ["settings"] });
-    } else {
-      toast.error("Failed to save settings.");
+    } catch (err: any) {
+      if (prevSettings) {
+        qc.setQueryData(["settings"], prevSettings);
+      }
+      notifyOptimisticFailure(err, "Failed to save settings.");
     }
   }
 

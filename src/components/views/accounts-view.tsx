@@ -27,6 +27,15 @@ import { formatSignedCents } from "@/lib/money";
 import { PrivacyMask } from "@/components/common/privacy-mask";
 import { useNavStore } from "@/lib/nav-store";
 import { useAuth } from "@/lib/auth-store";
+import { useConfirm } from "@/components/ui/confirm-dialog";
+import {
+  generateTempId,
+  optimisticInsert,
+  optimisticUpdate,
+  optimisticDelete,
+  reconcileTempId,
+  notifyOptimisticFailure,
+} from "@/lib/optimistic";
 
 /* ------------------------------------------------------------------ */
 /* Types & constants                                                   */
@@ -117,6 +126,7 @@ async function fetchTrades(): Promise<TradeRow[]> {
 
 export function AccountsView() {
   const qc = useQueryClient();
+  const confirm = useConfirm();
   const { user } = useAuth();
   const navigate = useNavStore((s) => s.navigate);
   const selectedAccountId = useNavStore((s) => s.selectedAccountId);
@@ -426,28 +436,49 @@ export function AccountsView() {
                             ? `Delete "${a.name}" and all ${tradesCount} trade${tradesCount === 1 ? "" : "s"} linked to it? This action cannot be undone.`
                             : `Delete "${a.name}"? This action cannot be undone.`;
 
-                        if (!confirm(message)) return;
+                        const ok = await confirm({
+                          title: "Delete Trading Account",
+                          description: message,
+                          confirmText: "Delete Account",
+                          cancelText: "Cancel",
+                          variant: "destructive",
+                        });
+                        if (!ok) return;
 
-                        const url = `/api/accounts/${a.id}${tradesCount > 0 ? "?cascade=true" : ""}`;
-                        const res = await fetch(url, { method: "DELETE" });
-                        if (res.ok) {
-                          toast.success(
-                            tradesCount > 0
-                              ? `Account and ${tradesCount} linked trade${tradesCount === 1 ? "" : "s"} deleted.`
-                              : "Account deleted.",
-                          );
-                          if (selectedAccountId === a.id) {
-                            setSelectedAccountId("");
+                        // Optimistic deletion
+                        const prevAccounts = qc.getQueryData(["accounts", user?.id]);
+                        qc.setQueryData(["accounts", user?.id], (old: any) =>
+                          optimisticDelete(old, a.id)
+                        );
+                        if (selectedAccountId === a.id) {
+                          setSelectedAccountId("");
+                        }
+                        toast.success(
+                          tradesCount > 0
+                            ? `Account and ${tradesCount} linked trade${tradesCount === 1 ? "" : "s"} deleted.`
+                            : "Account deleted."
+                        );
+
+                        try {
+                          const url = `/api/accounts/${a.id}${tradesCount > 0 ? "?cascade=true" : ""}`;
+                          const res = await fetch(url, { method: "DELETE" });
+                          if (!res.ok) {
+                            const d = await res.json().catch(() => null);
+                            throw new Error(d?.error ?? "Failed to delete account.");
                           }
-                          await qc.invalidateQueries({ queryKey: ["accounts"] });
-                          await qc.invalidateQueries({ queryKey: ["trades"] });
-                          await qc.invalidateQueries({ queryKey: ["dashboard"] });
-                          await qc.invalidateQueries({ queryKey: ["analytics"] });
-                          await qc.invalidateQueries({ queryKey: ["calendar"] });
-                          await qc.invalidateQueries({ queryKey: ["prop-challenges"] });
-                        } else {
-                          const d = await res.json().catch(() => null);
-                          toast.error(d?.error ?? "Failed to delete account.");
+                          await Promise.all([
+                            qc.invalidateQueries({ queryKey: ["accounts"] }),
+                            qc.invalidateQueries({ queryKey: ["trades"] }),
+                            qc.invalidateQueries({ queryKey: ["dashboard"] }),
+                            qc.invalidateQueries({ queryKey: ["analytics"] }),
+                            qc.invalidateQueries({ queryKey: ["calendar"] }),
+                            qc.invalidateQueries({ queryKey: ["prop-challenges"] }),
+                          ]);
+                        } catch (err: any) {
+                          if (prevAccounts) {
+                            qc.setQueryData(["accounts", user?.id], prevAccounts);
+                          }
+                          notifyOptimisticFailure(err, "Failed to delete account.");
                         }
                       }}
                       className="p-1.5 rounded text-muted-foreground/70 hover:text-loss hover:bg-background transition-colors"
@@ -700,6 +731,8 @@ function AccountDialog({
   account,
   onSaved,
 }: AccountDialogProps) {
+  const qc = useQueryClient();
+  const { user } = useAuth();
   const isEdit = !!account;
 
   const [name, setName] = useState("");
@@ -755,6 +788,7 @@ function AccountDialog({
       return;
     }
     setLoading(true);
+    const startingBalanceCents = Math.round(balanceNum * 100);
     const payload: Record<string, unknown> = {
       name: name.trim(),
       broker: broker.trim() || null,
@@ -764,8 +798,39 @@ function AccountDialog({
       dailyLossLimitPct: dailyLossLimitPct === "" ? null : Number(dailyLossLimitPct),
       maxDrawdownPct: maxDrawdownPct === "" ? null : Number(maxDrawdownPct),
       isDefault,
-      startingBalanceCents: Math.round(balanceNum * 100),
+      startingBalanceCents,
     };
+
+    const prevAccounts = qc.getQueryData(["accounts", user?.id]);
+    const tempId = generateTempId("account");
+    const optimisticAccount: TradingAccount = {
+      id: isEdit ? account!.id : tempId,
+      name: name.trim(),
+      broker: broker.trim() || null,
+      accountType,
+      currency,
+      consistencyRate: consistencyRate === "" ? null : Number(consistencyRate),
+      dailyLossLimitPct: dailyLossLimitPct === "" ? null : Number(dailyLossLimitPct),
+      maxDrawdownPct: maxDrawdownPct === "" ? null : Number(maxDrawdownPct),
+      isDefault,
+      startingBalanceCents,
+      currentBalanceCents: isEdit ? (account?.currentBalanceCents ?? startingBalanceCents) : startingBalanceCents,
+      createdAt: isEdit ? (account?.createdAt || new Date().toISOString()) : new Date().toISOString(),
+    };
+
+    if (isEdit) {
+      qc.setQueryData(["accounts", user?.id], (old: any) =>
+        optimisticUpdate(old, account!.id, optimisticAccount)
+      );
+      toast.success("Account updated.");
+    } else {
+      qc.setQueryData(["accounts", user?.id], (old: any) =>
+        optimisticInsert(old, optimisticAccount)
+      );
+      toast.success("Account created.");
+    }
+
+    onSaved();
 
     try {
       const res = isEdit
@@ -780,15 +845,23 @@ function AccountDialog({
             body: JSON.stringify(payload),
           });
 
-      if (res.ok) {
-        toast.success(isEdit ? "Account updated." : "Account created.");
-        onSaved();
-      } else {
+      if (!res.ok) {
         const d = await res.json().catch(() => null);
-        toast.error(d?.error ?? `Failed to ${isEdit ? "update" : "create"} account.`);
+        throw new Error(d?.error ?? `Failed to ${isEdit ? "update" : "create"} account.`);
       }
-    } catch {
-      toast.error("Network error");
+
+      const serverData = await res.json();
+      if (!isEdit && serverData?.id) {
+        qc.setQueryData(["accounts", user?.id], (old: any) =>
+          reconcileTempId(old, tempId, serverData)
+        );
+      }
+      await qc.invalidateQueries({ queryKey: ["accounts"] });
+    } catch (err: any) {
+      if (prevAccounts) {
+        qc.setQueryData(["accounts", user?.id], prevAccounts);
+      }
+      notifyOptimisticFailure(err, `Failed to ${isEdit ? "update" : "create"} account.`);
     } finally {
       setLoading(false);
     }

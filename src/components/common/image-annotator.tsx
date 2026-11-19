@@ -42,6 +42,7 @@ import {
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { useConfirm } from "@/components/ui/confirm-dialog";
 
 export type AnnotationKind =
   | "line"
@@ -128,6 +129,7 @@ export function ImageAnnotator({
   onChange,
   className,
 }: ImageAnnotatorProps) {
+  const confirm = useConfirm();
   const [tool, setTool] = useState<Tool>("select");
   const [color, setColor] = useState<string>(COLORS[0]);
   const [strokeWidth, setStrokeWidth] = useState<number>(2);
@@ -163,9 +165,16 @@ export function ImageAnnotator({
     setSelectedId(null);
   }
 
-  function clearAll() {
+  async function clearAll() {
     if (annotations.length === 0) return;
-    if (!window.confirm("Clear all annotations from this image?")) return;
+    const ok = await confirm({
+      title: "Clear Annotations",
+      description: "Clear all annotations from this image?",
+      confirmText: "Clear All",
+      cancelText: "Cancel",
+      variant: "destructive",
+    });
+    if (!ok) return;
     setHistory((h) => [...h, annotations]);
     setRedoHistory([]);
     onChange([]);

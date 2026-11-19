@@ -2,6 +2,11 @@
 
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import {
+  optimisticDelete,
+  optimisticUpdate,
+  notifyOptimisticFailure,
+} from "@/lib/optimistic";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -65,12 +70,32 @@ export function NoTradesView() {
       if (!res.ok) throw new Error("Failed to archive observation");
       return res.json();
     },
-    onSuccess: (_, vars) => {
-      toast.success(vars.action === "archive" ? "Observation archived." : "Observation restored.");
-      queryClient.invalidateQueries({ queryKey: ["no-trades"] });
+    onMutate: async ({ id, action }) => {
+      await queryClient.cancelQueries({ queryKey: ["no-trades"] });
+      const previous = queryClient.getQueriesData({ queryKey: ["no-trades"] });
+
+      queryClient.setQueriesData({ queryKey: ["no-trades"] }, (old: any) =>
+        action === "archive"
+          ? optimisticDelete(old, id)
+          : optimisticUpdate(old, id, { isArchived: false })
+      );
+
+      toast.success(action === "archive" ? "Observation archived." : "Observation restored.");
       setSelectedEntry(null);
+
+      return { previous };
     },
-    onError: (err: any) => toast.error(err.message || "Failed to update archive status"),
+    onError: (err: any, _vars, context) => {
+      if (context?.previous) {
+        for (const [key, val] of context.previous) {
+          queryClient.setQueryData(key, val);
+        }
+      }
+      notifyOptimisticFailure(err, "Failed to update observation.");
+    },
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: ["no-trades"] });
+    },
   });
 
   const items: any[] = data?.items || [];

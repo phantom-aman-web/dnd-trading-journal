@@ -23,7 +23,7 @@ export function SyncStatusIndicator() {
 
   const isSyncing = status === "synchronizing";
   const hasConflict = status === "conflict" || conflicts.length > 0;
-  const isOffline = !isOnline || status === "saved_locally";
+  const isOffline = !isOnline;
 
   return (
     <div className="relative">

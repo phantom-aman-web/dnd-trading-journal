@@ -6,6 +6,7 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/co
 import { Menu, ArrowRight, Sparkles, ChevronRight } from "lucide-react";
 import { useNav } from "@/lib/nav-store";
 import { cn } from "@/lib/utils";
+import { BrandLogo } from "@/components/brand/brand-logo";
 
 interface PublicHeaderProps {
   className?: string;
@@ -59,34 +60,10 @@ export function PublicHeader({ className }: PublicHeaderProps) {
         {/* Brand Logo */}
         <button
           onClick={() => scrollToSection("hero")}
-          className="flex items-center gap-2.5 shrink-0 group focus:outline-none"
+          className="focus:outline-none"
           aria-label="AlphaPips Home"
         >
-          <div className="h-9 w-9 rounded-xl bg-gradient-to-br from-blue-600 via-cyan-500 to-blue-700 p-0.5 shadow-lg shadow-blue-900/30 ring-1 ring-white/20 transition-transform duration-200 group-hover:scale-105">
-            <div className="w-full h-full bg-[#0B1021] rounded-[10px] flex items-center justify-center">
-              <svg
-                xmlns="http://www.w3.org/2000/svg"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2.3"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                className="h-5 w-5 text-cyan-300"
-              >
-                <path d="M12 3 L20 20 L15.5 20 L12 11 L8.5 20 L4 20 Z" fill="currentColor" fillOpacity="0.25" />
-                <circle cx="12" cy="8" r="1.6" fill="#10B981" stroke="#10B981" />
-              </svg>
-            </div>
-          </div>
-          <div className="flex items-center gap-1.5 text-left">
-            <span className="font-bold text-lg tracking-tight text-white font-[family-name:var(--font-jakarta)]">
-              AlphaPips
-            </span>
-            <span className="text-[10px] font-mono font-semibold uppercase px-1.5 py-0.5 rounded-full bg-cyan-500/15 text-cyan-300 border border-cyan-500/30">
-              PRO
-            </span>
-          </div>
+          <BrandLogo size="md" showBadge={true} interactive={true} />
         </button>
 
         {/* Center Desktop Navigation */}
@@ -142,21 +119,8 @@ export function PublicHeader({ className }: PublicHeaderProps) {
             </SheetTrigger>
             <SheetContent side="right" className="w-80 bg-[#070B18] border-l border-white/10 text-white p-6">
               <SheetHeader className="text-left pb-4 border-b border-white/10">
-                <SheetTitle className="flex items-center gap-2 text-white">
-                  <div className="h-8 w-8 rounded-lg bg-blue-600 flex items-center justify-center text-white">
-                    <svg
-                      xmlns="http://www.w3.org/2000/svg"
-                      viewBox="0 0 24 24"
-                      fill="none"
-                      stroke="currentColor"
-                      strokeWidth="2.3"
-                      className="h-4 w-4 text-white"
-                    >
-                      <path d="M12 3 L20 20 L15.5 20 L12 11 L8.5 20 L4 20 Z" fill="currentColor" fillOpacity="0.25" />
-                      <circle cx="12" cy="8" r="1.6" fill="#10B981" stroke="#10B981" />
-                    </svg>
-                  </div>
-                  <span className="font-bold tracking-tight">AlphaPips</span>
+                <SheetTitle className="text-white">
+                  <BrandLogo size="sm" showBadge={true} />
                 </SheetTitle>
               </SheetHeader>
 

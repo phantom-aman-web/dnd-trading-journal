@@ -26,6 +26,24 @@ export type ViewKey =
   | "privacy"
   | "cookies";
 
+export const ALL_APP_VIEWS: ViewKey[] = [
+  "dashboard",
+  "tradesLog",
+  "tradeDetail",
+  "tradeNew",
+  "calendar",
+  "analytics",
+  "setups",
+  "accounts",
+  "propChallenges",
+  "riskCalculator",
+  "tradingTodo",
+  "archived",
+  "settings",
+  "backup",
+  "noTrades",
+];
+
 interface NavState {
   view: ViewKey;
   params: Record<string, string>;
