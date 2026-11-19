@@ -1,12 +1,27 @@
 import { NextRequest, NextResponse } from "next/server";
+import crypto from "crypto";
 import { db } from "@/lib/db";
 import { sendMessage, answerCallbackQuery } from "@/lib/telegram/bot-api";
 import { decryptBotToken } from "@/lib/telegram/encryption";
 import { cancelTaskReminders } from "@/lib/telegram/delivery-engine";
 
+export const dynamic = "force-dynamic";
+
+function safeCompare(a?: string | null, b?: string | null): boolean {
+  if (!a || !b) return false;
+  const bufA = Buffer.from(a);
+  const bufB = Buffer.from(b);
+  if (bufA.length !== bufB.length) return false;
+  return crypto.timingSafeEqual(bufA, bufB);
+}
+
+export async function GET(_req: NextRequest) {
+  return NextResponse.json({ ok: true, status: "webhook_endpoint_ready" });
+}
+
 export async function POST(req: NextRequest) {
   try {
-    const secretTokenHeader = req.headers.get("x-telegram-bot-api-secret-token");
+    const secretTokenHeader = req.headers.get("x-telegram-bot-api-secret-token")?.trim();
     const json: any = await req.json().catch(() => null);
 
     if (!json || typeof json !== "object") {
@@ -31,52 +46,86 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ ok: true, duplicate: true });
     }
 
-    // ── CASE 1: MESSAGE (e.g. /start <token>) ──────────────────────
+    // ── CASE 1: MESSAGE (e.g. /start or /start <token>) ─────────────
     if (json.message) {
       const msg = json.message;
       const text: string = (msg.text || "").trim();
       const chatId = String(msg.chat?.id);
+      const chatType = msg.chat?.type;
       const chatUsername = msg.from?.username || msg.chat?.username || null;
       const firstName = msg.from?.first_name || msg.chat?.first_name || null;
 
-      if (text.startsWith("/start")) {
-        const parts = text.split(/\s+/);
-        const linkingToken = parts[1]?.trim();
+      // Regex matching:
+      // /start
+      // /start TOKEN
+      // /start@BotUsername
+      // /start@BotUsername TOKEN
+      // handles multiple spaces, leading/trailing whitespace
+      const startMatch = text.match(/^\/start(?:@\w+)?(?:\s+([a-zA-Z0-9_-]+))?$/i);
 
+      if (startMatch) {
+        // Enforce private chat verification: never link a group or channel
+        if (chatType !== "private") {
+          return NextResponse.json({ ok: true, ignored: "non_private_chat" });
+        }
+
+        const linkingToken = startMatch[1]?.trim();
+
+        // 1. User sent /start WITH a token
         if (linkingToken) {
-          // Look up integration by linkingToken
           const integration = await db.telegramIntegration.findFirst({
+            where: { linkingToken },
+          });
+
+          if (!integration) {
+            // Token invalid or already consumed
+            return NextResponse.json({ ok: true, reason: "invalid_or_consumed_token" });
+          }
+
+          // Validate webhook secret if configured on this integration
+          if (integration.webhookSecret && secretTokenHeader) {
+            if (!safeCompare(secretTokenHeader, integration.webhookSecret)) {
+              return NextResponse.json({ error: "Unauthorized webhook secret" }, { status: 401 });
+            }
+          }
+
+          // Check if token expired
+          if (integration.linkingTokenExpiresAt && new Date() > integration.linkingTokenExpiresAt) {
+            try {
+              const botToken = decryptBotToken(
+                integration.encryptedBotToken,
+                integration.botTokenIv,
+                integration.botTokenTag
+              );
+              await sendMessage(
+                botToken,
+                chatId,
+                `⚠️ <b>Linking Link Expired</b>\n\nThis linking token has expired (linking links are valid for 15 minutes). Please return to AlphaPips <b>Settings → Telegram</b> and click <b>Link Personal Telegram</b> to generate a fresh link.`
+              );
+            } catch {}
+            return NextResponse.json({ ok: true, reason: "token_expired" });
+          }
+
+          // Atomically link the private chat and consume the single-use token
+          const updated = await db.telegramIntegration.updateMany({
             where: {
+              id: integration.id,
               linkingToken,
               linkingTokenExpiresAt: { gt: new Date() },
             },
+            data: {
+              privateChatId: chatId,
+              privateChatUsername: chatUsername,
+              privateFirstName: firstName,
+              isPrivateLinked: true,
+              privateLinkedAt: new Date(),
+              linkingToken: null, // atomically consume single-use token
+              linkingTokenExpiresAt: null,
+              lastError: null,
+            },
           });
 
-          if (integration) {
-            // Verify webhook secret if configured
-            if (
-              integration.webhookSecret &&
-              secretTokenHeader &&
-              integration.webhookSecret !== secretTokenHeader
-            ) {
-              return NextResponse.json({ error: "Unauthorized webhook secret" }, { status: 401 });
-            }
-
-            // Link private chat to AlphaPips user
-            await db.telegramIntegration.update({
-              where: { id: integration.id },
-              data: {
-                privateChatId: chatId,
-                privateChatUsername: chatUsername,
-                privateFirstName: firstName,
-                isPrivateLinked: true,
-                privateLinkedAt: new Date(),
-                linkingToken: null, // Consume single-use token
-                linkingTokenExpiresAt: null,
-              },
-            });
-
-            // Send confirmation message to user's Telegram chat
+          if (updated.count > 0) {
             try {
               const botToken = decryptBotToken(
                 integration.encryptedBotToken,
@@ -84,11 +133,51 @@ export async function POST(req: NextRequest) {
                 integration.botTokenTag
               );
 
-              const welcomeText = `✅ <b>AlphaPips Private Reminders Connected!</b>\n\nWelcome, <b>${firstName || "Trader"}</b>! Your Telegram chat is now linked to your AlphaPips account.\n\nYou will receive personal notifications and reminders for your <b>Trading To-Do</b> tasks directly in this chat.`;
+              const welcomeText = `✅ <b>AlphaPips Private Reminders Connected!</b>\n\nWelcome, <b>${firstName || "Trader"}</b>! Your Telegram chat is now linked to your AlphaPips account.\n\nYou will receive personal notifications and reminders for your <b>Trading To-Do</b> tasks directly in this chat, with interactive buttons to mark them complete or snooze.`;
 
               await sendMessage(botToken, chatId, welcomeText);
             } catch (msgErr) {
               console.warn("Could not send Telegram welcome message:", msgErr);
+            }
+          }
+        }
+
+        // 2. User sent /start WITHOUT a token
+        else {
+          const alreadyLinked = await db.telegramIntegration.findFirst({
+            where: { privateChatId: chatId, isPrivateLinked: true },
+          });
+
+          if (alreadyLinked) {
+            try {
+              const botToken = decryptBotToken(
+                alreadyLinked.encryptedBotToken,
+                alreadyLinked.botTokenIv,
+                alreadyLinked.botTokenTag
+              );
+              await sendMessage(
+                botToken,
+                chatId,
+                `✅ <b>AlphaPips Reminders Active</b>\n\nYour Telegram chat is already linked to AlphaPips (@${alreadyLinked.botUsername || "bot"}). Scheduled Trading To-Do reminders will arrive here automatically.`
+              );
+            } catch {}
+          } else {
+            const anyIntegration = await db.telegramIntegration.findFirst({
+              where: { botId: { not: null } },
+            });
+            if (anyIntegration) {
+              try {
+                const botToken = decryptBotToken(
+                  anyIntegration.encryptedBotToken,
+                  anyIntegration.botTokenIv,
+                  anyIntegration.botTokenTag
+                );
+                await sendMessage(
+                  botToken,
+                  chatId,
+                  `👋 <b>Welcome to AlphaPips!</b>\n\nTo link this private chat for <b>Trading To-Do</b> reminders:\n1. Open AlphaPips in your browser\n2. Go to <b>Settings → Telegram</b>\n3. Click <b>Link Personal Telegram</b> and tap the generated link.\n\nOnce linked, personal task notifications will be delivered here.`
+                );
+              } catch {}
             }
           }
         }
@@ -109,6 +198,13 @@ export async function POST(req: NextRequest) {
 
       if (!integration) {
         return NextResponse.json({ ok: true });
+      }
+
+      // Validate webhook secret if configured
+      if (integration.webhookSecret && secretTokenHeader) {
+        if (!safeCompare(secretTokenHeader, integration.webhookSecret)) {
+          return NextResponse.json({ error: "Unauthorized webhook secret" }, { status: 401 });
+        }
       }
 
       let botToken: string | null = null;

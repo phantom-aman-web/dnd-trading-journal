@@ -36,6 +36,7 @@ import {
   HelpCircle,
   Copy,
   Check,
+  Activity,
 } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
@@ -103,16 +104,23 @@ export function TelegramSettingsTab() {
     refetchInterval: 10000,
   });
 
-  // Deep Link Query (for polling private chat linking state)
+  // Deep Link Query (for polling private chat linking state with cache-busting)
   const { data: linkState, refetch: pollLinkState } = useQuery({
     queryKey: ["telegram-link-token"],
     queryFn: async () => {
-      const res = await fetch("/api/telegram/link-token");
+      const res = await fetch(`/api/telegram/link-token?t=${Date.now()}`, {
+        cache: "no-store",
+        headers: { "Cache-Control": "no-cache" },
+      });
       if (!res.ok) return null;
       return res.json();
     },
     enabled: linkModalOpen && !connection?.isPrivateLinked,
-    refetchInterval: linkModalOpen && !connection?.isPrivateLinked ? 2500 : false,
+    refetchInterval: (query: any) => {
+      if (!linkModalOpen || connection?.isPrivateLinked) return false;
+      if (query.state.data?.expired) return false;
+      return 2000;
+    },
   });
 
   // When link is verified, close modal and show toast
@@ -243,8 +251,38 @@ export function TelegramSettingsTab() {
     },
   });
 
+  const syncWebhookMutation = useMutation({
+    mutationFn: async () => {
+      const res = await fetch("/api/telegram/connection", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "sync_webhook" }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Failed to sync webhook");
+      return data;
+    },
+    onSuccess: (data) => {
+      toast.success(
+        data.webhookUrl
+          ? "Telegram webhook registered & synchronized successfully!"
+          : "Webhook updated successfully!"
+      );
+      queryClient.invalidateQueries({ queryKey: ["telegram-connection"] });
+    },
+    onError: (err: any) => {
+      toast.error(err.message);
+    },
+  });
+
   // Modal linking handler
-  const [linkingPayload, setLinkingPayload] = useState<{ deepLink: string; token: string } | null>(null);
+  const [linkingPayload, setLinkingPayload] = useState<{
+    deepLink: string;
+    token: string;
+    webhookRegistered?: boolean;
+    webhookError?: string | null;
+  } | null>(null);
+
   const startPrivateLinking = async () => {
     try {
       const res = await fetch("/api/telegram/link-token", { method: "POST" });
@@ -252,6 +290,7 @@ export function TelegramSettingsTab() {
       if (!res.ok) throw new Error(data.error || "Failed to generate link");
       setLinkingPayload(data);
       setLinkModalOpen(true);
+      queryClient.invalidateQueries({ queryKey: ["telegram-connection"] });
       pollLinkState();
     } catch (err: any) {
       toast.error(err.message);
@@ -475,6 +514,74 @@ export function TelegramSettingsTab() {
             )}
           </div>
         </div>
+
+        {/* Webhook Health & Diagnostics Bar */}
+        {connection?.botConnected && (
+          <div className="rounded-md border border-border/80 bg-muted/10 p-4 space-y-3">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+              <div className="flex items-center gap-2">
+                <Activity className="h-4 w-4 text-sky-500" />
+                <span className="text-xs font-semibold text-foreground">Telegram Inbound Webhook Health</span>
+              </div>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => syncWebhookMutation.mutate()}
+                disabled={syncWebhookMutation.isPending}
+                className="text-[11px] h-7 gap-1.5"
+              >
+                <RefreshCw className={cn("h-3 w-3", syncWebhookMutation.isPending && "animate-spin")} />
+                Sync Webhook
+              </Button>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3 text-xs">
+              <div className="p-2.5 rounded border border-border/60 bg-background/50">
+                <div className="text-[11px] text-muted-foreground">Webhook Status</div>
+                <div className="font-medium mt-0.5 flex items-center gap-1.5">
+                  {connection?.webhookInfo?.registered ? (
+                    <span className="text-emerald-500 flex items-center gap-1">
+                      <CheckCircle2 className="h-3.5 w-3.5" /> Registered
+                    </span>
+                  ) : (
+                    <span className="text-amber-500 flex items-center gap-1">
+                      <AlertCircle className="h-3.5 w-3.5" /> Not Registered
+                    </span>
+                  )}
+                </div>
+              </div>
+
+              <div className="p-2.5 rounded border border-border/60 bg-background/50">
+                <div className="text-[11px] text-muted-foreground">Pending Updates</div>
+                <div className="font-medium mt-0.5 text-foreground">
+                  {connection?.webhookInfo?.pendingUpdateCount ?? 0} updates
+                </div>
+              </div>
+
+              <div className="p-2.5 rounded border border-border/60 bg-background/50 sm:col-span-2">
+                <div className="text-[11px] text-muted-foreground">Registered Endpoint</div>
+                <div className="font-mono text-[11px] text-foreground truncate mt-0.5">
+                  {connection?.webhookInfo?.url || (connection?.webhookBaseUrl ? `${connection.webhookBaseUrl}/api/telegram/webhook` : "None configured")}
+                </div>
+              </div>
+            </div>
+
+            {connection?.webhookInfo?.lastErrorMessage && (
+              <div className="p-2.5 rounded border border-destructive/30 bg-destructive/10 text-xs text-destructive flex items-start gap-2">
+                <AlertCircle className="h-4 w-4 shrink-0 mt-0.5" />
+                <div>
+                  <span className="font-semibold">Telegram Reported Webhook Error: </span>
+                  <span>{connection.webhookInfo.lastErrorMessage}</span>
+                  {connection.webhookInfo.lastErrorDate && (
+                    <span className="text-[10px] block text-muted-foreground mt-0.5">
+                      Reported at: {new Date(connection.webhookInfo.lastErrorDate).toLocaleString()}
+                    </span>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
       {/* ── 2. TRADE PUBLISHING CONTROLS ─────────────────────────────────── */}
@@ -1013,10 +1120,50 @@ export function TelegramSettingsTab() {
               </div>
             )}
 
-            <div className="flex items-center justify-center gap-2 text-xs text-muted-foreground pt-1">
-              <RefreshCw className="h-3.5 w-3.5 animate-spin text-primary" />
-              <span>Waiting for /start command...</span>
-            </div>
+            {/* Webhook Not Registered Notice */}
+            {connection?.webhookInfo && !connection.webhookInfo.registered && (
+              <div className="rounded-md border border-amber-500/30 bg-amber-500/10 p-3 text-xs space-y-2">
+                <div className="flex items-center gap-1.5 font-medium text-amber-500">
+                  <AlertCircle className="h-4 w-4 shrink-0" />
+                  <span>Webhook Not Registered on Telegram</span>
+                </div>
+                <p className="text-[11px] text-muted-foreground">
+                  Telegram cannot deliver your <code>/start</code> message because no public HTTPS webhook is registered.
+                </p>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => syncWebhookMutation.mutate()}
+                  disabled={syncWebhookMutation.isPending}
+                  className="w-full text-xs h-7 border-amber-500/40 text-amber-500 hover:bg-amber-500/20"
+                >
+                  {syncWebhookMutation.isPending ? <RefreshCw className="h-3 w-3 animate-spin mr-1.5" /> : null}
+                  Register Webhook Now
+                </Button>
+              </div>
+            )}
+
+            {/* Waiting vs Expired State */}
+            {linkState?.expired ? (
+              <div className="rounded-md border border-destructive/30 bg-destructive/10 p-3 text-center space-y-2">
+                <p className="text-xs font-medium text-destructive">
+                  This linking session has expired (15m limit).
+                </p>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={startPrivateLinking}
+                  className="text-xs h-7"
+                >
+                  Generate Fresh Link
+                </Button>
+              </div>
+            ) : (
+              <div className="flex items-center justify-center gap-2 text-xs text-muted-foreground pt-1">
+                <RefreshCw className="h-3.5 w-3.5 animate-spin text-primary" />
+                <span>Waiting for /start command...</span>
+              </div>
+            )}
           </div>
         </DialogContent>
       </Dialog>

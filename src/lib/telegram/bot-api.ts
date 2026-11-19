@@ -363,17 +363,31 @@ export async function sendMediaGroup(
   return makeTelegramRequest<TelegramMessage[]>(token, "sendMediaGroup", formData, true);
 }
 
+export interface TelegramWebhookInfo {
+  url: string;
+  has_custom_certificate: boolean;
+  pending_update_count: number;
+  ip_address?: string;
+  last_error_date?: number;
+  last_error_message?: string;
+  last_synchronization_error_date?: number;
+  max_connections?: number;
+  allowed_updates?: string[];
+}
+
 /**
  * Registers an HTTPS webhook URL with Telegram.
  */
 export async function setWebhook(
   token: string,
   webhookUrl: string,
-  secretToken?: string
+  secretToken?: string,
+  dropPendingUpdates = false
 ): Promise<boolean> {
   const payload: any = {
     url: webhookUrl,
     allowed_updates: ["message", "callback_query"],
+    drop_pending_updates: dropPendingUpdates,
   };
   if (secretToken) {
     payload.secret_token = secretToken;
@@ -382,10 +396,93 @@ export async function setWebhook(
 }
 
 /**
+ * Retrieves current webhook status and diagnostics from Telegram Bot API.
+ */
+export async function getWebhookInfo(token: string): Promise<TelegramWebhookInfo> {
+  return makeTelegramRequest<TelegramWebhookInfo>(token, "getWebhookInfo");
+}
+
+/**
  * Deletes the configured webhook.
  */
 export async function deleteWebhook(token: string): Promise<boolean> {
   return makeTelegramRequest<boolean>(token, "deleteWebhook");
+}
+
+/**
+ * Resolves the public HTTPS base URL for Telegram webhooks.
+ * Priority:
+ * 1. TELEGRAM_WEBHOOK_BASE_URL (explicitly configured custom domain or Vercel URL)
+ * 2. NEXT_PUBLIC_APP_URL
+ * 3. VERCEL_PROJECT_PRODUCTION_URL (Vercel production custom/main domain)
+ * 4. VERCEL_URL (Vercel deployment host)
+ */
+export function resolveWebhookBaseUrl(): string | null {
+  const custom = process.env.TELEGRAM_WEBHOOK_BASE_URL?.trim();
+  if (custom && custom.startsWith("https://")) {
+    return custom.replace(/\/+$/, "");
+  }
+
+  const appUrl = process.env.NEXT_PUBLIC_APP_URL?.trim();
+  if (appUrl && appUrl.startsWith("https://")) {
+    return appUrl.replace(/\/+$/, "");
+  }
+
+  const vercelProd = process.env.VERCEL_PROJECT_PRODUCTION_URL?.trim();
+  if (vercelProd) {
+    const clean = vercelProd.replace(/^https?:\/\//, "").replace(/\/+$/, "");
+    return `https://${clean}`;
+  }
+
+  const vercelUrl = process.env.VERCEL_URL?.trim();
+  if (vercelUrl) {
+    const clean = vercelUrl.replace(/^https?:\/\//, "").replace(/\/+$/, "");
+    return `https://${clean}`;
+  }
+
+  return null;
+}
+
+/**
+ * Ensures that the webhook is registered with Telegram using the production HTTPS URL.
+ * Checks current registration to avoid redundant resets, and preserves pending updates.
+ */
+export async function ensureWebhookRegistered(
+  botToken: string,
+  webhookSecret: string
+): Promise<{
+  success: boolean;
+  webhookUrl?: string;
+  error?: string;
+  skipped?: boolean;
+}> {
+  const baseUrl = resolveWebhookBaseUrl();
+  if (!baseUrl) {
+    return {
+      success: false,
+      error:
+        "No public HTTPS base URL configured. Set TELEGRAM_WEBHOOK_BASE_URL in your Vercel Environment Variables.",
+      skipped: true,
+    };
+  }
+
+  const webhookUrl = `${baseUrl}/api/telegram/webhook`;
+
+  try {
+    const currentInfo = await getWebhookInfo(botToken).catch(() => null);
+    if (currentInfo && currentInfo.url === webhookUrl) {
+      return { success: true, webhookUrl };
+    }
+
+    const ok = await setWebhook(botToken, webhookUrl, webhookSecret, false);
+    return { success: ok, webhookUrl };
+  } catch (err: any) {
+    return {
+      success: false,
+      webhookUrl,
+      error: err.message || "Failed to register webhook with Telegram.",
+    };
+  }
 }
 
 /**
