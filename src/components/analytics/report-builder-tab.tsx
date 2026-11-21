@@ -4,7 +4,7 @@ import { useState } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { formatSignedCents, formatR } from "@/lib/money";
+import { formatSignedCents, formatR, formatWinRate, formatProfitFactor } from "@/lib/money";
 import { cn } from "@/lib/utils";
 import {
   FileText,
@@ -73,14 +73,14 @@ export function ReportBuilderTab({
       [],
       ["EXECUTIVE SUMMARY"],
       ["Total Trades", aggregate.totalTrades ?? 0],
-      ["Win Rate (%)", aggregate.winRate ?? 0],
+      ["Win Rate", formatWinRate(aggregate.winRate)],
       ["Total Realized P&L ($)", ((aggregate.netPnlCents ?? 0) / 100).toFixed(2)],
       ["Average R", aggregate.avgR ?? 0],
-      ["Profit Factor", aggregate.profitFactor ?? "N/A"],
+      ["Profit Factor", formatProfitFactor(aggregate.profitFactor)],
       ["Expectancy ($)", ((aggregate.expectancyCents ?? 0) / 100).toFixed(2)],
       [],
       ["PROCESS VS OUTCOME MATRIX"],
-      ["Process Discipline (%)", matrixData?.overallProcessAdherencePct ?? 0],
+      ["Process Discipline (%)", matrixData?.overallProcessAdherencePct != null ? `${matrixData.overallProcessAdherencePct}% (${(matrixData as any).evaluatedTradesCount ?? (aggregate.totalTrades - (matrixData.insufficientDataCount ?? 0))}/${aggregate.totalTrades} evaluated)` : "N/A (0 evaluated)"],
       ["Disciplined Net P&L ($)", ((matrixData?.disciplinedNetPnlCents ?? 0) / 100).toFixed(2)],
       ["Undisciplined Net P&L ($)", ((matrixData?.undisciplinedNetPnlCents ?? 0) / 100).toFixed(2)],
       [],
@@ -217,7 +217,7 @@ export function ReportBuilderTab({
               <div className="p-3 rounded-lg bg-muted/40 border border-border/50">
                 <div className="text-[10px] font-mono uppercase text-muted-foreground">Win Rate</div>
                 <div className="text-base font-bold font-mono text-foreground mt-0.5">
-                  {aggregate.winRate ?? 0}%
+                  {formatWinRate(aggregate.winRate)}
                 </div>
                 <div className="text-[10px] text-muted-foreground">
                   {aggregate.wins ?? 0}W / {aggregate.losses ?? 0}L
@@ -235,7 +235,7 @@ export function ReportBuilderTab({
               <div className="p-3 rounded-lg bg-muted/40 border border-border/50">
                 <div className="text-[10px] font-mono uppercase text-muted-foreground">Profit Factor</div>
                 <div className="text-base font-bold font-mono text-foreground mt-0.5">
-                  {aggregate.profitFactor ?? "—"}
+                  {formatProfitFactor(aggregate.profitFactor)}
                 </div>
                 <div className="text-[10px] text-muted-foreground">
                   {aggregate.totalTrades ?? 0} closed trades
@@ -253,7 +253,7 @@ export function ReportBuilderTab({
                 <ShieldCheck className="h-4 w-4 text-primary" /> 2. Process vs. Outcome Analysis
               </h3>
               <Badge variant="outline" className="font-mono text-xs">
-                Process Discipline: {matrixData.overallProcessAdherencePct}%
+                Process Discipline: {matrixData.overallProcessAdherencePct != null ? `${matrixData.overallProcessAdherencePct}% (${(matrixData as any).evaluatedTradesCount ?? (aggregate.totalTrades - (matrixData.insufficientDataCount ?? 0))}/${aggregate.totalTrades} evaluated)` : "Not Evaluated (0 evaluated)"}
               </Badge>
             </div>
 

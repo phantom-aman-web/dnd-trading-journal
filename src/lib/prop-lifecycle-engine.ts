@@ -107,7 +107,7 @@ export interface PropPhaseSnapshot {
   netProfitCents: number;
   tradeCount: number;
   winRate: number;
-  profitFactor: number | null;
+  profitFactor: number | string | null;
   tradingDaysCount?: number;
   status: PropLifecycleStatus;
   rulesPassedCount: number;
@@ -1057,7 +1057,7 @@ export interface PropLifecycleEvaluationResult {
   lossCount: number;
   breakevenCount: number;
   winRate: number;
-  profitFactor: number | null;
+  profitFactor: number | string | null;
 
   // Rules & Violations
   rules: PropRuleDefinition[];
@@ -1124,7 +1124,7 @@ export function ensurePhaseSnapshot(
   const netProfitCents = balanceCents - phase.startingBalanceCents;
   const tradeCount = phaseTrades.length;
   const winRate = tradeCount > 0 ? Math.round((winCount / tradeCount) * 100) : 0;
-  const profitFactor = grossLoss > 0 ? Math.round((grossWin / grossLoss) * 100) / 100 : grossWin > 0 ? 99.99 : null;
+  const profitFactor = grossLoss > 0 ? Math.round((grossWin / grossLoss) * 100) / 100 : grossWin > 0 ? "Infinity" : null;
 
   return {
     phaseId: phase.id,
@@ -1152,6 +1152,54 @@ export function ensurePhaseSnapshot(
       resetHour,
     },
   };
+}
+
+/**
+ * Authoritatively filter trades belonging to a specific challenge phase (D-019).
+ * Strictly isolates active phase trades from prior and future phase executions.
+ */
+export function filterTradesForPhase<T extends { exitTime?: string | Date | null; entryTime?: string | Date | null; isDraft?: boolean; status?: string; tagsJson?: string | null; notes?: string | null }>(
+  trades: T[],
+  phase: PropPhaseConfig | null | undefined,
+  allPhases: PropPhaseConfig[] = [],
+  challengeStartDate?: string | Date
+): T[] {
+  if (!phase) return trades;
+  const isFirstPhase = phase.sequence === 1 || allPhases.findIndex((p) => p.id === phase.id) === 0;
+  const phaseStartMs = isFirstPhase ? 0 : new Date(phase.startDate || challengeStartDate || 0).getTime();
+  const phaseEndMs = phase.endDate ? new Date(phase.endDate).getTime() : null;
+
+  return trades.filter((t) => {
+    if (t.isDraft || t.status === "planned" || isSyntheticSampleTrade(t)) return false;
+    const tradeTime = t.exitTime ? new Date(t.exitTime).getTime() : t.entryTime ? new Date(t.entryTime).getTime() : 0;
+    if (tradeTime < phaseStartMs) return false;
+    if (phaseEndMs && tradeTime > phaseEndMs) return false;
+    return true;
+  });
+}
+
+/**
+ * Determine which phase a trade executed in across the challenge's phase history (D-019).
+ */
+export function getPhaseForTrade(
+  trade: { exitTime?: string | Date | null; entryTime?: string | Date | null },
+  allPhases: PropPhaseConfig[],
+  challengeStartDate?: string | Date
+): PropPhaseConfig | null {
+  const tradeTime = trade.exitTime ? new Date(trade.exitTime).getTime() : trade.entryTime ? new Date(trade.entryTime).getTime() : 0;
+  if (!tradeTime || !allPhases.length) return null;
+
+  const sorted = [...allPhases].sort((a, b) => (a.sequence || 0) - (b.sequence || 0));
+  for (let i = 0; i < sorted.length; i++) {
+    const phase = sorted[i];
+    const isFirst = i === 0 || phase.sequence === 1;
+    const startMs = isFirst ? 0 : new Date(phase.startDate || challengeStartDate || 0).getTime();
+    const endMs = phase.endDate ? new Date(phase.endDate).getTime() : null;
+    if (tradeTime >= startMs && (!endMs || tradeTime <= endMs)) {
+      return phase;
+    }
+  }
+  return sorted[sorted.length - 1] ?? null;
 }
 
 export function evaluatePropLifecycle(
@@ -1264,7 +1312,7 @@ export function evaluatePropLifecycle(
   const profitFactor = grossLossCents > 0
     ? Math.round((grossWinCents / grossLossCents) * 100) / 100
     : grossWinCents > 0
-    ? 99.99
+    ? "Infinity"
     : null;
 
   // Daily Loss Metrics
@@ -1366,7 +1414,7 @@ export function evaluatePropLifecycle(
   // Dynamic Rule Evaluation & Failure Diagnosis
   // -------------------------------------------------------------------------
   const evaluatedRules: PropRuleDefinition[] = [];
-  const dynamicViolations: PropViolationRecord[] = [...meta.violations];
+  const dynamicViolations: PropViolationRecord[] = [...(meta?.violations || [])];
   const warnings: Array<{ type: string; title: string; message: string; remainingAllowance?: string }> = [];
 
   const nowIso = now.toISOString();
@@ -1614,7 +1662,7 @@ export function evaluatePropLifecycle(
   // Payout Eligibility
   // -------------------------------------------------------------------------
   const isFunded = activePhase.phaseType === "funded";
-  const profitableDaysCount = Array.from(dailyPnlMap.values()).filter((d) => d.pnlCents >= (meta.payoutConfig.minPayoutCents || 10000)).length;
+  const profitableDaysCount = Array.from(dailyPnlMap.values()).filter((d) => d.pnlCents >= (meta?.payoutConfig?.minPayoutCents || 10000)).length;
   const netTraderAccumulatedProfitCents = Math.max(0, netProfitCents);
 
   let payoutEligible = false;
@@ -1623,7 +1671,7 @@ export function evaluatePropLifecycle(
   let firmShareCents = 0;
 
   if (isFunded) {
-    const splitPct = meta.payoutConfig.profitSplitPct || 80;
+    const splitPct = meta?.payoutConfig?.profitSplitPct || 80;
     traderShareCents = Math.round(netTraderAccumulatedProfitCents * (splitPct / 100));
     firmShareCents = netTraderAccumulatedProfitCents - traderShareCents;
 
@@ -1818,7 +1866,7 @@ export function transitionToNextPhase(
   });
 
   const updatedEvents: PropLifecycleEvent[] = [
-    ...meta.events,
+    ...(meta.events || []),
     {
       id: `event_trans_${Date.now()}`,
       timestamp: nowIso,
@@ -1873,7 +1921,7 @@ export function recordManualFirmRejection(
       userVerified: details.userVerified,
       documents: details.documents || [],
     },
-    events: [...meta.events, rejectionEvent],
+    events: [...(meta.events || []), rejectionEvent],
   };
 }
 
@@ -1883,7 +1931,7 @@ export function requestPayout(
   notes?: string
 ): { updatedMeta: PropLifecycleMetadata; payout: PropPayoutRecord } {
   const nowIso = new Date().toISOString();
-  const splitPct = meta.payoutConfig.profitSplitPct || 80;
+  const splitPct = meta.payoutConfig?.profitSplitPct || 80;
   const netTrader = Math.round(amountCents * (splitPct / 100));
   const firmSplit = amountCents - netTrader;
 
@@ -1908,8 +1956,8 @@ export function requestPayout(
   return {
     updatedMeta: {
       ...meta,
-      payouts: [newPayout, ...meta.payouts],
-      events: [...meta.events, payoutEvent],
+      payouts: [newPayout, ...(meta.payouts || [])],
+      events: [...(meta.events || []), payoutEvent],
     },
     payout: newPayout,
   };

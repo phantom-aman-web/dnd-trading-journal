@@ -82,13 +82,32 @@ export function DrawdownAnalyticsTab({ data }: DrawdownAnalyticsTabProps) {
   }, [curve]);
 
   if (!data || curve.length === 0) {
+    const isMultiCurrency = Boolean(data?.isMultiCurrency || data?.currencyExplanation);
     return (
-      <Card className="p-10 text-center border-border">
-        <TrendingDown className="h-10 w-10 mx-auto text-muted-foreground/50 mb-3" />
-        <h3 className="font-semibold text-foreground text-base">No drawdown data available</h3>
-        <p className="text-xs text-muted-foreground mt-1 max-w-sm mx-auto">
-          Execute and close trades with an initial account balance to analyze peak-to-trough drawdowns, losing streaks, and recovery cycles.
-        </p>
+      <Card className="p-8 text-center border-border">
+        {isMultiCurrency ? (
+          <div className="max-w-md mx-auto space-y-3">
+            <div className="inline-flex p-3 rounded-full bg-amber-500/10 text-amber-500">
+              <Info className="h-6 w-6" />
+            </div>
+            <h3 className="font-semibold text-foreground text-base">Multi-Currency Portfolio Scope</h3>
+            <p className="text-xs text-muted-foreground leading-relaxed">
+              {data?.currencyExplanation ||
+                "Peak-to-trough balance curves and monetary drawdowns cannot be mathematically aggregated across mixed currencies without an authoritative FX rate oracle."}
+            </p>
+            <p className="text-xs text-primary font-medium">
+              Please select an individual single-currency account from the account filter to view its dedicated drawdown curve and streak analytics.
+            </p>
+          </div>
+        ) : (
+          <div className="max-w-sm mx-auto space-y-2">
+            <TrendingDown className="h-10 w-10 mx-auto text-muted-foreground/50 mb-3" />
+            <h3 className="font-semibold text-foreground text-base">No drawdown data available</h3>
+            <p className="text-xs text-muted-foreground mt-1">
+              Execute and close trades with an initial account balance to analyze peak-to-trough drawdowns, losing streaks, and recovery cycles.
+            </p>
+          </div>
+        )}
       </Card>
     );
   }

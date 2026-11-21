@@ -4,7 +4,7 @@ import { useState } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { formatSignedCents, formatR } from "@/lib/money";
+import { formatSignedCents, formatR, formatProfitFactor } from "@/lib/money";
 import { cn } from "@/lib/utils";
 import { useNav } from "@/lib/nav-store";
 import {
@@ -69,19 +69,28 @@ export function ProcessOutcomeTab({ data, isLoading }: ProcessOutcomeTabProps) {
               Distinguish between execution quality and market variance to eliminate outcome bias.
             </p>
           </div>
-          <Badge
-            variant="outline"
-            className={cn(
-              "font-mono text-xs px-2.5 py-1 font-semibold",
-              overallProcessAdherencePct >= 80
-                ? "bg-profit/15 text-profit border-profit/30"
-                : overallProcessAdherencePct >= 60
-                ? "bg-amber-500/15 text-amber-600 border-amber-500/30"
-                : "bg-loss/15 text-loss border-loss/30"
-            )}
-          >
-            Process Discipline: {overallProcessAdherencePct}%
-          </Badge>
+          {overallProcessAdherencePct !== null && (data as any)?.evaluatedTradesCount > 0 ? (
+            <Badge
+              variant="outline"
+              className={cn(
+                "font-mono text-xs px-2.5 py-1 font-semibold",
+                overallProcessAdherencePct >= 80
+                  ? "bg-profit/15 text-profit border-profit/30"
+                  : overallProcessAdherencePct >= 60
+                  ? "bg-amber-500/15 text-amber-600 border-amber-500/30"
+                  : "bg-loss/15 text-loss border-loss/30"
+              )}
+            >
+              Process Discipline: {overallProcessAdherencePct}% ({data.evaluatedTradesCount} of {totalTrades} trades{totalTrades > data.evaluatedTradesCount ? ` · ${totalTrades - data.evaluatedTradesCount} unassigned` : ""})
+            </Badge>
+          ) : (
+            <Badge
+              variant="outline"
+              className="font-mono text-xs px-2.5 py-1 font-semibold bg-muted text-muted-foreground border-border"
+            >
+              Process Discipline: Not Evaluated (0 of {totalTrades} trades)
+            </Badge>
+          )}
         </div>
 
         {/* Top telemetry grid */}
@@ -166,7 +175,7 @@ export function ProcessOutcomeTab({ data, isLoading }: ProcessOutcomeTabProps) {
                 </div>
                 <div>
                   <div className="text-[10px] text-muted-foreground">Profit Factor</div>
-                  <div className="font-bold text-foreground">{quadrants.disciplinedWin.profitFactor ?? "—"}</div>
+                  <div className="font-bold text-foreground">{formatProfitFactor(quadrants.disciplinedWin.profitFactor)}</div>
                 </div>
               </div>
               <p className="text-[11px] text-muted-foreground">{quadrants.disciplinedWin.description}</p>
@@ -209,7 +218,7 @@ export function ProcessOutcomeTab({ data, isLoading }: ProcessOutcomeTabProps) {
                 </div>
                 <div>
                   <div className="text-[10px] text-muted-foreground">Profit Factor</div>
-                  <div className="font-bold text-foreground">{quadrants.luckyWin.profitFactor ?? "—"}</div>
+                  <div className="font-bold text-foreground">{formatProfitFactor(quadrants.luckyWin.profitFactor)}</div>
                 </div>
               </div>
               <p className="text-[11px] text-muted-foreground">{quadrants.luckyWin.description}</p>

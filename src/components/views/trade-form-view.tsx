@@ -739,6 +739,7 @@ export function TradeFormView() {
         if (!isNaN(val) && val > 0) next.plannedRiskAmountCents = val;
       }
       if (params.plannedRiskPct) {
+        next.riskPct = params.plannedRiskPct;
         next.plannedRiskPercent = params.plannedRiskPct;
       }
       return next;
@@ -1211,12 +1212,13 @@ export function TradeFormView() {
   const entryNum = Number(effEntry);
   const stopNum = Number(effStop);
   const targetNum = Number(effTarget);
-  const lotNum = Number(effLot) || 1;
+  const lotNum = Number(effLot);
+  const hasLot = Number.isFinite(lotNum) && lotNum > 0;
   const riskPctNum = Number(form.riskPct);
 
-  const hasEntry = Number.isFinite(entryNum) && effEntry !== "";
-  const hasStop = Number.isFinite(stopNum) && effStop !== "";
-  const hasTarget = Number.isFinite(targetNum) && effTarget !== "";
+  const hasEntry = Number.isFinite(entryNum) && entryNum > 0 && effEntry !== "";
+  const hasStop = Number.isFinite(stopNum) && stopNum > 0 && effStop !== "";
+  const hasTarget = Number.isFinite(targetNum) && targetNum > 0 && effTarget !== "";
 
   // Stop distance (always positive).
   const stopDistance = hasEntry && hasStop ? Math.abs(entryNum - stopNum) : null;
@@ -1258,9 +1260,9 @@ export function TradeFormView() {
   const stopDistanceUnits = stopDistance != null
     ? distanceInUnits(stopDistance, selectedInstrument.pipSize)
     : 0;
-  const pointValueCents = selectedInstrument.pointValueCents;
+  const pointValueCents = selectedInstrument?.pointValueCents ?? 0;
   const instrumentRiskCents =
-    stopDistance != null
+    stopDistance != null && hasLot && pointValueCents > 0
       ? Math.round(stopDistance * lotNum * pointValueCents)
       : 0;
   const instrumentRiskDollars = instrumentRiskCents / 100;
@@ -2203,7 +2205,7 @@ export function TradeFormView() {
                 type="button"
                 size="sm"
                 onClick={() => submit(false)}
-                disabled={saving || !form.instrumentSymbol || !form.plannedEntryPrice}
+                disabled={saving || !form.instrumentSymbol || !hasEntry || !hasStop || !hasTarget || (stopDistance !== null && stopDistance <= 0)}
                 className="gap-1.5"
               >
                 {saving && <Loader2 className="h-4 w-4 animate-spin" />}
@@ -4135,7 +4137,7 @@ export function TradeFormView() {
                 </div>
                 <div className="flex justify-between">
                   <dt className="text-muted-foreground">Risk Budget</dt>
-                  <dd className="font-medium tnum text-loss">
+                  <dd className="font-medium tnum text-foreground">
                     {riskAmountDollars != null ? fmtMoney(riskAmountDollars, accountCurrency) : "—"}
                   </dd>
                 </div>
@@ -4146,11 +4148,9 @@ export function TradeFormView() {
                 <div className="flex justify-between">
                   <dt className="text-muted-foreground">Expected Loss at Stop</dt>
                   <dd className="font-medium tnum text-loss">
-                    {instrumentRiskCents > 0
-                      ? `-${fmtMoney(instrumentRiskDollars, accountCurrency)}`
-                      : riskAmountDollars != null
-                        ? `-${fmtMoney(riskAmountDollars, accountCurrency)}`
-                        : "—"}
+                    {hasEntry && hasStop && instrumentRiskCents > 0
+                      ? `-${fmtMoney(Math.abs(instrumentRiskDollars), accountCurrency)}`
+                      : "—"}
                   </dd>
                 </div>
                 <div className="flex justify-between">
@@ -4280,7 +4280,7 @@ export function TradeFormView() {
               type="button"
               size="sm"
               onClick={() => submit(false)}
-              disabled={saving || (stopDistance !== null && stopDistance <= 0)}
+              disabled={saving || !form.instrumentSymbol || !hasEntry || !hasStop || !hasTarget || (stopDistance !== null && stopDistance <= 0)}
               className="bg-primary text-primary-foreground font-semibold text-xs sm:text-sm h-9 px-3"
             >
               {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1" /> : <Sparkles className="h-3.5 w-3.5 mr-1" />}

@@ -24,6 +24,7 @@ import { Plus, PencilLine, Trash2, Wallet, Loader2, AlertTriangle, ShieldAlert, 
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { formatSignedCents } from "@/lib/money";
+import { aggregateAccountsByCurrency, type CurrencyGroupSummary } from "@/lib/accounts-currency";
 import { PrivacyMask } from "@/components/common/privacy-mask";
 import { useNavStore } from "@/lib/nav-store";
 import { useAuth } from "@/lib/auth-store";
@@ -182,32 +183,25 @@ export function AccountsView() {
     return map;
   }, [trades]);
 
-  // Aggregate summary across all accounts.
-  const aggregate = useMemo(() => {
-    let totalBalanceCents = 0;
-    let totalStartingCents = 0;
-    let totalTrades = 0;
-    let totalWins = 0;
-    let totalClosed = 0;
-    let totalPnlCents = 0;
-    for (const a of accounts) {
-      totalBalanceCents += a.currentBalanceCents;
-      totalStartingCents += a.startingBalanceCents;
-      const s = statsByAccount.get(a.id);
-      if (s) {
-        totalTrades += s.count;
-        totalWins += s.wins;
-        totalClosed += s.wins + s.losses;
-        totalPnlCents += s.pnlCents;
-      }
-    }
-    return {
-      totalBalanceCents: totalStartingCents + totalPnlCents,
-      totalPnlCents,
-      totalTrades,
-      winRate: totalClosed > 0 ? Math.round((totalWins / totalClosed) * 100) : null,
-    };
+  // Filter state for currencies when multi-currency is active
+  const [currencyFilter, setCurrencyFilter] = useState<string>("ALL");
+
+  // Currency-safe aggregate summary across accounts (D-017)
+  const portfolioSummary = useMemo(() => {
+    return aggregateAccountsByCurrency(accounts, statsByAccount);
   }, [accounts, statsByAccount]);
+
+  // Accounts to display based on currency filter
+  const displayedAccounts = useMemo(() => {
+    if (currencyFilter === "ALL") return accounts;
+    return accounts.filter((a) => (a.currency || "USD").toUpperCase() === currencyFilter);
+  }, [accounts, currencyFilter]);
+
+  // Selected currency group summary
+  const activeCurrencyGroup: CurrencyGroupSummary | null = useMemo(() => {
+    if (currencyFilter === "ALL") return portfolioSummary.groups[0] ?? null;
+    return portfolioSummary.groupsByCurrency[currencyFilter] ?? null;
+  }, [portfolioSummary, currencyFilter]);
 
   function openCreate() {
     setEditing(null);
@@ -267,35 +261,149 @@ export function AccountsView() {
         </span>
       </div>
 
-      {/* Aggregate summary */}
+      {/* Multi-Currency Notice & Grouped Aggregates (D-017) */}
       {accounts.length > 0 && (
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-          <SummaryStat
-            label="Total Balance"
-            value={formatSignedCents(aggregate.totalBalanceCents).text}
-            valueClass="text-foreground"
-          />
-          <SummaryStat
-            label="Total P&L"
-            value={formatSignedCents(aggregate.totalPnlCents).text}
-            valueClass={
-              aggregate.totalPnlCents > 0
-                ? "text-profit"
-                : aggregate.totalPnlCents < 0
-                  ? "text-loss"
-                  : "text-foreground"
-            }
-          />
-          <SummaryStat
-            label="Total Trades"
-            value={String(aggregate.totalTrades)}
-            valueClass="text-foreground"
-          />
-          <SummaryStat
-            label="Win Rate"
-            value={aggregate.winRate == null ? "—" : `${aggregate.winRate}%`}
-            valueClass="text-foreground"
-          />
+        <div className="space-y-3">
+          {portfolioSummary.isMultiCurrency && (
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 p-3 rounded-lg border border-border/80 bg-muted/40 text-xs text-muted-foreground">
+              <div className="flex items-center gap-2">
+                <span className="font-semibold text-foreground">Multi-Currency Portfolio:</span>
+                <span>Balances and P&amp;L are grouped by currency denomination to prevent inaccurate unconverted sums.</span>
+              </div>
+              <div className="flex items-center gap-1.5 flex-wrap shrink-0">
+                <span className="text-[11px] font-medium text-muted-foreground mr-1">Filter:</span>
+                <button
+                  type="button"
+                  onClick={() => setCurrencyFilter("ALL")}
+                  className={cn(
+                    "px-2.5 py-1 rounded-md text-xs font-semibold transition-colors cursor-pointer",
+                    currencyFilter === "ALL"
+                      ? "bg-primary text-primary-foreground"
+                      : "bg-card border border-border text-foreground hover:bg-muted"
+                  )}
+                >
+                  All Currencies ({accounts.length})
+                </button>
+                {portfolioSummary.currencies.map((curr) => (
+                  <button
+                    key={curr}
+                    type="button"
+                    onClick={() => setCurrencyFilter(curr)}
+                    className={cn(
+                      "px-2.5 py-1 rounded-md text-xs font-semibold transition-colors cursor-pointer",
+                      currencyFilter === curr
+                        ? "bg-primary text-primary-foreground"
+                        : "bg-card border border-border text-foreground hover:bg-muted"
+                    )}
+                  >
+                    {curr} ({portfolioSummary.groupsByCurrency[curr]?.accountsCount ?? 0})
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Aggregate summary cards */}
+          {portfolioSummary.isMultiCurrency && currencyFilter === "ALL" ? (
+            /* Multi-currency grouped summary breakdown */
+            <div className="space-y-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                {portfolioSummary.groups.map((group) => {
+                  const bal = formatSignedCents(group.totalBalanceCents, group.currency);
+                  const pnl = formatSignedCents(group.pnlCents, group.currency);
+                  return (
+                    <div
+                      key={group.currency}
+                      className="p-4 rounded-xl border border-border bg-card shadow-xs space-y-2"
+                    >
+                      <div className="flex items-center justify-between">
+                        <span className="font-mono font-bold text-xs px-2 py-0.5 rounded bg-primary/10 text-primary uppercase">
+                          {group.currency} Portfolio ({group.accountsCount} {group.accountsCount === 1 ? "account" : "accounts"})
+                        </span>
+                        <span className="text-xs text-muted-foreground font-mono">
+                          {group.tradesCount} tr · {group.winRate != null ? `${group.winRate}% WR` : "—"}
+                        </span>
+                      </div>
+                      <div className="grid grid-cols-2 gap-2 pt-1 border-t border-border/50">
+                        <div>
+                          <div className="text-[10px] font-mono uppercase text-muted-foreground">Total Balance</div>
+                          <div className="text-base font-bold font-mono text-foreground">
+                            <PrivacyMask value={bal.text} />
+                          </div>
+                        </div>
+                        <div className="text-right">
+                          <div className="text-[10px] font-mono uppercase text-muted-foreground">Realized P&amp;L</div>
+                          <div
+                            className={cn(
+                              "text-base font-bold font-mono",
+                              group.pnlCents > 0
+                                ? "text-profit"
+                                : group.pnlCents < 0
+                                  ? "text-loss"
+                                  : "text-foreground"
+                            )}
+                          >
+                            <PrivacyMask value={pnl.text} />
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+
+              {/* Portfolio-wide Non-monetary Metrics Strip */}
+              <div className="grid grid-cols-3 gap-3">
+                <SummaryStat
+                  label="Total Active Accounts"
+                  value={String(portfolioSummary.totalAccountsCount)}
+                  valueClass="text-foreground"
+                />
+                <SummaryStat
+                  label="Total Executed Trades"
+                  value={String(portfolioSummary.totalTradesCount)}
+                  valueClass="text-foreground"
+                />
+                <SummaryStat
+                  label="Portfolio Win Rate"
+                  value={portfolioSummary.overallWinRate == null ? "—" : `${portfolioSummary.overallWinRate}%`}
+                  valueClass="text-foreground"
+                />
+              </div>
+            </div>
+          ) : (
+            /* Single-currency summary or filtered single-currency view */
+            activeCurrencyGroup && (
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                <SummaryStat
+                  label={portfolioSummary.isMultiCurrency ? `Total ${activeCurrencyGroup.currency} Balance` : "Total Balance"}
+                  value={formatSignedCents(activeCurrencyGroup.totalBalanceCents, activeCurrencyGroup.currency).text}
+                  valueClass="text-foreground"
+                />
+                <SummaryStat
+                  label={portfolioSummary.isMultiCurrency ? `Total ${activeCurrencyGroup.currency} P&L` : "Total P&L"}
+                  value={formatSignedCents(activeCurrencyGroup.pnlCents, activeCurrencyGroup.currency).text}
+                  valueClass={
+                    activeCurrencyGroup.pnlCents > 0
+                      ? "text-profit"
+                      : activeCurrencyGroup.pnlCents < 0
+                        ? "text-loss"
+                        : "text-foreground"
+                  }
+                />
+                <SummaryStat
+                  label="Total Trades"
+                  value={String(activeCurrencyGroup.tradesCount)}
+                  valueClass="text-foreground"
+                />
+                <SummaryStat
+                  label="Win Rate"
+                  value={activeCurrencyGroup.winRate == null ? "—" : `${activeCurrencyGroup.winRate}%`}
+                  valueClass="text-foreground"
+                />
+              </div>
+            )
+          )}
         </div>
       )}
 
@@ -311,10 +419,18 @@ export function AccountsView() {
             <Plus className="h-4 w-4" /> Add Account
           </Button>
         </div>
+      ) : displayedAccounts.length === 0 ? (
+        <div className="bg-card rounded-xl border border-border shadow-sm p-8 text-center space-y-2">
+          <h3 className="font-semibold text-foreground">No accounts denominated in {currencyFilter}</h3>
+          <p className="text-xs text-muted-foreground">Select another currency or clear the filter to view your accounts.</p>
+          <Button variant="outline" size="sm" onClick={() => setCurrencyFilter("ALL")}>
+            Show All Accounts
+          </Button>
+        </div>
       ) : (
         /* Account cards grid */
         <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
-          {accounts.map((a) => {
+          {displayedAccounts.map((a) => {
             const stats = statsByAccount.get(a.id);
             const tradesCount = stats?.count ?? 0;
             const closed = stats ? stats.wins + stats.losses : 0;

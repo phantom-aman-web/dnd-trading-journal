@@ -58,6 +58,7 @@ export interface ScannableTradeRecord {
 export function evaluateDataQuality(trades: ScannableTradeRecord[]): DataQualityReport {
   const issues: DataQualityIssue[] = [];
   let completeTrades = 0;
+  let totalWeightedScores = 0;
 
   // Track potential duplicate candidates (same symbol, same direction, within 60s)
   const sortedByTime = [...trades]
@@ -96,12 +97,17 @@ export function evaluateDataQuality(trades: ScannableTradeRecord[]): DataQuality
 
   for (const t of trades) {
     let tradeHasIssue = false;
+    let maxWeight = 0;
+    let earnedWeight = 0;
     const entryDateStr = t.entryTime ? new Date(t.entryTime).toISOString() : null;
 
-    // 1. Missing Risk / Stop Loss
+    // 1. Missing Risk / Stop Loss (25% weight)
+    maxWeight += 25;
     const hasRisk = (t.plannedRiskAmountCents != null && t.plannedRiskAmountCents > 0) ||
       (t.plannedStopPrice != null && t.plannedStopPrice.trim() !== "");
-    if (!hasRisk && t.status !== "planned") {
+    if (hasRisk || t.status === "planned") {
+      earnedWeight += 25;
+    } else {
       tradeHasIssue = true;
       issues.push({
         tradeId: t.id,
@@ -116,25 +122,34 @@ export function evaluateDataQuality(trades: ScannableTradeRecord[]): DataQuality
       });
     }
 
-    // 2. Missing Timestamp on Closed Positions
+    // 2. Missing Timestamp on Closed Positions (20% weight)
     const sLower = (t.status || "").toLowerCase();
-    if ((sLower === "closed" || sLower === "win" || sLower === "loss" || sLower === "breakeven") && !t.exitTime) {
-      tradeHasIssue = true;
-      issues.push({
-        tradeId: t.id,
-        instrumentSymbol: t.instrumentSymbol,
-        entryDate: entryDateStr,
-        direction: t.direction,
-        category: "missing_timestamp",
-        severity: "high",
-        title: "Missing Exit Timestamp",
-        description: "Closed trade lacks a recorded exit timestamp, impairing holding duration and calendar placement.",
-        actionLabel: "Set Exit Time",
-      });
+    const isClosed = sLower === "closed" || sLower === "win" || sLower === "loss" || sLower === "breakeven";
+    if (isClosed) {
+      maxWeight += 20;
+      if (t.exitTime) {
+        earnedWeight += 20;
+      } else {
+        tradeHasIssue = true;
+        issues.push({
+          tradeId: t.id,
+          instrumentSymbol: t.instrumentSymbol,
+          entryDate: entryDateStr,
+          direction: t.direction,
+          category: "missing_timestamp",
+          severity: "high",
+          title: "Missing Exit Timestamp",
+          description: "Closed trade lacks a recorded exit timestamp, impairing holding duration and calendar placement.",
+          actionLabel: "Set Exit Time",
+        });
+      }
     }
 
-    // 3. Missing Strategy Assignment
-    if (!t.strategyId) {
+    // 3. Missing Strategy Assignment (20% weight)
+    maxWeight += 20;
+    if (t.strategyId) {
+      earnedWeight += 20;
+    } else {
       tradeHasIssue = true;
       issues.push({
         tradeId: t.id,
@@ -149,24 +164,32 @@ export function evaluateDataQuality(trades: ScannableTradeRecord[]): DataQuality
       });
     }
 
-    // 4. Missing Checklist Answers (when trade has a strategy with configured rules)
-    if (t.strategyId && t.hasChecklistRules && !t.hasChecklistAnswers) {
-      tradeHasIssue = true;
-      issues.push({
-        tradeId: t.id,
-        instrumentSymbol: t.instrumentSymbol,
-        entryDate: entryDateStr,
-        direction: t.direction,
-        category: "missing_checklist",
-        severity: "medium",
-        title: "Unanswered Strategy Checklist",
-        description: "Strategy has defined execution rules, but checklist responses were left uncompleted.",
-        actionLabel: "Score Checklist",
-      });
+    // 4. Missing Checklist Answers (20% weight when strategy has defined checklist rules)
+    if (t.strategyId && t.hasChecklistRules) {
+      maxWeight += 20;
+      if (t.hasChecklistAnswers) {
+        earnedWeight += 20;
+      } else {
+        tradeHasIssue = true;
+        issues.push({
+          tradeId: t.id,
+          instrumentSymbol: t.instrumentSymbol,
+          entryDate: entryDateStr,
+          direction: t.direction,
+          category: "missing_checklist",
+          severity: "medium",
+          title: "Unanswered Strategy Checklist",
+          description: "Strategy has defined execution rules, but checklist responses were left uncompleted.",
+          actionLabel: "Score Checklist",
+        });
+      }
     }
 
-    // 5. Missing Trade Notes / Journal Thesis
-    if (!t.notes || t.notes.trim().length === 0) {
+    // 5. Missing Trade Notes / Journal Thesis (10% weight)
+    maxWeight += 10;
+    if (t.notes && t.notes.trim().length > 0) {
+      earnedWeight += 10;
+    } else {
       tradeHasIssue = true;
       issues.push({
         tradeId: t.id,
@@ -181,13 +204,22 @@ export function evaluateDataQuality(trades: ScannableTradeRecord[]): DataQuality
       });
     }
 
+    // 6. Duplicate Integrity (5% weight)
+    maxWeight += 5;
+    if (!duplicateCandidateIds.has(t.id)) {
+      earnedWeight += 5;
+    }
+
+    const tradeScore = maxWeight > 0 ? (earnedWeight / maxWeight) * 100 : 100;
+    totalWeightedScores += tradeScore;
+
     if (!tradeHasIssue && !duplicateCandidateIds.has(t.id)) {
       completeTrades++;
     }
   }
 
   const total = trades.length;
-  const completenessScorePct = total > 0 ? Math.round((completeTrades / total) * 100) : 100;
+  const completenessScorePct = total > 0 ? Math.round(totalWeightedScores / total) : 100;
 
   return {
     totalTradesScanned: total,

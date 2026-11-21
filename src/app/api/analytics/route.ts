@@ -472,41 +472,69 @@ export async function GET(req: NextRequest) {
     return send(report);
   }
   if (dimension === "process-matrix") {
-    const behaviorRows: TradeBehaviorRow[] = trades.map((t) => ({
-      id: t.id,
-      instrumentSymbol: t.instrumentSymbol,
-      direction: t.direction as "long" | "short",
-      entryTime: t.entryTime ? t.entryTime.toISOString() : null,
-      exitTime: t.exitTime ? t.exitTime.toISOString() : null,
-      status: (["win", "loss", "breakeven"].includes(t.status) ? t.status : "open") as any,
-      netPnlCents: t.netPnlCents,
-      actualR: t.actualR ? parseFloat(t.actualR) : null,
-      plannedRiskCents: t.plannedRiskAmountCents,
-      plannedRiskPct: t.plannedRiskPct ? parseFloat(t.plannedRiskPct) : null,
-      session: t.session,
-      processCompliant: !(safeParseArr(t.behaviorFlagsJson).length > 0),
-      behaviorFlags: safeParseArr(t.behaviorFlagsJson),
-      notes: t.notes,
-    }));
+    const behaviorRows: TradeBehaviorRow[] = trades.map((t) => {
+      const flags = safeParseArr(t.behaviorFlagsJson);
+      let processCompliant: boolean | null = null;
+      if (flags.length > 0) {
+        processCompliant = false;
+      } else if (t.planAdherenceJson) {
+        try {
+          const pa = JSON.parse(t.planAdherenceJson);
+          if (pa?.followedPlan === false) processCompliant = false;
+          else if (pa?.followedPlan === true) processCompliant = true;
+        } catch {}
+      }
+
+      return {
+        id: t.id,
+        instrumentSymbol: t.instrumentSymbol,
+        direction: t.direction as "long" | "short",
+        entryTime: t.entryTime ? t.entryTime.toISOString() : null,
+        exitTime: t.exitTime ? t.exitTime.toISOString() : null,
+        status: (["win", "loss", "breakeven"].includes(t.status) ? t.status : "open") as any,
+        netPnlCents: t.netPnlCents,
+        actualR: t.actualR ? parseFloat(t.actualR) : null,
+        plannedRiskCents: t.plannedRiskAmountCents,
+        plannedRiskPct: t.plannedRiskPct ? parseFloat(t.plannedRiskPct) : null,
+        session: t.session,
+        processCompliant,
+        behaviorFlags: flags,
+        notes: t.notes,
+      };
+    });
     return send(computeProcessOutcomeMatrix(behaviorRows));
   }
   if (dimension === "behavioral") {
-    const behaviorRows: TradeBehaviorRow[] = trades.map((t) => ({
-      id: t.id,
-      instrumentSymbol: t.instrumentSymbol,
-      direction: t.direction as "long" | "short",
-      entryTime: t.entryTime ? t.entryTime.toISOString() : null,
-      exitTime: t.exitTime ? t.exitTime.toISOString() : null,
-      status: (["win", "loss", "breakeven"].includes(t.status) ? t.status : "open") as any,
-      netPnlCents: t.netPnlCents,
-      actualR: t.actualR ? parseFloat(t.actualR) : null,
-      plannedRiskCents: t.plannedRiskAmountCents,
-      plannedRiskPct: t.plannedRiskPct ? parseFloat(t.plannedRiskPct) : null,
-      session: t.session,
-      processCompliant: !(safeParseArr(t.behaviorFlagsJson).length > 0),
-      behaviorFlags: safeParseArr(t.behaviorFlagsJson),
-      notes: t.notes,
-    }));
+    const behaviorRows: TradeBehaviorRow[] = trades.map((t) => {
+      const flags = safeParseArr(t.behaviorFlagsJson);
+      let processCompliant: boolean | null = null;
+      if (flags.length > 0) {
+        processCompliant = false;
+      } else if (t.planAdherenceJson) {
+        try {
+          const pa = JSON.parse(t.planAdherenceJson);
+          if (pa?.followedPlan === false) processCompliant = false;
+          else if (pa?.followedPlan === true) processCompliant = true;
+        } catch {}
+      }
+
+      return {
+        id: t.id,
+        instrumentSymbol: t.instrumentSymbol,
+        direction: t.direction as "long" | "short",
+        entryTime: t.entryTime ? t.entryTime.toISOString() : null,
+        exitTime: t.exitTime ? t.exitTime.toISOString() : null,
+        status: (["win", "loss", "breakeven"].includes(t.status) ? t.status : "open") as any,
+        netPnlCents: t.netPnlCents,
+        actualR: t.actualR ? parseFloat(t.actualR) : null,
+        plannedRiskCents: t.plannedRiskAmountCents,
+        plannedRiskPct: t.plannedRiskPct ? parseFloat(t.plannedRiskPct) : null,
+        session: t.session,
+        processCompliant,
+        behaviorFlags: flags,
+        notes: t.notes,
+      };
+    });
     return send(computeBehavioralAnalytics(behaviorRows));
   }
   return send({ aggregate: computeAggregateMetrics(rows, startingBalanceCents) });

@@ -28,6 +28,7 @@ import {
 } from "lucide-react";
 import { usePrivacyStore, maskAccountName } from "@/lib/privacy-store";
 import { useNav } from "@/lib/nav-store";
+import { formatProfitFactor } from "@/lib/money";
 import { cn } from "@/lib/utils";
 import type {
   PropPhaseConfig,
@@ -386,7 +387,7 @@ export function FundedPhaseDetailModal({
                 <div className="p-3.5 rounded-xl border border-border/60 bg-card space-y-1">
                   <div className="text-[10px] text-muted-foreground uppercase font-mono">Profit Factor</div>
                   <div className="text-lg font-bold font-mono text-foreground">
-                    {lifecycle.profitFactor !== null ? lifecycle.profitFactor : "—"}
+                    {formatProfitFactor(lifecycle.profitFactor)}
                   </div>
                 </div>
                 <div className="p-3.5 rounded-xl border border-border/60 bg-card space-y-1">

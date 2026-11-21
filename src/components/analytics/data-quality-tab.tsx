@@ -168,7 +168,10 @@ export function DataQualityTab({ data, onFixTrade }: DataQualityTabProps) {
                 {score}%
               </div>
               <div className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
-                {isHigh ? "Audit Ready" : isMedium ? "Action Required" : "Gaps Detected"}
+                {isHigh ? "Audit Ready" : isMedium ? "Action Required" : "Critical Gaps Detected"}
+              </div>
+              <div className="text-[10px] text-muted-foreground font-mono mt-0.5">
+                {score}% Complete · {100 - score}% Gaps
               </div>
             </div>
           </div>

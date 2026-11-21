@@ -1124,10 +1124,16 @@ export function RiskCalculatorView() {
                   </div>
                   <div className="flex justify-between text-[10px] pt-1 border-t border-border/40">
                     <span>Variance (Safe Round-down):</span>
-                    <span className="font-mono text-profit">
-                      {riskBudgetAccount - calculation.totalRiskAccountDollars >= 0 ? "-" : "+"}
-                      {effectiveCurrency} {Math.abs(riskBudgetAccount - calculation.totalRiskAccountDollars).toFixed(2)}
-                    </span>
+                    {(() => {
+                      const savings = riskBudgetAccount - calculation.totalRiskAccountDollars;
+                      const isPositive = savings >= 0;
+                      return (
+                        <span className={cn("font-mono", isPositive ? "text-profit" : "text-loss")}>
+                          {isPositive ? "+" : "-"}
+                          {effectiveCurrency} {Math.abs(savings).toFixed(2)}
+                        </span>
+                      );
+                    })()}
                   </div>
                 </div>
 

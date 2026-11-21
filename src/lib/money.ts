@@ -80,6 +80,31 @@ export function formatPct(decimal: Decimal | number | null | undefined, dp = 2):
   return `${(n * 100).toFixed(dp)}%`;
 }
 
+/**
+ * Format a Win Rate value safely whether provided as a ratio (0.674416) or percentage (67.4).
+ * Defensively prevents displaying 0.674416% (D-012).
+ */
+export function formatWinRate(wr: Decimal | number | string | null | undefined, dp = 1): string {
+  if (wr == null || wr === "") return "—";
+  const n = typeof wr === "string" ? parseFloat(wr) : Number(wr);
+  if (!Number.isFinite(n)) return "—";
+  // If <= 1.0 (and > 0), it is a decimal ratio (e.g. 0.674416 -> 67.4%)
+  const pct = n <= 1.0 && n > 0 ? n * 100 : n;
+  return `${pct.toFixed(dp)}%`;
+}
+
+/**
+ * Format Profit Factor with concise precision (default 2 decimals).
+ * Gracefully handles zero-loss unbounded cases ("∞ (0 losses)") per D-013.
+ */
+export function formatProfitFactor(pf: number | string | null | undefined, dp = 2): string {
+  if (pf == null || pf === "" || pf === "—" || pf === "N/A") return "—";
+  if (pf === "Infinity" || pf === "unbounded" || pf === Infinity) return "∞ (0 losses)";
+  const n = typeof pf === "string" ? parseFloat(pf) : Number(pf);
+  if (!Number.isFinite(n)) return "—";
+  return n.toFixed(dp);
+}
+
 /** Format an R multiple. Returns "N/A" when undefined. */
 export function formatR(r: Decimal | number | null | undefined, dp = 2): string {
   if (r == null) return "N/A";

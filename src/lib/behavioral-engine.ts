@@ -34,6 +34,7 @@ export type MatrixQuadrantKey =
   | "process_deviation_win"
   | "process_deviation_loss"
   | "insufficient_process_data"
+  | "breakeven"
   // Backwards compatibility aliases
   | "disciplined_win"
   | "good_loss"
@@ -55,7 +56,8 @@ export interface MatrixQuadrantStats {
 
 export interface ProcessOutcomeMatrixResult {
   totalTrades: number;
-  overallProcessAdherencePct: number;
+  evaluatedTradesCount: number;
+  overallProcessAdherencePct: number | null;
   disciplinedTradesCount: number;
   undisciplinedTradesCount: number;
   disciplinedNetPnlCents: number;
@@ -63,12 +65,14 @@ export interface ProcessOutcomeMatrixResult {
   disciplinedAvgR: number;
   undisciplinedAvgR: number;
   insufficientDataCount: number;
+  breakevenTradesCount: number;
   quadrants: {
     processFollowedWin: MatrixQuadrantStats;
     processFollowedLoss: MatrixQuadrantStats;
     processDeviationWin: MatrixQuadrantStats;
     processDeviationLoss: MatrixQuadrantStats;
     insufficientProcessData: MatrixQuadrantStats;
+    breakeven?: MatrixQuadrantStats;
     // Backwards-compatible aliases
     disciplinedWin: MatrixQuadrantStats;
     goodLoss: MatrixQuadrantStats;
@@ -82,7 +86,7 @@ export function computeProcessOutcomeMatrix(trades: TradeBehaviorRow[]): Process
   const total = closed.length;
 
   const qTrades: Record<
-    "process_followed_win" | "process_followed_loss" | "process_deviation_win" | "process_deviation_loss" | "insufficient_process_data",
+    "process_followed_win" | "process_followed_loss" | "process_deviation_win" | "process_deviation_loss" | "insufficient_process_data" | "breakeven",
     TradeBehaviorRow[]
   > = {
     process_followed_win: [],
@@ -90,10 +94,17 @@ export function computeProcessOutcomeMatrix(trades: TradeBehaviorRow[]): Process
     process_deviation_win: [],
     process_deviation_loss: [],
     insufficient_process_data: [],
+    breakeven: [],
   };
 
   for (const t of closed) {
-    const isWin = t.netPnlCents > 0 || t.status === "win";
+    // Authoritative financial outcome (D-012):
+    // Positive realized net P&L = win
+    // Negative realized net P&L = loss
+    // Zero realized net P&L = breakeven (excluded from winning quadrants)
+    const isWin = t.netPnlCents > 0;
+    const isLoss = t.netPnlCents < 0;
+    const isBreakeven = t.netPnlCents === 0;
 
     // Objective evaluation of process adherence based on explicit criteria
     let processStatus: "followed" | "deviation" | "unknown" = "unknown";
@@ -104,20 +115,24 @@ export function computeProcessOutcomeMatrix(trades: TradeBehaviorRow[]): Process
       processStatus = "deviation";
     } else if (Array.isArray(t.behaviorFlags) && t.behaviorFlags.length > 0) {
       processStatus = "deviation";
-    } else if (t.processCompliant === undefined && (t.checklistScore === null || t.checklistScore === undefined) && (!t.behaviorFlags || t.behaviorFlags.length === 0)) {
+    } else if ((t.processCompliant === undefined || t.processCompliant === null) && (t.checklistScore === null || t.checklistScore === undefined) && (!t.behaviorFlags || t.behaviorFlags.length === 0)) {
       processStatus = "unknown";
     } else {
       processStatus = "followed";
     }
 
-    if (processStatus === "followed") {
+    if (processStatus === "unknown") {
+      qTrades.insufficient_process_data.push(t);
+    } else if (isBreakeven) {
+      qTrades.breakeven.push(t);
+    } else if (processStatus === "followed") {
       if (isWin) qTrades.process_followed_win.push(t);
-      else qTrades.process_followed_loss.push(t);
+      else if (isLoss) qTrades.process_followed_loss.push(t);
+      else qTrades.breakeven.push(t);
     } else if (processStatus === "deviation") {
       if (isWin) qTrades.process_deviation_win.push(t);
-      else qTrades.process_deviation_loss.push(t);
-    } else {
-      qTrades.insufficient_process_data.push(t);
+      else if (isLoss) qTrades.process_deviation_loss.push(t);
+      else qTrades.breakeven.push(t);
     }
   }
 
@@ -135,14 +150,15 @@ export function computeProcessOutcomeMatrix(trades: TradeBehaviorRow[]): Process
       ? Math.round((rValues.reduce((a, b) => a + b, 0) / rValues.length) * 100) / 100
       : 0;
 
-    const wins = arr.filter((t) => t.netPnlCents > 0 || t.status === "win").length;
+    const wins = arr.filter((t) => t.netPnlCents > 0).length;
     const winRate = count > 0 ? Math.round((wins / count) * 100) : 0;
 
     const grossProfit = arr.filter((t) => t.netPnlCents > 0).reduce((a, t) => a + t.netPnlCents, 0);
     const grossLoss = Math.abs(arr.filter((t) => t.netPnlCents < 0).reduce((a, t) => a + t.netPnlCents, 0));
+    // D-013: If gross loss is 0, profit factor is mathematically unbounded (return null instead of arbitrary 99.99)
     const profitFactor = grossLoss > 0
       ? Math.round((grossProfit / grossLoss) * 100) / 100
-      : grossProfit > 0 ? 99.99 : null;
+      : null;
 
     return {
       key,
@@ -196,7 +212,7 @@ export function computeProcessOutcomeMatrix(trades: TradeBehaviorRow[]): Process
   const evaluatedTradesCount = total - qTrades.insufficient_process_data.length;
   const disciplinedCount = followedWin.tradesCount + followedLoss.tradesCount;
   const undisciplinedCount = deviationWin.tradesCount + deviationLoss.tradesCount;
-  const adherencePct = evaluatedTradesCount > 0 ? Math.round((disciplinedCount / evaluatedTradesCount) * 100) : 100;
+  const adherencePct = evaluatedTradesCount > 0 ? Math.round((disciplinedCount / evaluatedTradesCount) * 100) : null;
 
   const disciplinedNetPnl = followedWin.totalPnlCents + followedLoss.totalPnlCents;
   const undisciplinedNetPnl = deviationWin.totalPnlCents + deviationLoss.totalPnlCents;
@@ -210,6 +226,7 @@ export function computeProcessOutcomeMatrix(trades: TradeBehaviorRow[]): Process
 
   return {
     totalTrades: total,
+    evaluatedTradesCount,
     overallProcessAdherencePct: adherencePct,
     disciplinedTradesCount: disciplinedCount,
     undisciplinedTradesCount: undisciplinedCount,
@@ -218,6 +235,7 @@ export function computeProcessOutcomeMatrix(trades: TradeBehaviorRow[]): Process
     disciplinedAvgR: discR.length > 0 ? Math.round((discR.reduce((a, b) => a + b, 0) / discR.length) * 100) / 100 : 0,
     undisciplinedAvgR: undiscR.length > 0 ? Math.round((undiscR.reduce((a, b) => a + b, 0) / undiscR.length) * 100) / 100 : 0,
     insufficientDataCount: insufficientData.tradesCount,
+    breakevenTradesCount: qTrades.breakeven.length,
     quadrants: {
       processFollowedWin: followedWin,
       processFollowedLoss: followedLoss,

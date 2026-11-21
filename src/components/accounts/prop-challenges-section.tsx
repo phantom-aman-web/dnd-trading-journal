@@ -54,7 +54,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { Skeleton } from "@/components/ui/skeleton";
-import { formatSignedCents } from "@/lib/money";
+import { formatSignedCents, formatProfitFactor } from "@/lib/money";
 import { useNav } from "@/lib/nav-store";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
@@ -967,7 +967,7 @@ export function PropChallengesSection({ accounts: rawAccounts, hideHeader = fals
                   <div className="space-y-0.5 min-w-0">
                     <span className="text-[10px] text-muted-foreground uppercase tracking-wider font-mono block">Profit Factor</span>
                     <div className="font-bold text-foreground text-sm font-mono truncate">
-                      {m.profitFactor != null ? m.profitFactor : "—"}
+                      {formatProfitFactor(m.profitFactor)}
                     </div>
                     <div className="text-[10px] text-muted-foreground truncate">
                       {m.breakevenCount} Breakevens

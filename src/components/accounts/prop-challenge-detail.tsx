@@ -64,9 +64,12 @@ import {
 } from "@/components/ui/select";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
+import { formatProfitFactor } from "@/lib/money";
 import {
   simulateHypotheticalScenario,
   isSyntheticSampleTrade,
+  filterTradesForPhase,
+  getPhaseForTrade,
   type PropRuleDefinition,
   type PropViolationRecord,
   type PropPhaseConfig,
@@ -437,6 +440,8 @@ export function PropChallengeDetail({ challengeId, onBack }: PropChallengeDetail
 
   // Trade History filter
   const [tradeFilter, setTradeFilter] = useState<"all" | "win" | "loss">("all");
+  // D-019: Trade History & Performance scope: "active" (default) or "all"
+  const [tradeScope, setTradeScope] = useState<"active" | "all">("active");
   const [dismissedAlertKeys, setDismissedAlertKeys] = useState<string[]>([]);
 
   // Fetch challenge details
@@ -628,8 +633,14 @@ export function PropChallengeDetail({ challengeId, onBack }: PropChallengeDetail
     { key: "payout", label: "Payout" },
   ];
 
-  // Derived trade statistics for Performance tab
-  const closedTrades = trades.filter((t: any) => t.status !== "open" && t.exitTime !== null);
+  // D-019: Filter trades belonging strictly to active phase
+  const activePhaseTrades = filterTradesForPhase(trades, activePhase, allPhases, challenge.startDate);
+
+  // Selected trade population for Performance tab and Trade History tab
+  const scopedTrades = tradeScope === "active" ? activePhaseTrades : trades;
+
+  // Derived trade statistics for Performance tab (based on scoped trades)
+  const closedTrades = scopedTrades.filter((t: any) => t.status !== "open" && t.exitTime !== null);
   const winningTrades = closedTrades.filter((t: any) => t.netPnlCents > 0 || t.status === "win");
   const losingTrades = closedTrades.filter((t: any) => t.netPnlCents < 0 || t.status === "loss");
   const breakevenTrades = closedTrades.filter((t: any) => t.netPnlCents === 0 || t.status === "breakeven");
@@ -674,7 +685,7 @@ export function PropChallengeDetail({ challengeId, onBack }: PropChallengeDetail
     .sort((a, b) => b.trades - a.trades);
 
   // Filtered trades for Trade History tab
-  const filteredTrades = trades.filter((t: any) => {
+  const filteredTrades = scopedTrades.filter((t: any) => {
     if (tradeFilter === "win") return t.netPnlCents > 0 || t.status === "win";
     if (tradeFilter === "loss") return t.netPnlCents < 0 || t.status === "loss";
     return true;
@@ -1131,7 +1142,7 @@ export function PropChallengeDetail({ challengeId, onBack }: PropChallengeDetail
                 <div className="flex justify-between items-center text-xs">
                   <span className="text-muted-foreground">Profit Factor:</span>
                   <span className="font-mono font-semibold text-foreground">
-                    {lifecycle.profitFactor !== null ? lifecycle.profitFactor : "—"}
+                    {formatProfitFactor(lifecycle.profitFactor)}
                   </span>
                 </div>
               </CardContent>
@@ -1295,7 +1306,7 @@ export function PropChallengeDetail({ challengeId, onBack }: PropChallengeDetail
               </CardHeader>
               <CardContent>
                 <div className="text-2xl font-bold font-mono text-foreground">
-                  {lifecycle.profitFactor !== null ? lifecycle.profitFactor : "—"}
+                  {formatProfitFactor(lifecycle.profitFactor)}
                 </div>
                 <div className="text-xs text-muted-foreground mt-1">Gross Win / Gross Loss ratio</div>
               </CardContent>
@@ -1434,18 +1445,56 @@ export function PropChallengeDetail({ challengeId, onBack }: PropChallengeDetail
           <div className="rounded-xl border border-border bg-card overflow-hidden">
             <div className="p-4 border-b border-border flex flex-col sm:flex-row sm:items-center justify-between gap-3">
               <div>
-                <h3 className="font-semibold text-sm">Phase Trade Executions ({trades.length})</h3>
-                <p className="text-xs text-muted-foreground">
-                  Executed trades recorded for this challenge during {activePhase.name}.
+                <div className="flex items-center gap-2">
+                  <h3 className="font-semibold text-sm">
+                    {tradeScope === "active" ? `${activePhase.name} Executions` : "All Challenge Executions"} ({scopedTrades.length})
+                  </h3>
+                  <Badge variant="outline" className="text-[10px] font-mono">
+                    {tradeScope === "active" ? activePhase.name : "All Phases"}
+                  </Badge>
+                </div>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  {tradeScope === "active"
+                    ? `Showing verified executions strictly recorded during ${activePhase.name}.`
+                    : "Showing complete execution history across all phases of this challenge."}
                 </p>
               </div>
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 flex-wrap">
+                {/* D-019: Scope Selector Toggle */}
+                <div className="flex items-center gap-1 bg-muted/60 p-1 rounded-lg border border-border/70 text-xs">
+                  <button
+                    type="button"
+                    onClick={() => setTradeScope("active")}
+                    className={cn(
+                      "px-2.5 py-0.5 rounded text-[11px] font-medium transition-colors cursor-pointer",
+                      tradeScope === "active"
+                        ? "bg-card font-semibold text-foreground shadow-xs border border-border"
+                        : "text-muted-foreground hover:text-foreground"
+                    )}
+                  >
+                    Active Phase ({activePhaseTrades.length})
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setTradeScope("all")}
+                    className={cn(
+                      "px-2.5 py-0.5 rounded text-[11px] font-medium transition-colors cursor-pointer",
+                      tradeScope === "all"
+                        ? "bg-card font-semibold text-foreground shadow-xs border border-border"
+                        : "text-muted-foreground hover:text-foreground"
+                    )}
+                  >
+                    All History ({trades.length})
+                  </button>
+                </div>
+
+                {/* Outcome filter */}
                 <div className="flex items-center gap-1 bg-muted/40 p-1 rounded-lg border border-border/50 text-xs">
                   <button
                     onClick={() => setTradeFilter("all")}
                     className={cn("px-2 py-0.5 rounded transition-colors text-[11px]", tradeFilter === "all" ? "bg-card font-semibold text-foreground shadow-xs" : "text-muted-foreground")}
                   >
-                    All ({trades.length})
+                    All ({scopedTrades.length})
                   </button>
                   <button
                     onClick={() => setTradeFilter("win")}
@@ -1492,6 +1541,7 @@ export function PropChallengeDetail({ challengeId, onBack }: PropChallengeDetail
                   <thead className="bg-muted/50 text-muted-foreground uppercase font-mono text-[10px] border-b border-border">
                     <tr>
                       <th className="py-2.5 px-4">Symbol</th>
+                      {tradeScope === "all" && <th className="py-2.5 px-4 text-center">Phase</th>}
                       <th className="py-2.5 px-4">Direction</th>
                       <th className="py-2.5 px-4">Size</th>
                       <th className="py-2.5 px-4">Entry / Exit</th>
@@ -1509,6 +1559,13 @@ export function PropChallengeDetail({ challengeId, onBack }: PropChallengeDetail
                       return (
                         <tr key={t.id} className="hover:bg-muted/20">
                           <td className="py-2.5 px-4 font-semibold text-foreground">{t.instrumentSymbol || "—"}</td>
+                          {tradeScope === "all" && (
+                            <td className="py-2.5 px-4 text-center">
+                              <Badge variant="outline" className="text-[10px] font-mono">
+                                {getPhaseForTrade(t, allPhases, challenge.startDate)?.name || "Phase"}
+                              </Badge>
+                            </td>
+                          )}
                           <td className="py-2.5 px-4">
                             <span
                               className={cn(
