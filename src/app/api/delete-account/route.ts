@@ -39,6 +39,7 @@ export async function DELETE(req: NextRequest) {
   await db.instrument.deleteMany({ where: { userId: user.id } });
   await db.tag.deleteMany({ where: { userId: user.id } });
   await db.goal.deleteMany({ where: { userId: user.id } });
+  await db.watchlistOutcome.deleteMany({ where: { userId: user.id } });
   await db.notification.deleteMany({ where: { userId: user.id } });
 
   await db.importRow.deleteMany({ where: { import: { userId: user.id } } });

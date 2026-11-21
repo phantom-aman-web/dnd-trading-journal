@@ -358,12 +358,13 @@ export function TradingTodoView() {
       notifyOptimisticFailure(err, "Failed to create task.");
     },
     onSuccess: (serverTask: any, _vars: any, context: any) => {
-      if (context?.tempId && serverTask?.id) {
+      const canonical = serverTask?.item || serverTask?.task || serverTask;
+      if (context?.tempId && canonical?.id) {
         qc.setQueriesData({ queryKey: ["trading-tasks"] }, (old: any) =>
-          reconcileTempId(old, context.tempId, serverTask)
+          reconcileTempId(old, context.tempId, canonical)
         );
         qc.setQueryData(["trading-tasks-all-lists"], (old: any) =>
-          reconcileTempId(old, context.tempId, serverTask)
+          reconcileTempId(old, context.tempId, canonical)
         );
       }
     },

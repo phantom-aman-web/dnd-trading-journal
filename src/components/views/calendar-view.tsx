@@ -41,6 +41,8 @@ import { useNav } from "@/lib/nav-store";
 import { formatSignedCents, formatR } from "@/lib/money";
 import { PrivacyMask } from "@/components/common/privacy-mask";
 import { cn } from "@/lib/utils";
+import { WatchlistOutcomesTab } from "@/components/calendar/watchlist-outcomes-tab";
+import { EconomicCalendarTab } from "@/components/calendar/economic-calendar-tab";
 import {
   ChevronLeft,
   ChevronRight,
@@ -119,6 +121,7 @@ export function CalendarView() {
   const [month, setMonth] = useState(now.getMonth() + 1); // 1..12
   const [viewMode, setViewMode] = useState<"month" | "week" | "list">("month");
   const [selectedDay, setSelectedDay] = useState<CalendarDay | null>(null);
+  const [calendarTab, setCalendarTab] = useState<"calendar" | "watchlist" | "economic">("calendar");
 
   useEffect(() => {
     if (typeof window !== "undefined" && window.innerWidth < 768) {
@@ -209,46 +212,95 @@ export function CalendarView() {
 
   return (
     <div className="p-4 md:p-6 space-y-5">
-      {/* Header: title + month/year dropdowns */}
-      <div className="flex flex-col gap-3">
+      {/* Header: title + sub-navigation mode switcher */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div>
           <h1 className="text-2xl font-semibold tracking-tight text-foreground">
             Trading Calendar
           </h1>
           <p className="text-sm text-muted-foreground">
-            Track your daily P&amp;L and trading activity over the month.
+            Track daily P&amp;L, monitor watchlist setup outcomes, and track macroeconomic calendar events.
           </p>
         </div>
 
-        <div className="flex flex-wrap items-center gap-2">
-          <div className="flex items-center gap-1.5">
-            <Select value={String(month)} onValueChange={(v) => setMonth(Number(v))}>
-              <SelectTrigger
-                size="sm"
-                className="bg-card border-border text-foreground h-8 w-[140px] rounded-md text-sm font-medium"
-              >
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {MONTHS.map((m, idx) => (
-                  <SelectItem key={m} value={String(idx + 1)}>{m}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            <Select value={String(year)} onValueChange={(v) => setYear(Number(v))}>
-              <SelectTrigger
-                size="sm"
-                className="bg-card border-border text-foreground h-8 w-[100px] rounded-md text-sm font-medium"
-              >
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {yearOptions(now).map((y) => (
-                  <SelectItem key={y} value={String(y)}>{y}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
+        {/* View mode switcher */}
+        <div className="flex items-center gap-1 bg-muted/60 p-1 rounded-lg border border-border/50 self-start sm:self-auto">
+          <button
+            type="button"
+            onClick={() => setCalendarTab("calendar")}
+            className={cn(
+              "px-3 py-1 rounded-md text-xs font-medium transition-colors cursor-pointer",
+              calendarTab === "calendar"
+                ? "bg-card text-foreground shadow-xs font-semibold"
+                : "text-muted-foreground hover:text-foreground"
+            )}
+          >
+            P&amp;L Calendar
+          </button>
+          <button
+            type="button"
+            onClick={() => setCalendarTab("watchlist")}
+            className={cn(
+              "px-3 py-1 rounded-md text-xs font-medium transition-colors cursor-pointer",
+              calendarTab === "watchlist"
+                ? "bg-card text-foreground shadow-xs font-semibold"
+                : "text-muted-foreground hover:text-foreground"
+            )}
+          >
+            Watchlist Outcomes
+          </button>
+          <button
+            type="button"
+            onClick={() => setCalendarTab("economic")}
+            className={cn(
+              "px-3 py-1 rounded-md text-xs font-medium transition-colors cursor-pointer",
+              calendarTab === "economic"
+                ? "bg-card text-foreground shadow-xs font-semibold"
+                : "text-muted-foreground hover:text-foreground"
+            )}
+          >
+            Economic Calendar
+          </button>
+        </div>
+      </div>
+
+      {calendarTab === "watchlist" ? (
+        <WatchlistOutcomesTab />
+      ) : calendarTab === "economic" ? (
+        <EconomicCalendarTab />
+      ) : (
+        <>
+          {/* Header: title + month/year dropdowns */}
+          <div className="flex flex-col gap-3">
+            <div className="flex flex-wrap items-center gap-2">
+              <div className="flex items-center gap-1.5">
+                <Select value={String(month)} onValueChange={(v) => setMonth(Number(v))}>
+                  <SelectTrigger
+                    size="sm"
+                    className="bg-card border-border text-foreground h-8 w-[140px] rounded-md text-sm font-medium"
+                  >
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {MONTHS.map((m, idx) => (
+                      <SelectItem key={m} value={String(idx + 1)}>{m}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <Select value={String(year)} onValueChange={(v) => setYear(Number(v))}>
+                  <SelectTrigger
+                    size="sm"
+                    className="bg-card border-border text-foreground h-8 w-[100px] rounded-md text-sm font-medium"
+                  >
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {yearOptions(now).map((y) => (
+                      <SelectItem key={y} value={String(y)}>{y}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
 
           {/* View mode switcher: Month, Week, List */}
           <div className="flex items-center rounded-lg border border-border p-0.5 bg-muted/40">
@@ -641,6 +693,8 @@ export function CalendarView() {
         </span>
         <span className="text-muted-foreground/70">Click a day to view its trades or log a new one.</span>
       </div>
+      </>
+      )}
 
       {/* Day detail modal */}
       <DayDetailModal

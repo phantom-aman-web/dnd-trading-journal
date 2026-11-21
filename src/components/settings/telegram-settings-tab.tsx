@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -37,10 +37,30 @@ import {
   Copy,
   Check,
   Activity,
+  Bold,
+  Italic,
+  Underline,
+  Code,
+  Link2,
+  Minus,
+  Heading,
+  CornerDownLeft,
+  RotateCcw,
+  Image as ImageIcon,
+  Layers,
 } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
-import { renderStandardTemplate, renderIctTemplate, renderCustomTemplate } from "@/lib/telegram/formatter";
+import {
+  renderStandardTemplate,
+  renderIctTemplate,
+  renderCustomTemplate,
+  formatTradeClosureUpdateMessage,
+  formatTradePartialExitMessage,
+  DEFAULT_NEW_TRADE_TEMPLATE,
+  DEFAULT_CLOSURE_TEMPLATE,
+  DEFAULT_PARTIAL_EXIT_TEMPLATE,
+} from "@/lib/telegram/formatter";
 
 export function TelegramSettingsTab() {
   const queryClient = useQueryClient();
@@ -52,28 +72,14 @@ export function TelegramSettingsTab() {
   const [linkModalOpen, setLinkModalOpen] = useState(false);
   const [copiedLink, setCopiedLink] = useState(false);
   const [selectedTemplate, setSelectedTemplate] = useState<"standard" | "ict2022" | "custom">("standard");
-  const [customPattern, setCustomPattern] = useState(
-    `📊 ASSET: {{asset}}
-📈 DIRECTION: {{direction}}
-⏰ SESSION: {{session}}
-
-1. TRADE INFORMATION
-• Strategy: {{strategy}}
-• Timeframe: {{timeframe}}
-• Entry: {{entry}}
-• Stop Loss: {{stop_loss}}
-• Take Profit: {{take_profit}}
-
-2. RISK & MANAGEMENT
-• Risk: {{risk_percent}}
-• Risk/Reward: {{risk_reward}}
-• Outcome: {{outcome}}
-• Net P&L: {{net_pnl}}
-
-3. NOTES
-• Description: {{description}}
-• Tags: {{tags}}`
-  );
+  const [selectedEventTab, setSelectedEventTab] = useState<"newTrade" | "tradeClosure" | "partialExit">("newTrade");
+  const [eventPatterns, setEventPatterns] = useState<Record<"newTrade" | "tradeClosure" | "partialExit", string>>({
+    newTrade: DEFAULT_NEW_TRADE_TEMPLATE,
+    tradeClosure: DEFAULT_CLOSURE_TEMPLATE,
+    partialExit: DEFAULT_PARTIAL_EXIT_TEMPLATE,
+  });
+  const [mockImageCount, setMockImageCount] = useState<0 | 1 | 2 | 3 | 4>(2);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   // Queries
   const { data: connection, isLoading: loadingConn } = useQuery({
@@ -146,7 +152,11 @@ export function TelegramSettingsTab() {
     if (settings?.publishing?.customTemplateJson) {
       try {
         const parsed = JSON.parse(settings.publishing.customTemplateJson);
-        if (parsed.templateText) setCustomPattern(parsed.templateText);
+        setEventPatterns({
+          newTrade: parsed.events?.newTrade || parsed.templateText || DEFAULT_NEW_TRADE_TEMPLATE,
+          tradeClosure: parsed.events?.tradeClosure || DEFAULT_CLOSURE_TEMPLATE,
+          partialExit: parsed.events?.partialExit || DEFAULT_PARTIAL_EXIT_TEMPLATE,
+        });
       } catch {}
     }
   }, [settings]);
@@ -229,6 +239,10 @@ export function TelegramSettingsTab() {
         return {
           ...old,
           ...newSettings,
+          publishing: {
+            ...(old.publishing || {}),
+            ...(newSettings.publishing || {}),
+          },
           reminders: {
             ...(old.reminders || {}),
             ...(newSettings.reminders || {}),
@@ -318,30 +332,184 @@ export function TelegramSettingsTab() {
     }
   };
 
+  // Helper handlers for template editor
+  const handleSavePattern = () => {
+    updateSettingsMutation.mutate({
+      publishing: {
+        templateType: selectedTemplate,
+        customTemplateJson: JSON.stringify({
+          templateText: eventPatterns.newTrade,
+          events: eventPatterns,
+        }),
+      },
+    });
+  };
+
+  const insertPlaceholder = (token: string) => {
+    const textarea = textareaRef.current;
+    const currentText = eventPatterns[selectedEventTab] || "";
+    if (!textarea) {
+      setEventPatterns((prev) => ({
+        ...prev,
+        [selectedEventTab]: `${currentText}\n${token}`,
+      }));
+      return;
+    }
+
+    const start = textarea.selectionStart ?? currentText.length;
+    const end = textarea.selectionEnd ?? currentText.length;
+    const nextText = currentText.substring(0, start) + token + currentText.substring(end);
+    setEventPatterns((prev) => ({
+      ...prev,
+      [selectedEventTab]: nextText,
+    }));
+
+    setTimeout(() => {
+      textarea.focus();
+      textarea.setSelectionRange(start + token.length, start + token.length);
+    }, 0);
+  };
+
+  const insertFormatting = (tag: "b" | "i" | "u" | "code" | "a" | "separator" | "heading" | "linebreak") => {
+    const textarea = textareaRef.current;
+    const currentText = eventPatterns[selectedEventTab] || "";
+
+    if (tag === "separator") {
+      const sep = "\n───────────────\n";
+      if (!textarea) {
+        setEventPatterns((prev) => ({ ...prev, [selectedEventTab]: `${currentText}${sep}` }));
+        return;
+      }
+      const start = textarea.selectionStart ?? currentText.length;
+      const end = textarea.selectionEnd ?? currentText.length;
+      const nextText = currentText.substring(0, start) + sep + currentText.substring(end);
+      setEventPatterns((prev) => ({ ...prev, [selectedEventTab]: nextText }));
+      setTimeout(() => {
+        textarea.focus();
+        textarea.setSelectionRange(start + sep.length, start + sep.length);
+      }, 0);
+      return;
+    }
+
+    if (tag === "heading") {
+      const hd = "\n<b>🔷 SECTION HEADING</b>\n";
+      if (!textarea) {
+        setEventPatterns((prev) => ({ ...prev, [selectedEventTab]: `${currentText}${hd}` }));
+        return;
+      }
+      const start = textarea.selectionStart ?? currentText.length;
+      const end = textarea.selectionEnd ?? currentText.length;
+      const nextText = currentText.substring(0, start) + hd + currentText.substring(end);
+      setEventPatterns((prev) => ({ ...prev, [selectedEventTab]: nextText }));
+      setTimeout(() => {
+        textarea.focus();
+        textarea.setSelectionRange(start + 4, start + 24);
+      }, 0);
+      return;
+    }
+
+    if (tag === "linebreak") {
+      const lb = "\n";
+      if (!textarea) {
+        setEventPatterns((prev) => ({ ...prev, [selectedEventTab]: `${currentText}${lb}` }));
+        return;
+      }
+      const start = textarea.selectionStart ?? currentText.length;
+      const end = textarea.selectionEnd ?? currentText.length;
+      const nextText = currentText.substring(0, start) + lb + currentText.substring(end);
+      setEventPatterns((prev) => ({ ...prev, [selectedEventTab]: nextText }));
+      setTimeout(() => {
+        textarea.focus();
+        textarea.setSelectionRange(start + lb.length, start + lb.length);
+      }, 0);
+      return;
+    }
+
+    const openTag = tag === "a" ? `<a href="https://alphapips.com">` : `<${tag}>`;
+    const closeTag = tag === "a" ? `</a>` : `</${tag}>`;
+
+    if (!textarea) {
+      setEventPatterns((prev) => ({
+        ...prev,
+        [selectedEventTab]: `${currentText}\n${openTag}text${closeTag}`,
+      }));
+      return;
+    }
+
+    const start = textarea.selectionStart ?? 0;
+    const end = textarea.selectionEnd ?? 0;
+    const selected = currentText.substring(start, end) || "text";
+    const replacement = `${openTag}${selected}${closeTag}`;
+    const nextText = currentText.substring(0, start) + replacement + currentText.substring(end);
+
+    setEventPatterns((prev) => ({
+      ...prev,
+      [selectedEventTab]: nextText,
+    }));
+
+    setTimeout(() => {
+      textarea.focus();
+      textarea.setSelectionRange(
+        start + openTag.length,
+        start + openTag.length + selected.length
+      );
+    }, 0);
+  };
+
+  const resetToDefault = () => {
+    const def =
+      selectedEventTab === "newTrade"
+        ? DEFAULT_NEW_TRADE_TEMPLATE
+        : selectedEventTab === "tradeClosure"
+        ? DEFAULT_CLOSURE_TEMPLATE
+        : DEFAULT_PARTIAL_EXIT_TEMPLATE;
+    setEventPatterns((prev) => ({
+      ...prev,
+      [selectedEventTab]: def,
+    }));
+    toast.info("Reset template to default.");
+  };
+
   // Mock trade data for Live Preview
   const mockTrade = {
-    instrumentSymbol: "XAUUSD",
-    direction: "short",
-    status: "win",
+    instrumentSymbol: "EURUSD",
+    direction: "long",
+    market: "Forex",
+    status: selectedEventTab === "newTrade" ? "open" : "win",
     session: "london",
     timeframe: "15m",
-    plannedEntryPrice: "2650.50",
-    plannedStopPrice: "2658.00",
-    plannedTargetPrice: "2625.00",
+    entryPriceAvg: "1.08520",
+    exitPriceAvg: selectedEventTab === "newTrade" ? null : "1.09240",
+    plannedEntryPrice: "1.08500",
+    plannedStopPrice: "1.08250",
+    plannedTargetPrice: "1.09250",
     plannedRiskPct: "1.0",
-    plannedRR: "3.2",
-    actualR: "3.2",
-    netPnlCents: 320000,
-    strategyName: "Silver Bullet",
-    description: "Clean liquidity sweep into 15m order block.",
-    tags: ["London", "SilverBullet", "Gold"],
+    plannedRiskAmountCents: 50000,
+    plannedRR: "3.0",
+    actualR: selectedEventTab === "newTrade" ? null : selectedEventTab === "partialExit" ? "+1.50" : "+2.88",
+    netPnlCents: selectedEventTab === "newTrade" ? null : selectedEventTab === "partialExit" ? 75000 : 144000,
+    grossPnlCents: selectedEventTab === "newTrade" ? null : 145200,
+    feesCents: 1200,
+    positionSize: selectedEventTab === "partialExit" ? "1.0 Lot (1.5 Lots Secured)" : "2.5 Lots",
+    pnlPercent: selectedEventTab === "newTrade" ? null : "1.44",
+    accountName: "FTMO $100K Challenge",
+    accountCurrency: "USD",
+    strategyName: "London Silver Bullet",
+    setupGrade: "A+",
+    setupScore: "95/100",
+    entryTime: "08:15 UTC",
+    exitTime: selectedEventTab === "newTrade" ? null : "10:42 UTC",
+    duration: selectedEventTab === "newTrade" ? "Ongoing" : "2h 27m",
+    notes: "Clean liquidity sweep of Asian Range Low into 15m bullish FVG. Rapid displacement.",
+    lessons: "Patience paid off; waited for confirmation candle rather than anticipating.",
+    description: "London Open execution targeting previous day high.",
+    tags: ["Forex", "EURUSD", "SilverBullet", "LondonSession"],
     setupJson: JSON.stringify({
-      htfContext: { dol: "1H QM level", pdArray: "PDH", bias: "Bearish" },
-      liquidity: { sweep: "Asian High swept" },
-      structure: { mss: "5min CHoCH" },
-      entryModel: { fvg: "5min FVG" },
+      htfContext: { dol: "Previous Day High (PDH)", pdArray: "1H Bullish FVG", bias: "Bullish" },
+      liquidity: { sweep: "Asian Range Low swept" },
+      structure: { mss: "5m Market Structure Shift with displacement" },
+      entryModel: { fvg: "5m Fair Value Gap tap" },
     }),
-    lessons: "Patience paid off; waited for liquidity sweep before entering.",
   };
 
   const previewOptions = {
@@ -352,14 +520,21 @@ export function TelegramSettingsTab() {
     includeRisk: settings?.publishing?.includeRisk ?? true,
     includePerformance: settings?.publishing?.includePerformance ?? true,
     includeAccountName: settings?.publishing?.includeAccountName ?? false,
-    customTemplateJson: JSON.stringify({ templateText: customPattern }),
+    customTemplateJson: JSON.stringify({
+      templateText: eventPatterns.newTrade,
+      events: eventPatterns,
+    }),
   };
 
   let renderedPreview = "";
-  if (selectedTemplate === "ict2022") {
+  if (selectedTemplate === "custom") {
+    renderedPreview = renderCustomTemplate(mockTrade, eventPatterns[selectedEventTab], previewOptions);
+  } else if (selectedEventTab === "tradeClosure") {
+    renderedPreview = formatTradeClosureUpdateMessage(mockTrade, previewOptions);
+  } else if (selectedEventTab === "partialExit") {
+    renderedPreview = formatTradePartialExitMessage(mockTrade, previewOptions);
+  } else if (selectedTemplate === "ict2022") {
     renderedPreview = renderIctTemplate(mockTrade, previewOptions);
-  } else if (selectedTemplate === "custom") {
-    renderedPreview = renderCustomTemplate(mockTrade, customPattern, previewOptions);
   } else {
     renderedPreview = renderStandardTemplate(mockTrade, previewOptions);
   }
@@ -704,161 +879,491 @@ export function TelegramSettingsTab() {
         </div>
       </div>
 
-      {/* ── 3. MESSAGE TEMPLATES & LIVE PREVIEW ──────────────────────────── */}
+      {/* ── 3. ADVANCED MESSAGE TEMPLATES & LIVE PREVIEW ──────────────────── */}
       <div className="rounded-lg border border-border bg-card p-6 space-y-6">
-        <div>
-          <h3 className="text-base font-semibold text-foreground">Message Templates &amp; Live Preview</h3>
-          <p className="text-xs text-muted-foreground mt-0.5">
-            Select a built-in format or configure a custom template with dynamic placeholders.
-          </p>
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+          <div>
+            <h3 className="text-base font-semibold text-foreground flex items-center gap-2">
+              <MessageSquare className="h-4 w-4 text-primary" />
+              Advanced Message Templates &amp; Album Publishing
+            </h3>
+            <p className="text-xs text-muted-foreground mt-0.5">
+              Customizable section-based formatting, HTML styling tools, and multi-image Telegram album previews.
+            </p>
+          </div>
+          <div className="flex items-center gap-2">
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={handleSavePattern}
+              className="text-xs h-8 gap-1.5"
+            >
+              <Check className="h-3.5 w-3.5 text-profit" /> Save All Templates
+            </Button>
+          </div>
         </div>
 
-        {/* Template Selector */}
-        <div className="flex flex-wrap items-center gap-3">
+        {/* Event Tabs Switcher */}
+        <div className="flex items-center border-b border-border gap-2 pb-2">
+          <span className="text-xs font-semibold text-muted-foreground mr-1">Trigger Event:</span>
           <Button
             size="sm"
-            variant={selectedTemplate === "standard" ? "default" : "outline"}
-            onClick={() => {
-              setSelectedTemplate("standard");
-              updateSettingsMutation.mutate({ publishing: { templateType: "standard" } });
-            }}
-            className="text-xs h-8"
+            variant={selectedEventTab === "newTrade" ? "default" : "ghost"}
+            onClick={() => setSelectedEventTab("newTrade")}
+            className="text-xs h-7 rounded-full"
           >
-            Standard Trading
+            🚀 New Trade Entry
           </Button>
+          <Button
+            size="sm"
+            variant={selectedEventTab === "tradeClosure" ? "default" : "ghost"}
+            onClick={() => setSelectedEventTab("tradeClosure")}
+            className="text-xs h-7 rounded-full"
+          >
+            🎯 Trade Closure
+          </Button>
+          <Button
+            size="sm"
+            variant={selectedEventTab === "partialExit" ? "default" : "ghost"}
+            onClick={() => setSelectedEventTab("partialExit")}
+            className="text-xs h-7 rounded-full"
+          >
+            ✂️ Partial Exit
+          </Button>
+        </div>
 
-          <Button
-            size="sm"
-            variant={selectedTemplate === "ict2022" ? "default" : "outline"}
-            onClick={() => {
-              setSelectedTemplate("ict2022");
-              updateSettingsMutation.mutate({ publishing: { templateType: "ict2022" } });
-            }}
-            className="text-xs h-8"
-          >
-            ICT 2022 Model
-          </Button>
+        {/* Template Style Selector */}
+        <div className="flex flex-wrap items-center justify-between gap-3 bg-muted/20 p-3 rounded-lg border border-border/70">
+          <div className="flex items-center gap-2">
+            <span className="text-xs font-medium text-foreground">Template Preset:</span>
+            <div className="flex items-center gap-1.5">
+              <Button
+                size="sm"
+                variant={selectedTemplate === "standard" ? "default" : "outline"}
+                onClick={() => {
+                  setSelectedTemplate("standard");
+                  updateSettingsMutation.mutate({ publishing: { templateType: "standard" } });
+                }}
+                className="text-xs h-7"
+              >
+                Standard Trading
+              </Button>
 
-          <Button
-            size="sm"
-            variant={selectedTemplate === "custom" ? "default" : "outline"}
-            onClick={() => {
-              setSelectedTemplate("custom");
-              updateSettingsMutation.mutate({ publishing: { templateType: "custom" } });
-            }}
-            className="text-xs h-8"
-          >
-            Custom Template
-          </Button>
+              <Button
+                size="sm"
+                variant={selectedTemplate === "ict2022" ? "default" : "outline"}
+                onClick={() => {
+                  setSelectedTemplate("ict2022");
+                  updateSettingsMutation.mutate({ publishing: { templateType: "ict2022" } });
+                }}
+                className="text-xs h-7"
+              >
+                ICT 2022 Model
+              </Button>
+
+              <Button
+                size="sm"
+                variant={selectedTemplate === "custom" ? "default" : "outline"}
+                onClick={() => {
+                  setSelectedTemplate("custom");
+                  updateSettingsMutation.mutate({ publishing: { templateType: "custom" } });
+                }}
+                className="text-xs h-7"
+              >
+                Custom Editor
+              </Button>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2 text-xs text-muted-foreground">
+            <Layers className="h-3.5 w-3.5 text-primary" />
+            <span>Editing: <strong className="text-foreground capitalize">{selectedEventTab.replace(/([A-Z])/g, ' $1')}</strong></span>
+          </div>
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-start">
-          {/* Left: Custom Template Editor (if selected) or Template description */}
-          {selectedTemplate === "custom" ? (
-            <div className="space-y-3">
-              <div className="flex items-center justify-between">
-                <span className="text-xs font-medium text-foreground">Custom Template Text</span>
+          {/* Left: Custom Template Editor & Placeholders Toolbar */}
+          <div className="space-y-3">
+            {/* Formatting Toolbar */}
+            <div className="flex flex-wrap items-center justify-between gap-1.5 p-1.5 rounded-md border border-border/70 bg-muted/30">
+              <div className="flex items-center gap-1">
                 <Button
+                  type="button"
                   size="sm"
-                  variant="outline"
-                  onClick={() =>
-                    updateSettingsMutation.mutate({
-                      publishing: {
-                        templateType: "custom",
-                        customTemplateJson: JSON.stringify({ templateText: customPattern }),
-                      },
-                    })
-                  }
-                  className="text-xs h-7"
+                  variant="ghost"
+                  onClick={() => insertFormatting("b")}
+                  className="h-7 w-7 p-0"
+                  title="Bold (<b>text</b>)"
                 >
-                  Save Pattern
+                  <Bold className="h-3.5 w-3.5" />
+                </Button>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="ghost"
+                  onClick={() => insertFormatting("i")}
+                  className="h-7 w-7 p-0"
+                  title="Italic (<i>text</i>)"
+                >
+                  <Italic className="h-3.5 w-3.5" />
+                </Button>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="ghost"
+                  onClick={() => insertFormatting("u")}
+                  className="h-7 w-7 p-0"
+                  title="Underline (<u>text</u>)"
+                >
+                  <Underline className="h-3.5 w-3.5" />
+                </Button>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="ghost"
+                  onClick={() => insertFormatting("code")}
+                  className="h-7 w-7 p-0"
+                  title="Code (<code>text</code>)"
+                >
+                  <Code className="h-3.5 w-3.5" />
+                </Button>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="ghost"
+                  onClick={() => insertFormatting("a")}
+                  className="h-7 w-7 p-0"
+                  title="Link (<a href='...'>text</a>)"
+                >
+                  <Link2 className="h-3.5 w-3.5" />
+                </Button>
+                <div className="h-4 w-px bg-border/70 mx-0.5" />
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="ghost"
+                  onClick={() => insertFormatting("heading")}
+                  className="h-7 px-1.5 text-[11px] font-semibold gap-1"
+                  title="Insert Section Heading (<b>🔷 HEADING</b>)"
+                >
+                  <Heading className="h-3.5 w-3.5" /> Head
+                </Button>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="ghost"
+                  onClick={() => insertFormatting("separator")}
+                  className="h-7 px-1.5 text-[11px] font-semibold gap-1"
+                  title="Insert Divider Separator (───────────────)"
+                >
+                  <Minus className="h-3.5 w-3.5" /> Div
+                </Button>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="ghost"
+                  onClick={() => insertFormatting("linebreak")}
+                  className="h-7 w-7 p-0"
+                  title="Insert Line Break (↵)"
+                >
+                  <CornerDownLeft className="h-3.5 w-3.5" />
                 </Button>
               </div>
 
+              <div className="flex items-center gap-1.5">
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="ghost"
+                  onClick={resetToDefault}
+                  className="text-xs h-7 gap-1 text-muted-foreground hover:text-foreground"
+                  title="Reset to default template"
+                >
+                  <RotateCcw className="h-3 w-3" /> Reset Default
+                </Button>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  onClick={handleSavePattern}
+                  className="text-xs h-7 gap-1"
+                >
+                  <Check className="h-3 w-3 text-profit" /> Save
+                </Button>
+              </div>
+            </div>
+
+            {/* Template Editor Textarea */}
+            <div className="relative">
               <textarea
-                value={customPattern}
-                onChange={(e) => setCustomPattern(e.target.value)}
-                rows={12}
-                className="w-full text-xs font-mono rounded-md border border-border bg-muted/30 p-3 text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
+                ref={textareaRef}
+                value={eventPatterns[selectedEventTab] || ""}
+                onChange={(e) => {
+                  const val = e.target.value;
+                  setEventPatterns((prev) => ({
+                    ...prev,
+                    [selectedEventTab]: val,
+                  }));
+                }}
+                rows={13}
+                placeholder="Enter custom Telegram message template..."
+                className="w-full text-xs font-mono rounded-md border border-border bg-muted/20 p-3 text-foreground focus:outline-none focus:ring-1 focus:ring-primary leading-relaxed resize-y"
+              />
+            </div>
+
+            {/* Categorized Placeholder Chips */}
+            <div className="space-y-2 pt-1">
+              <div className="flex items-center justify-between text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">
+                <span>Dynamic Placeholders (Click to insert)</span>
+                <span className="text-[10px] lowercase text-muted-foreground/80 font-normal">empty values are auto-suppressed</span>
+              </div>
+
+              <div className="space-y-2 max-h-56 overflow-y-auto pr-1">
+                {/* Core */}
+                <div>
+                  <div className="text-[10px] text-muted-foreground font-medium mb-1">Asset &amp; Setup:</div>
+                  <div className="flex flex-wrap gap-1">
+                    {[
+                      { tag: "{{asset}}", label: "Asset Symbol" },
+                      { tag: "{{direction}}", label: "Direction" },
+                      { tag: "{{market}}", label: "Market" },
+                      { tag: "{{session}}", label: "Session" },
+                      { tag: "{{timeframe}}", label: "Timeframe" },
+                      { tag: "{{strategy}}", label: "Strategy" },
+                      { tag: "{{account}}", label: "Account" },
+                    ].map((chip) => (
+                      <button
+                        key={chip.tag}
+                        type="button"
+                        onClick={() => insertPlaceholder(chip.tag)}
+                        title={chip.label}
+                        className="px-1.5 py-0.5 rounded text-[10px] font-mono bg-muted/60 text-muted-foreground hover:text-foreground hover:bg-muted transition-colors border border-border/40"
+                      >
+                        {chip.tag}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Levels & Sizing */}
+                <div>
+                  <div className="text-[10px] text-muted-foreground font-medium mb-1">Levels &amp; Position:</div>
+                  <div className="flex flex-wrap gap-1">
+                    {[
+                      { tag: "{{entry}}", label: "Entry Price" },
+                      { tag: "{{exit}}", label: "Exit Price" },
+                      { tag: "{{stop_loss}}", label: "Stop Loss" },
+                      { tag: "{{take_profit}}", label: "Take Profit" },
+                      { tag: "{{position_size}}", label: "Position Size" },
+                    ].map((chip) => (
+                      <button
+                        key={chip.tag}
+                        type="button"
+                        onClick={() => insertPlaceholder(chip.tag)}
+                        title={chip.label}
+                        className="px-1.5 py-0.5 rounded text-[10px] font-mono bg-muted/60 text-muted-foreground hover:text-foreground hover:bg-muted transition-colors border border-border/40"
+                      >
+                        {chip.tag}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Risk, R-Multiple & Financial */}
+                <div>
+                  <div className="text-[10px] text-muted-foreground font-medium mb-1">Risk &amp; Performance:</div>
+                  <div className="flex flex-wrap gap-1">
+                    {[
+                      { tag: "{{risk_percent}}", label: "Risk %" },
+                      { tag: "{{risk_reward}}", label: "Planned RR" },
+                      { tag: "{{actual_r}}", label: "Realized R" },
+                      { tag: "{{outcome}}", label: "Outcome Emoji" },
+                      { tag: "{{net_pnl}}", label: "Net P&L" },
+                      { tag: "{{gross_pnl}}", label: "Gross P&L" },
+                      { tag: "{{fees}}", label: "Commissions/Fees" },
+                      { tag: "{{pnl_percent}}", label: "Return %" },
+                      { tag: "{{grade}}", label: "Setup Grade" },
+                      { tag: "{{score}}", label: "Score" },
+                    ].map((chip) => (
+                      <button
+                        key={chip.tag}
+                        type="button"
+                        onClick={() => insertPlaceholder(chip.tag)}
+                        title={chip.label}
+                        className="px-1.5 py-0.5 rounded text-[10px] font-mono bg-muted/60 text-muted-foreground hover:text-foreground hover:bg-muted transition-colors border border-border/40"
+                      >
+                        {chip.tag}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Journal & Notes */}
+                <div>
+                  <div className="text-[10px] text-muted-foreground font-medium mb-1">Time &amp; Journal:</div>
+                  <div className="flex flex-wrap gap-1">
+                    {[
+                      { tag: "{{entry_time}}", label: "Entry Time" },
+                      { tag: "{{exit_time}}", label: "Exit Time" },
+                      { tag: "{{duration}}", label: "Trade Duration" },
+                      { tag: "{{notes}}", label: "Trade Notes" },
+                      { tag: "{{lessons}}", label: "Lessons Learned" },
+                      { tag: "{{tags}}", label: "Formatted #Hashtags" },
+                    ].map((chip) => (
+                      <button
+                        key={chip.tag}
+                        type="button"
+                        onClick={() => insertPlaceholder(chip.tag)}
+                        title={chip.label}
+                        className="px-1.5 py-0.5 rounded text-[10px] font-mono bg-muted/60 text-muted-foreground hover:text-foreground hover:bg-muted transition-colors border border-border/40"
+                      >
+                        {chip.tag}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Right: Realistic Telegram Card Mockup & Multi-Image Album Preview */}
+          <div className="space-y-3 w-full">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-medium text-foreground flex items-center gap-1.5">
+                <Eye className="h-3.5 w-3.5 text-primary" /> Live Channel Mockup
+              </span>
+
+              {/* Album Image Count Switcher */}
+              <div className="flex items-center gap-1 bg-muted/30 p-1 rounded-md border border-border/50 text-[11px]">
+                <span className="text-[10px] text-muted-foreground px-1">Attached Media:</span>
+                {[0, 1, 2, 3, 4].map((count) => (
+                  <button
+                    key={count}
+                    type="button"
+                    onClick={() => setMockImageCount(count as any)}
+                    className={cn(
+                      "px-2 py-0.5 rounded text-[10px] transition-colors",
+                      mockImageCount === count
+                        ? "bg-primary text-primary-foreground font-medium"
+                        : "text-muted-foreground hover:text-foreground"
+                    )}
+                  >
+                    {count === 0 ? "None" : count === 1 ? "1 Img" : `${count} Album`}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Telegram Channel Post Container */}
+            <div className="rounded-xl border border-border bg-[#18222d] text-white p-4 shadow-md space-y-3.5 w-full">
+              {/* Telegram Header */}
+              <div className="flex items-center justify-between border-b border-white/10 pb-2.5">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-8 h-8 rounded-full bg-sky-500 flex items-center justify-center font-bold text-xs text-white shadow-xs">
+                    AP
+                  </div>
+                  <div>
+                    <div className="text-xs font-semibold text-white flex items-center gap-1.5">
+                      {connection?.channelTitle || "AlphaPips Trading Channel"}
+                      <CheckCircle2 className="h-3 w-3 text-sky-400" />
+                    </div>
+                    <div className="text-[10px] text-sky-400/90 font-mono">
+                      bot delivery • {selectedEventTab.replace(/([A-Z])/g, ' $1').toLowerCase()}
+                    </div>
+                  </div>
+                </div>
+                <Badge variant="outline" className="text-[9px] border-white/20 text-white/70 uppercase">
+                  {selectedTemplate}
+                </Badge>
+              </div>
+
+              {/* Multi-Image Telegram Album Grid Layout */}
+              {previewOptions.includeScreenshots && mockImageCount > 0 && (
+                <div className="space-y-1.5">
+                  {mockImageCount === 1 && (
+                    <div className="rounded-lg overflow-hidden border border-white/10 bg-slate-900 aspect-[16/9] flex flex-col items-center justify-center text-xs text-white/70 relative">
+                      <Sparkles className="h-5 w-5 text-sky-400 mb-1" />
+                      <span className="font-medium text-[11px]">Primary Chart Screenshot (16:9 Single Photo)</span>
+                      <Badge variant="outline" className="text-[9px] border-white/20 text-white/60 absolute bottom-2 right-2">
+                        1 Photo
+                      </Badge>
+                    </div>
+                  )}
+
+                  {mockImageCount === 2 && (
+                    <div className="grid grid-cols-2 gap-1.5">
+                      <div className="rounded-lg overflow-hidden border border-white/10 bg-slate-900 aspect-square flex flex-col items-center justify-center text-xs text-white/70 p-2 text-center">
+                        <ImageIcon className="h-5 w-5 text-sky-400 mb-1" />
+                        <span className="text-[10px] font-medium">1. HTF 1H Market Context</span>
+                        <span className="text-[9px] text-white/50 mt-0.5">High Timeframe Bias</span>
+                      </div>
+                      <div className="rounded-lg overflow-hidden border border-white/10 bg-slate-900 aspect-square flex flex-col items-center justify-center text-xs text-white/70 p-2 text-center">
+                        <ImageIcon className="h-5 w-5 text-emerald-400 mb-1" />
+                        <span className="text-[10px] font-medium">2. 5m Execution Trigger</span>
+                        <span className="text-[9px] text-white/50 mt-0.5">FVG Tap &amp; Entry</span>
+                      </div>
+                    </div>
+                  )}
+
+                  {mockImageCount === 3 && (
+                    <div className="space-y-1.5">
+                      <div className="rounded-lg overflow-hidden border border-white/10 bg-slate-900 aspect-[2/1] flex flex-col items-center justify-center text-xs text-white/70">
+                        <ImageIcon className="h-5 w-5 text-sky-400 mb-1" />
+                        <span className="text-[11px] font-medium">1. Daily / 4H Market Structure Overview</span>
+                      </div>
+                      <div className="grid grid-cols-2 gap-1.5">
+                        <div className="rounded-lg overflow-hidden border border-white/10 bg-slate-900 aspect-square flex flex-col items-center justify-center text-xs text-white/70 p-2 text-center">
+                          <ImageIcon className="h-4 w-4 text-amber-400 mb-1" />
+                          <span className="text-[10px] font-medium">2. 15m FVG Sweep</span>
+                        </div>
+                        <div className="rounded-lg overflow-hidden border border-white/10 bg-slate-900 aspect-square flex flex-col items-center justify-center text-xs text-white/70 p-2 text-center">
+                          <ImageIcon className="h-4 w-4 text-emerald-400 mb-1" />
+                          <span className="text-[10px] font-medium">3. 1m Trigger Confirmation</span>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {mockImageCount === 4 && (
+                    <div className="grid grid-cols-2 gap-1.5">
+                      <div className="rounded-lg overflow-hidden border border-white/10 bg-slate-900 aspect-square flex flex-col items-center justify-center text-xs text-white/70 p-2 text-center">
+                        <ImageIcon className="h-4 w-4 text-sky-400 mb-1" />
+                        <span className="text-[10px] font-medium">1. 4H HTF Bias</span>
+                      </div>
+                      <div className="rounded-lg overflow-hidden border border-white/10 bg-slate-900 aspect-square flex flex-col items-center justify-center text-xs text-white/70 p-2 text-center">
+                        <ImageIcon className="h-4 w-4 text-amber-400 mb-1" />
+                        <span className="text-[10px] font-medium">2. 15m Liquidity Sweep</span>
+                      </div>
+                      <div className="rounded-lg overflow-hidden border border-white/10 bg-slate-900 aspect-square flex flex-col items-center justify-center text-xs text-white/70 p-2 text-center">
+                        <ImageIcon className="h-4 w-4 text-emerald-400 mb-1" />
+                        <span className="text-[10px] font-medium">3. 1m Entry Trigger</span>
+                      </div>
+                      <div className="rounded-lg overflow-hidden border border-white/10 bg-slate-900 aspect-square flex flex-col items-center justify-center text-xs text-white/70 p-2 text-center relative">
+                        <ImageIcon className="h-4 w-4 text-purple-400 mb-1" />
+                        <span className="text-[10px] font-medium">4. Trade Outcome</span>
+                        <Badge className="absolute bottom-1.5 right-1.5 bg-sky-500/80 hover:bg-sky-500 text-[8px] py-0 px-1 font-mono">
+                          +4 Album
+                        </Badge>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Formatted Message Caption Content */}
+              <div
+                className="text-xs leading-relaxed space-y-1 font-sans text-slate-100 whitespace-pre-line bg-black/20 p-3 rounded-lg border border-white/5"
+                dangerouslySetInnerHTML={{ __html: renderedPreview }}
               />
 
-              <div className="space-y-1">
-                <div className="text-[11px] font-semibold text-muted-foreground uppercase">Supported Placeholders</div>
-                <div className="flex flex-wrap gap-1.5 pt-1">
-                  {[
-                    "{{asset}}",
-                    "{{direction}}",
-                    "{{session}}",
-                    "{{timeframe}}",
-                    "{{strategy}}",
-                    "{{entry}}",
-                    "{{stop_loss}}",
-                    "{{take_profit}}",
-                    "{{risk_percent}}",
-                    "{{risk_reward}}",
-                    "{{actual_r}}",
-                    "{{outcome}}",
-                    "{{net_pnl}}",
-                    "{{tags}}",
-                    "{{description}}",
-                  ].map((chip) => (
-                    <button
-                      key={chip}
-                      type="button"
-                      onClick={() => setCustomPattern((p) => `${p}\n${chip}`)}
-                      className="px-2 py-0.5 rounded text-[11px] font-mono bg-muted text-muted-foreground hover:text-foreground hover:bg-muted/80 transition-colors"
-                    >
-                      {chip}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            </div>
-          ) : (
-            <div className="space-y-3 text-xs text-muted-foreground p-4 rounded-md border border-border/60 bg-muted/10">
-              <div className="font-semibold text-foreground text-sm">
-                {selectedTemplate === "standard" ? "Universal Standard Template" : "ICT 2022 Mentorship Template"}
-              </div>
-              <p>
-                {selectedTemplate === "standard"
-                  ? "A universal, structured layout suitable for any trading strategy. Formats asset symbol, direction, entry/stop/target prices, risk ratios, net P&L, description, and hashtags."
-                  : "Designed for Inner Circle Trader (ICT) concepts. Organizes Draw on Liquidity (DOL), HTF PD Arrays, Liquidity Sweeps, Market Structure Shifts (MSS), Entry FVGs, and emotional trade management."}
-              </p>
-              <div className="text-[11px] text-muted-foreground/80 italic">
-                Empty or missing fields are cleanly suppressed so your posts remain professional.
-              </div>
-            </div>
-          )}
-
-          {/* Right: Realistic Telegram Message Preview Mockup */}
-          <div className="rounded-lg border border-border bg-[#18222d] text-white p-4 shadow-sm space-y-3 max-w-md w-full">
-            {/* Telegram Header */}
-            <div className="flex items-center gap-2 border-b border-white/10 pb-2">
-              <div className="w-7 h-7 rounded-full bg-sky-500 flex items-center justify-center font-bold text-xs text-white">
-                AP
-              </div>
-              <div>
-                <div className="text-xs font-semibold text-white">
-                  {connection?.channelTitle || "AlphaPips Trading Channel"}
-                </div>
-                <div className="text-[10px] text-sky-400">bot post • live preview</div>
-              </div>
-            </div>
-
-            {/* Mock Screenshot (if enabled) */}
-            {previewOptions.includeScreenshots && (
-              <div className="rounded overflow-hidden border border-white/10 bg-black/40 aspect-[16/9] flex items-center justify-center text-xs text-white/50">
-                <span className="flex items-center gap-1.5">
-                  <Sparkles className="h-4 w-4 text-sky-400" /> [Chart Screenshot Attached]
+              {/* Telegram Footer Meta */}
+              <div className="flex items-center justify-between text-[10px] text-white/40 pt-1">
+                <span>AlphaPips Bot v2.4</span>
+                <span className="flex items-center gap-1 font-mono">
+                  <Clock className="h-2.5 w-2.5" /> 10:42 AM
                 </span>
               </div>
-            )}
-
-            {/* Formatted HTML Message Content */}
-            <div
-              className="text-xs leading-relaxed space-y-1 font-sans text-slate-100 whitespace-pre-line"
-              dangerouslySetInnerHTML={{ __html: renderedPreview }}
-            />
+            </div>
           </div>
         </div>
       </div>

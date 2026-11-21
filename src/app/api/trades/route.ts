@@ -18,6 +18,7 @@ import {
 } from "@/lib/checklist-evaluation";
 import { audit } from "@/lib/audit";
 import { queueTradePublication } from "@/lib/telegram/delivery-engine";
+import { triggerChallengeRuleAlertsForAccount } from "@/lib/prop-simulator-engine";
 import {
   computeTradePayloadHash,
   claimIdempotencyKey,
@@ -82,6 +83,7 @@ const TradeCreateSchema = z.object({
   status: z.string().default("open"),
   isDraft: z.boolean().default(false),
   partialExits: z.array(PartialExitSchema).default([]),
+  mediaIds: z.array(z.string()).default([]),
 });
 
 const ListQuerySchema = z.object({
@@ -685,6 +687,18 @@ export async function POST(req: NextRequest) {
   invalidateCache(`analytics:${user.id}`);
   invalidateCache(`trades:${user.id}`);
 
+  // Attach all uploaded media directly to trade before Telegram queueing
+  if (Array.isArray(body.mediaIds) && body.mediaIds.length > 0) {
+    try {
+      await db.tradeMedia.updateMany({
+        where: { id: { in: body.mediaIds }, userId: user.id },
+        data: { tradeId: trade.id },
+      });
+    } catch (mediaErr) {
+      console.warn("Non-fatal: Failed to link mediaIds to trade:", mediaErr);
+    }
+  }
+
   // Telegram Auto-Publish Hook (Spec Part 4)
   // Non-fatal: failures never roll back or disrupt trade creation.
   if (!trade.isDraft && (body as any)?.publishToTelegram !== false) {
@@ -697,6 +711,12 @@ export async function POST(req: NextRequest) {
     } catch (telegramErr) {
       console.warn("Non-fatal: Telegram trade publishing queue failed:", telegramErr);
     }
+  }
+
+  // Rule Alerts Hook (Feature 73)
+  // Non-fatal: triggers evaluation of linked prop challenge rules on new trades.
+  if (trade.accountId) {
+    triggerChallengeRuleAlertsForAccount(user.id, trade.accountId).catch(() => {});
   }
 
   return ok(trade);

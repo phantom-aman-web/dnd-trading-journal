@@ -24,11 +24,15 @@ export interface FormatterTradeInput {
   grossPnlCents?: number | null;
   feesCents?: number | null;
   positionSize?: string | number | null;
+  pnlPercent?: string | number | null;
   accountName?: string | null;
   accountCurrency?: string | null;
   strategyName?: string | null;
   setupGrade?: string | null;
-  setupScore?: string | null;
+  setupScore?: string | number | null;
+  entryTime?: string | null;
+  exitTime?: string | null;
+  duration?: string | null;
   notes?: string | null;
   lessons?: string | null;
   description?: string | null;
@@ -324,6 +328,52 @@ export function renderIctTemplate(
   return lines.join("\n").trim();
 }
 
+export const DEFAULT_NEW_TRADE_TEMPLATE = `📊 <b>TRADE ENTRY: {{asset}} ({{direction}})</b>
+⏰ Session: {{session}}
+📈 Strategy: {{strategy}}
+⏱ Timeframe: {{timeframe}}
+
+<b>Execution & Levels</b>
+• Entry: {{entry}}
+• Stop Loss: {{stop_loss}}
+• Take Profit: {{take_profit}}
+• Risk: {{risk_percent}}
+• Planned R:R: {{risk_reward}}
+• Position Size: {{position_size}}
+• Account: {{account}}
+
+<b>Notes & Bias</b>
+• Notes: {{notes}}
+
+{{tags}}`;
+
+export const DEFAULT_CLOSURE_TEMPLATE = `🎯 <b>TRADE CLOSED: {{asset}} ({{direction}})</b>
+
+• Outcome: {{outcome}}
+• Exit Price: {{exit}}
+• Realized R: {{actual_r}}
+• Net P&L: {{net_pnl}}
+• Duration: {{duration}}
+
+<b>Lessons & Review</b>
+• Lessons: {{lessons}}
+• Notes: {{notes}}
+
+{{tags}}`;
+
+export const DEFAULT_PARTIAL_EXIT_TEMPLATE = `✂️ <b>PARTIAL EXIT TAKEN: {{asset}} ({{direction}})</b>
+
+• Outcome: {{outcome}}
+• Partial Exit Price: {{exit}}
+• Secured R: {{actual_r}}
+• Partial Net P&L: {{net_pnl}}
+• Remaining Position: {{position_size}}
+
+<b>Notes</b>
+• Notes: {{notes}}
+
+{{tags}}`;
+
 /**
  * Custom Template Engine
  * Replaces placeholders safely and suppresses unpopulated rows.
@@ -339,23 +389,44 @@ export function renderCustomTemplate(
 
   const symbol = escapeHtml(trade.instrumentSymbol.toUpperCase());
   const direction = trade.direction.toLowerCase() === "long" ? "Long 🟢" : "Short 🔴";
+  const market = trade.market ? escapeHtml(trade.market) : "N/A";
+  const status = escapeHtml(trade.status || "open");
+  const outcome = formatTradeOutcome(trade.status);
   const session = trade.session ? escapeHtml(trade.session.toUpperCase()) : "N/A";
+  const timeframe = trade.timeframe ? escapeHtml(trade.timeframe) : "N/A";
   const entry = trade.entryPriceAvg ?? trade.plannedEntryPrice ?? "N/A";
+  const exit = trade.exitPriceAvg ?? "N/A";
   const stopLoss = trade.plannedStopPrice ?? "N/A";
   const takeProfit = trade.plannedTargetPrice ?? "N/A";
   const riskPct = trade.plannedRiskPct ? `${trade.plannedRiskPct}%` : "N/A";
   const riskReward = trade.plannedRR ? `1:${trade.plannedRR}` : "N/A";
-  const actualR = trade.actualR ? `${trade.actualR}R` : "N/A";
-  const outcome = formatTradeOutcome(trade.status);
+  const actualR = trade.actualR !== null && trade.actualR !== undefined ? `${trade.actualR}R` : "N/A";
   const netPnl =
     trade.netPnlCents !== null && trade.netPnlCents !== undefined
       ? formatCurrencyCents(trade.netPnlCents, trade.accountCurrency || "USD")
       : "N/A";
-  const timeframe = trade.timeframe ? escapeHtml(trade.timeframe) : "N/A";
+  const grossPnl =
+    trade.grossPnlCents !== null && trade.grossPnlCents !== undefined
+      ? formatCurrencyCents(trade.grossPnlCents, trade.accountCurrency || "USD")
+      : "N/A";
+  const fees =
+    trade.feesCents !== null && trade.feesCents !== undefined
+      ? formatCurrencyCents(trade.feesCents, trade.accountCurrency || "USD")
+      : "N/A";
+  const positionSize =
+    trade.positionSize !== null && trade.positionSize !== undefined ? String(trade.positionSize) : "N/A";
+  const pnlPercent =
+    trade.pnlPercent !== null && trade.pnlPercent !== undefined ? `${trade.pnlPercent}%` : "N/A";
   const strategy = trade.strategyName ? escapeHtml(trade.strategyName) : "N/A";
-  const description = escapeHtml(trade.description || trade.notes || "");
   const account = trade.accountName ? escapeHtml(trade.accountName) : "N/A";
   const grade = trade.setupGrade ? escapeHtml(trade.setupGrade) : "N/A";
+  const score = trade.setupScore ? escapeHtml(String(trade.setupScore)) : "N/A";
+  const entryTime = trade.entryTime ? escapeHtml(trade.entryTime) : "N/A";
+  const exitTime = trade.exitTime ? escapeHtml(trade.exitTime) : "N/A";
+  const duration = trade.duration ? escapeHtml(trade.duration) : "N/A";
+  const notes = escapeHtml(trade.notes || "");
+  const lessons = escapeHtml(trade.lessons || "");
+  const description = escapeHtml(trade.description || trade.notes || "");
 
   const allTags = [trade.instrumentSymbol, trade.direction, ...(trade.tags || [])];
   const tags = formatHashtags(allTags);
@@ -363,21 +434,34 @@ export function renderCustomTemplate(
   const replacements: Record<string, string> = {
     "{{asset}}": symbol,
     "{{direction}}": direction,
+    "{{market}}": market,
+    "{{status}}": status,
+    "{{outcome}}": outcome,
     "{{session}}": session,
     "{{timeframe}}": timeframe,
     "{{strategy}}": strategy,
     "{{entry}}": escapeHtml(String(entry)),
+    "{{exit}}": escapeHtml(String(exit)),
     "{{stop_loss}}": escapeHtml(String(stopLoss)),
     "{{take_profit}}": escapeHtml(String(takeProfit)),
     "{{risk_percent}}": escapeHtml(String(riskPct)),
     "{{risk_reward}}": escapeHtml(String(riskReward)),
     "{{actual_r}}": escapeHtml(String(actualR)),
-    "{{outcome}}": outcome,
+    "{{position_size}}": escapeHtml(positionSize),
     "{{net_pnl}}": netPnl,
+    "{{gross_pnl}}": grossPnl,
+    "{{fees}}": fees,
+    "{{pnl_percent}}": escapeHtml(pnlPercent),
     "{{description}}": description,
+    "{{notes}}": notes,
+    "{{lessons}}": lessons,
     "{{tags}}": tags,
     "{{account}}": account,
     "{{grade}}": grade,
+    "{{score}}": score,
+    "{{entry_time}}": entryTime,
+    "{{exit_time}}": exitTime,
+    "{{duration}}": duration,
   };
 
   let result = templatePattern;
@@ -385,10 +469,24 @@ export function renderCustomTemplate(
     result = result.replaceAll(placeholder, val);
   }
 
-  // Remove lines that ended up as "Key: N/A" or empty bullet points if they were optional
+  // Remove lines that ended up as "Key: N/A", empty bullet points, or unpopulated labels
   return result
     .split("\n")
-    .filter((line) => !line.trim().endsWith(": N/A") && line.trim() !== "•")
+    .filter((line) => {
+      const trimmed = line.trim();
+      if (!trimmed) return true; // keep empty blank line dividers
+      if (trimmed === "•" || trimmed === "-" || trimmed === "*") return false;
+      if (
+        trimmed.endsWith(": N/A") ||
+        trimmed.endsWith(": <i>N/A</i>") ||
+        trimmed.endsWith(": &lt;N/A&gt;") ||
+        trimmed.endsWith(": &lt;None&gt;")
+      ) {
+        return false;
+      }
+      if (trimmed.endsWith(": ") || trimmed.endsWith(":")) return false;
+      return true;
+    })
     .join("\n")
     .trim();
 }
@@ -407,8 +505,9 @@ export function formatTradePublicationMessage(
   if (t === "custom" && options.customTemplateJson) {
     try {
       const parsed = JSON.parse(options.customTemplateJson);
-      if (parsed.templateText) {
-        return renderCustomTemplate(trade, parsed.templateText, options);
+      const customPattern = parsed.events?.newTrade || parsed.templateText;
+      if (customPattern) {
+        return renderCustomTemplate(trade, customPattern, options);
       }
     } catch {}
   }
@@ -421,8 +520,17 @@ export function formatTradePublicationMessage(
  */
 export function formatTradeClosureUpdateMessage(
   trade: FormatterTradeInput,
-  _options: TemplateConfigOptions = {}
+  options: TemplateConfigOptions = {}
 ): string {
+  if (options.templateType === "custom" && options.customTemplateJson) {
+    try {
+      const parsed = JSON.parse(options.customTemplateJson);
+      if (parsed.events?.tradeClosure) {
+        return renderCustomTemplate(trade, parsed.events.tradeClosure, options);
+      }
+    } catch {}
+  }
+
   const symbol = escapeHtml(trade.instrumentSymbol.toUpperCase());
   const direction = trade.direction.toLowerCase() === "long" ? "Long 🟢" : "Short 🔴";
   const outcome = formatTradeOutcome(trade.status);
@@ -448,6 +556,57 @@ export function formatTradeClosureUpdateMessage(
   if (trade.lessons || trade.notes) {
     lines.push("");
     lines.push("<b>Lessons / Execution Notes:</b>");
+    lines.push(escapeHtml(trade.lessons || trade.notes));
+  }
+
+  return lines.join("\n").trim();
+}
+
+/**
+ * Trade Partial Exit Update Message
+ * Sent as a reply to the original Telegram publication when partial profits are taken.
+ */
+export function formatTradePartialExitMessage(
+  trade: FormatterTradeInput,
+  options: TemplateConfigOptions = {}
+): string {
+  if (options.templateType === "custom" && options.customTemplateJson) {
+    try {
+      const parsed = JSON.parse(options.customTemplateJson);
+      if (parsed.events?.partialExit) {
+        return renderCustomTemplate(trade, parsed.events.partialExit, options);
+      }
+    } catch {}
+  }
+
+  const symbol = escapeHtml(trade.instrumentSymbol.toUpperCase());
+  const direction = trade.direction.toLowerCase() === "long" ? "Long 🟢" : "Short 🔴";
+  const outcome = formatTradeOutcome(trade.status);
+
+  const lines: string[] = [];
+  lines.push(`✂️ <b>PARTIAL EXIT UPDATE: ${symbol} (${direction})</b>`);
+  lines.push("");
+  lines.push(`• <b>Status:</b> ${outcome}`);
+  if (trade.exitPriceAvg) {
+    lines.push(`• <b>Partial Exit Price:</b> ${escapeHtml(String(trade.exitPriceAvg))}`);
+  }
+  if (trade.actualR !== null && trade.actualR !== undefined) {
+    lines.push(`• <b>Secured R:</b> ${escapeHtml(String(trade.actualR))}R`);
+  }
+  if (trade.netPnlCents !== null && trade.netPnlCents !== undefined) {
+    lines.push(
+      `• <b>Secured Net P&amp;L:</b> ${formatCurrencyCents(
+        trade.netPnlCents,
+        trade.accountCurrency || "USD"
+      )}`
+    );
+  }
+  if (trade.positionSize) {
+    lines.push(`• <b>Remaining Size:</b> ${escapeHtml(String(trade.positionSize))}`);
+  }
+  if (trade.lessons || trade.notes) {
+    lines.push("");
+    lines.push("<b>Notes:</b>");
     lines.push(escapeHtml(trade.lessons || trade.notes));
   }
 

@@ -249,6 +249,21 @@ export function DashboardView() {
     queryFn: () => fetchRecentTrades(accountId),
   });
 
+  const { data: behavioralData } = useQuery({
+    queryKey: ["analytics-behavioral-dashboard", accountId, preset],
+    queryFn: async () => {
+      const url = new URL("/api/analytics", window.location.origin);
+      url.searchParams.set("dimension", "behavioral");
+      if (accountId && accountId !== "all") url.searchParams.set("accountId", accountId);
+      const res = await fetch(url.toString(), { cache: "no-store" });
+      if (!res.ok) return null;
+      return res.json();
+    },
+    staleTime: 60000,
+  });
+
+  const behavioralWarnings = behavioralData?.activeWarnings || [];
+
   const recentTrades: TradeRow[] = Array.isArray(tradesData) ? tradesData : (tradesData?.items ?? []);
 
   // Adherence breakdown derived from BOTH the dashboard's period-correct
@@ -741,6 +756,44 @@ export function DashboardView() {
         onInspectTrades={() => navigate("tradesLog", accountId ? { accountId } : undefined)}
         onOpenAnalytics={() => navigate("analytics", { preset, ...(accountId ? { accountId } : {}) })}
       />
+
+      {/* Behavioral Warnings Banner (Feature 35) */}
+      {behavioralWarnings.length > 0 && (
+        <div className="space-y-2">
+          {behavioralWarnings.map((warn: any) => (
+            <div
+              key={warn.id}
+              className={cn(
+                "p-3 rounded-xl border text-xs shadow-xs flex items-start justify-between gap-3",
+                warn.severity === "critical"
+                  ? "bg-loss/10 border-loss/30 text-loss"
+                  : "bg-amber-500/10 border-amber-500/30 text-amber-600 dark:text-amber-400"
+              )}
+            >
+              <div className="flex items-start gap-2.5">
+                <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5" />
+                <div className="space-y-0.5">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="font-semibold text-foreground">{warn.title}</span>
+                    <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-muted/60 text-muted-foreground uppercase">
+                      {warn.sampleSize}
+                    </span>
+                  </div>
+                  <p className="text-muted-foreground text-[11px] leading-relaxed">{warn.neutralDescription}</p>
+                </div>
+              </div>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => navigate("analytics", { tab: "behavioral", preset, ...(accountId ? { accountId } : {}) })}
+                className="h-6 px-2 text-[11px] text-primary hover:text-primary gap-1 shrink-0 cursor-pointer"
+              >
+                Inspect <ArrowUpRight className="h-3 w-3" />
+              </Button>
+            </div>
+          ))}
+        </div>
+      )}
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         {sortedWidgets

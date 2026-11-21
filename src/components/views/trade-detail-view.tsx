@@ -15,6 +15,20 @@ import {
   generateTempId,
   notifyOptimisticFailure,
 } from "@/lib/optimistic";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+} from "@/components/ui/dialog";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Separator } from "@/components/ui/separator";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -52,6 +66,10 @@ import {
   BookOpen,
   MoreHorizontal,
   Send,
+  Layers,
+  Columns,
+  CheckCircle2,
+  SlidersHorizontal,
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -69,7 +87,7 @@ import { ExecuteTradeModal } from "@/components/trade/execute-trade-modal";
 import { TradeReplay } from "@/components/trade/trade-replay";
 import { useRouter } from "next/navigation";
 import { TIMEFRAME_GROUPS, getTimeframeGroup, getTimeframeLabel } from "@/lib/timeframes";
-import { extractCustomFields } from "@/lib/strategy-custom-fields";
+import { extractCustomFields, extractAllCustomFieldsForDisplay } from "@/lib/strategy-custom-fields";
 
 
 async function fetchTrade(id: string) {
@@ -97,6 +115,11 @@ export function TradeDetailView({ tradeId, onBack }: { tradeId?: string; onBack?
   const [publishingTelegram, setPublishingTelegram] = useState(false);
   const [duplicating, setDuplicating] = useState(false);
   const [archiving, setArchiving] = useState(false);
+  const [evidenceViewMode, setEvidenceViewMode] = useState<"timeframe" | "stage" | "compare">("timeframe");
+  const [selectedBeforeMediaId, setSelectedBeforeMediaId] = useState<string>("");
+  const [selectedAfterMediaId, setSelectedAfterMediaId] = useState<string>("");
+  const [editingMedia, setEditingMedia] = useState<{ id: string; stage: string; caption: string } | null>(null);
+  const [savingMediaMeta, setSavingMediaMeta] = useState(false);
 
   const handleDuplicateTrade = async () => {
     if (!trade || !id || duplicating) return;
@@ -229,6 +252,44 @@ export function TradeDetailView({ tradeId, onBack }: { tradeId?: string; onBack?
       toast.error(err.message);
     } finally {
       setPublishingTelegram(false);
+    }
+  };
+
+  const handleDeleteMedia = async (mediaId: string) => {
+    const ok = await confirm({
+      title: "Delete Evidence Screenshot",
+      description: "Are you sure you want to delete this screenshot? The trade record, executions, and notes will remain intact.",
+      confirmText: "Delete Screenshot",
+      variant: "destructive",
+    });
+    if (!ok) return;
+
+    try {
+      const res = await fetch(`/api/media/${mediaId}`, { method: "DELETE" });
+      if (!res.ok) throw new Error("Failed to delete screenshot.");
+      toast.success("Screenshot removed.");
+      qc.invalidateQueries({ queryKey: ["trade", id] });
+    } catch (err: any) {
+      toast.error(err.message || "Failed to delete screenshot");
+    }
+  };
+
+  const handleUpdateMediaStageCaption = async (mediaId: string, stage: string, caption: string) => {
+    setSavingMediaMeta(true);
+    try {
+      const res = await fetch(`/api/media/${mediaId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ stage, caption }),
+      });
+      if (!res.ok) throw new Error("Failed to update screenshot.");
+      toast.success("Screenshot details saved.");
+      qc.invalidateQueries({ queryKey: ["trade", id] });
+      setEditingMedia(null);
+    } catch (err: any) {
+      toast.error(err.message || "Failed to update screenshot");
+    } finally {
+      setSavingMediaMeta(false);
     }
   };
 
@@ -780,17 +841,15 @@ export function TradeDetailView({ tradeId, onBack }: { tradeId?: string; onBack?
               {trade.strategy?.name ? `${trade.strategy.name} Setup` : "Setup & Trade Context"}
             </h3>
             <div className="grid sm:grid-cols-2 gap-4 text-sm">
-              {/* Dynamic Strategy-Specific Custom Fields */}
-              {strategyCustomFields.map((field) => {
-                const customVal = setup?.customFields?.[field.id] ?? setup?.[field.id];
-                if (customVal === undefined || customVal === null || customVal === "") return null;
+              {/* Dynamic & Historical Strategy-Specific Custom Fields */}
+              {extractAllCustomFieldsForDisplay(strategyCustomFields, setup?.customFields).map((field) => {
+                const displayVal = field.type === "boolean" ? (field.value ? "Yes" : "No") : field.value;
                 return (
                   <SetupSection
                     key={field.id}
-                    title={field.name}
-                    data={customVal}
-                    isList={Array.isArray(customVal)}
-                    hint={field.description}
+                    title={field.isHistorical ? `${field.name} (Archived Rule)` : field.name}
+                    data={displayVal}
+                    isList={Array.isArray(field.value)}
                   />
                 );
               })}
@@ -997,84 +1056,152 @@ export function TradeDetailView({ tradeId, onBack }: { tradeId?: string; onBack?
             )}
           </Card>
 
-          <Card className="p-4">
-            <h3 className="font-medium mb-3">Planned vs Actual</h3>
-            <div className="grid sm:grid-cols-3 gap-4 text-sm">
-              <div>
-                <div className="text-xs text-muted-foreground">Planned Entry</div>
-                <div className="font-medium tnum">{trade.plannedEntryPrice ? formatPrice(trade.plannedEntryPrice, 5) : "-"}</div>
-              </div>
-              <div>
-                <div className="text-xs text-muted-foreground">Planned Stop</div>
-                <div className="font-medium tnum">{trade.plannedStopPrice ? formatPrice(trade.plannedStopPrice, 5) : "-"}</div>
-              </div>
-              <div>
-                <div className="text-xs text-muted-foreground">Planned Target</div>
-                <div className="font-medium tnum">{trade.plannedTargetPrice ? formatPrice(trade.plannedTargetPrice, 5) : "-"}</div>
-              </div>
-              <div>
-                <div className="text-xs text-muted-foreground">Avg Entry</div>
-                <div className="font-medium tnum">{trade.entryPriceAvg ? formatPrice(trade.entryPriceAvg, 5) : "-"}</div>
-              </div>
-              <div>
-                <div className="text-xs text-muted-foreground">Avg Exit</div>
-                <div className="font-medium tnum">{trade.exitPriceAvg ? formatPrice(trade.exitPriceAvg, 5) : "-"}</div>
-              </div>
-              <div>
-                <div className="text-xs text-muted-foreground">Risk %</div>
-                <div className="font-medium tnum">
-                  {trade.plannedRiskPct
-                    ? (() => {
-                        if (trade.riskAmountCents && trade.accountBalanceCents && trade.accountBalanceCents > 0) {
-                          const calc = (trade.riskAmountCents / trade.accountBalanceCents) * 100;
-                          return `${calc.toFixed(2)}%`;
-                        }
-                        const val = dToNumber(trade.plannedRiskPct);
-                        if (!Number.isFinite(val) || val <= 0) return "-";
-                        const pct = val <= 0.20 ? val * 100 : val;
-                        return `${pct.toFixed(2)}%`;
-                      })()
-                    : "-"}
-                </div>
-              </div>
-            </div>
+          {/* Planned vs Actual Execution Analysis */}
+          <Card className="p-4 space-y-4">
+            {(() => {
+              const hasPlan = Boolean(
+                trade.plannedEntryPrice ||
+                trade.plannedStopPrice ||
+                trade.plannedTargetPrice ||
+                trade.plannedRiskPct ||
+                trade.plannedRiskAmountCents
+              );
 
-            {/* Plan Adherence summary */}
-            {planAdherence && Object.keys(planAdherence).length > 0 && (
-              <div className="mt-4 pt-3 border-t border-border">
-                <div className="flex items-center gap-2 mb-2">
-                  <span className="text-xs font-medium text-muted-foreground">Plan Adherence:</span>
-                  <span className={cn(
-                    "text-xs px-2 py-0.5 rounded-full font-medium",
-                    planAdherence.followedPlan !== false
-                      ? "bg-profit/10 text-profit"
-                      : "bg-loss/10 text-loss",
-                  )}>
-                    {planAdherence.followedPlan !== false ? "Followed Plan" : "Deviated"}
-                  </span>
-                </div>
-                {planAdherence.followedPlan === false && (
-                  <div className="grid sm:grid-cols-4 gap-3 text-sm">
+              const plannedEntryNum = trade.plannedEntryPrice ? parseFloat(trade.plannedEntryPrice) : null;
+              const actualEntryNum = trade.entryPriceAvg ? parseFloat(trade.entryPriceAvg) : null;
+              const plannedStopNum = trade.plannedStopPrice ? parseFloat(trade.plannedStopPrice) : null;
+              const plannedTargetNum = trade.plannedTargetPrice ? parseFloat(trade.plannedTargetPrice) : null;
+              const isLong = (trade.direction || "").toLowerCase() === "long";
+
+              let slippage: { delta: number; favorable: boolean } | null = null;
+              if (plannedEntryNum !== null && actualEntryNum !== null && !isNaN(plannedEntryNum) && !isNaN(actualEntryNum)) {
+                const diff = actualEntryNum - plannedEntryNum;
+                // For long: entered lower => favorable, higher => adverse
+                // For short: entered higher => favorable, lower => adverse
+                const favorable = isLong ? diff < 0 : diff > 0;
+                slippage = { delta: diff, favorable };
+              }
+
+              let plannedStopDist: number | null = null;
+              let actualStopDist: number | null = null;
+              if (plannedEntryNum !== null && plannedStopNum !== null) {
+                plannedStopDist = Math.abs(plannedEntryNum - plannedStopNum);
+              }
+              if (actualEntryNum !== null && plannedStopNum !== null) {
+                actualStopDist = Math.abs(actualEntryNum - plannedStopNum);
+              }
+
+              return (
+                <>
+                  <div className="flex items-center justify-between flex-wrap gap-2">
                     <div>
-                      <div className="text-xs text-muted-foreground">Actual Entry</div>
-                      <div className="font-medium tnum">{planAdherence.actualEntryPrice ? formatPrice(planAdherence.actualEntryPrice, 5) : "-"}</div>
+                      <h3 className="font-medium text-foreground">Planned vs Actual Execution</h3>
+                      <p className="text-xs text-muted-foreground mt-0.5">
+                        Authoritative comparison between pre-trade intent and actual market execution
+                      </p>
                     </div>
-                    <div>
-                      <div className="text-xs text-muted-foreground">Actual Stop</div>
-                      <div className="font-medium tnum">{planAdherence.actualStopPrice ? formatPrice(planAdherence.actualStopPrice, 5) : "-"}</div>
-                    </div>
-                    <div>
-                      <div className="text-xs text-muted-foreground">Actual Target</div>
-                      <div className="font-medium tnum">{planAdherence.actualTargetPrice ? formatPrice(planAdherence.actualTargetPrice, 5) : "-"}</div>
-                    </div>
-                    <div>
-                      <div className="text-xs text-muted-foreground">Actual Lot</div>
-                      <div className="font-medium tnum">{planAdherence.actualLotSize || "-"}</div>
-                    </div>
+                    <Badge
+                      variant="outline"
+                      className={cn(
+                        "text-xs px-2.5 py-0.5 font-medium",
+                        hasPlan
+                          ? planAdherence?.followedPlan !== false
+                            ? "bg-profit/10 text-profit border-profit/30"
+                            : "bg-amber-500/10 text-amber-500 border-amber-500/30"
+                          : "bg-muted text-muted-foreground border-border"
+                      )}
+                    >
+                      {hasPlan
+                        ? planAdherence?.followedPlan !== false
+                          ? "Plan Followed"
+                          : "Plan Deviated"
+                        : "Direct Execution (No Prior Plan)"}
+                    </Badge>
                   </div>
-                )}
-              </div>
-            )}
+
+                  {hasPlan ? (
+                    <>
+                      <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-3 text-sm">
+                        {/* Entry & Slippage */}
+                        <div className="p-3 rounded-lg border border-border bg-card/50">
+                          <div className="text-xs text-muted-foreground">Entry Price</div>
+                          <div className="font-medium tnum mt-0.5">
+                            {trade.entryPriceAvg ? formatPrice(trade.entryPriceAvg, 5) : "-"}
+                          </div>
+                          <div className="text-[11px] text-muted-foreground mt-1 flex items-center justify-between">
+                            <span>Planned: {trade.plannedEntryPrice ? formatPrice(trade.plannedEntryPrice, 5) : "-"}</span>
+                            {slippage && (
+                              <span className={cn("font-mono text-[10px]", slippage.favorable ? "text-profit" : "text-loss")}>
+                                {slippage.delta >= 0 ? `+${slippage.delta.toFixed(5)}` : slippage.delta.toFixed(5)}
+                                {slippage.favorable ? " (Fav)" : " (Slip)"}
+                              </span>
+                            )}
+                          </div>
+                        </div>
+
+                        {/* Stop Loss & Distance */}
+                        <div className="p-3 rounded-lg border border-border bg-card/50">
+                          <div className="text-xs text-muted-foreground">Stop Loss &amp; Distance</div>
+                          <div className="font-medium tnum mt-0.5">
+                            {trade.plannedStopPrice ? formatPrice(trade.plannedStopPrice, 5) : "-"}
+                          </div>
+                          <div className="text-[11px] text-muted-foreground mt-1">
+                            {plannedStopDist !== null
+                              ? `Dist: ${plannedStopDist.toFixed(5)} ${actualStopDist !== null && Math.abs(actualStopDist - plannedStopDist) > 0.00001 ? `(Act: ${actualStopDist.toFixed(5)})` : ""}`
+                              : "Pre-trade risk boundary"}
+                          </div>
+                        </div>
+
+                        {/* Target Price */}
+                        <div className="p-3 rounded-lg border border-border bg-card/50">
+                          <div className="text-xs text-muted-foreground">Target / Exit Price</div>
+                          <div className="font-medium tnum mt-0.5">
+                            {trade.exitPriceAvg ? formatPrice(trade.exitPriceAvg, 5) : (trade.plannedTargetPrice ? formatPrice(trade.plannedTargetPrice, 5) : "-")}
+                          </div>
+                          <div className="text-[11px] text-muted-foreground mt-1">
+                            Planned TP: {trade.plannedTargetPrice ? formatPrice(trade.plannedTargetPrice, 5) : "-"}
+                          </div>
+                        </div>
+
+                        {/* Risk & Position Size */}
+                        <div className="p-3 rounded-lg border border-border bg-card/50">
+                          <div className="text-xs text-muted-foreground">Planned vs Actual Risk</div>
+                          <div className="font-medium tnum mt-0.5">
+                            {trade.plannedRiskPct
+                              ? (() => {
+                                  const val = dToNumber(trade.plannedRiskPct);
+                                  const pct = val <= 0.20 ? val * 100 : val;
+                                  return `${pct.toFixed(2)}%`;
+                                })()
+                              : "-"}
+                            {trade.positionSize ? ` · ${trade.positionSize} lots` : ""}
+                          </div>
+                          <div className="text-[11px] text-muted-foreground mt-1">
+                            Planned R:R: {trade.plannedRR ? `${trade.plannedRR}R` : "—"} · Realized: {trade.actualR ? `${trade.actualR}R` : "—"}
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Execution Deviation Notes */}
+                      {planAdherence && planAdherence.followedPlan === false && (
+                        <div className="p-3 rounded-lg border border-amber-500/20 bg-amber-500/5 text-xs text-amber-500 space-y-1">
+                          <div className="font-medium flex items-center gap-1.5">
+                            <AlertTriangle className="h-3.5 w-3.5" /> Plan Deviation Noted:
+                          </div>
+                          <p className="text-muted-foreground">
+                            {planAdherence.notes || planAdherence.reason || "Execution departed from initial pre-trade plan (entry price, stop placement, or sizing adjusted)."}
+                          </p>
+                        </div>
+                      )}
+                    </>
+                  ) : (
+                    <div className="rounded-lg border border-dashed border-border p-4 text-center text-xs text-muted-foreground">
+                      No pre-execution plan snapshot was recorded for this trade. Trade was entered directly into the journal.
+                    </div>
+                  )}
+                </>
+              );
+            })()}
           </Card>
         </TabsContent>
 
@@ -1141,18 +1268,378 @@ export function TradeDetailView({ tradeId, onBack }: { tradeId?: string; onBack?
         </TabsContent>
 
         <TabsContent value="evidence" className="space-y-4 mt-3">
-          <Card className="p-4">
-            <div className="flex items-center justify-between mb-3">
-              <h3 className="font-medium">Evidence Timeline</h3>
-              <Button size="sm" variant="outline" onClick={() => navigate("tradeNew", { id })}>
-                <ImageIcon className="h-4 w-4" /> Add Media
-              </Button>
+          <Card className="p-4 space-y-4">
+            <div className="flex items-center justify-between flex-wrap gap-3 pb-3 border-b border-border">
+              <div>
+                <h3 className="font-medium text-foreground">Trade Evidence &amp; Annotations</h3>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  Screenshots, chart markup, multi-stage timeline &amp; side-by-side before/after comparison
+                </p>
+              </div>
+              <div className="flex items-center gap-2">
+                {/* View Mode Toggle */}
+                <div className="inline-flex rounded-lg border border-border p-0.5 bg-muted/40 text-xs">
+                  <button
+                    type="button"
+                    onClick={() => setEvidenceViewMode("timeframe")}
+                    className={cn(
+                      "px-2.5 py-1 rounded-md font-medium transition-colors",
+                      evidenceViewMode === "timeframe"
+                        ? "bg-card text-foreground shadow-xs"
+                        : "text-muted-foreground hover:text-foreground"
+                    )}
+                  >
+                    Timeframe
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setEvidenceViewMode("stage")}
+                    className={cn(
+                      "px-2.5 py-1 rounded-md font-medium transition-colors flex items-center gap-1",
+                      evidenceViewMode === "stage"
+                        ? "bg-card text-foreground shadow-xs"
+                        : "text-muted-foreground hover:text-foreground"
+                    )}
+                  >
+                    <Layers className="h-3 w-3" />
+                    By Stage
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setEvidenceViewMode("compare")}
+                    className={cn(
+                      "px-2.5 py-1 rounded-md font-medium transition-colors flex items-center gap-1",
+                      evidenceViewMode === "compare"
+                        ? "bg-card text-foreground shadow-xs"
+                        : "text-muted-foreground hover:text-foreground"
+                    )}
+                  >
+                    <Columns className="h-3 w-3" />
+                    Before vs After
+                  </button>
+                </div>
+
+                <Button size="sm" variant="outline" onClick={() => navigate("tradeNew", { id })}>
+                  <ImageIcon className="h-4 w-4" /> Add Media
+                </Button>
+              </div>
             </div>
+
             {evidenceMedia.length === 0 ? (
               <div className="rounded-md border border-dashed border-border p-8 text-center text-sm text-muted-foreground">
                 No evidence uploaded yet. Add screenshots or videos to build a chronological story of this trade.
               </div>
+            ) : evidenceViewMode === "compare" ? (
+              /* Before vs After Side-by-Side Comparison Mode */
+              (() => {
+                const beforeCandidates = images.filter((m: any) =>
+                  !m.stage || m.stage === "before_entry" || m.stage === "setup"
+                );
+                const afterCandidates = images.filter((m: any) =>
+                  m.stage === "exit" || m.stage === "review" || m.stage === "during_trade"
+                );
+
+                const activeBefore = images.find((m: any) => m.id === selectedBeforeMediaId) ||
+                  beforeCandidates[0] ||
+                  images[0];
+                const activeAfter = images.find((m: any) => m.id === selectedAfterMediaId) ||
+                  afterCandidates[0] ||
+                  (images.length > 1 ? images[images.length - 1] : images[0]);
+
+                return (
+                  <div className="space-y-4">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      {/* Left: Before Execution */}
+                      <div className="space-y-2">
+                        <div className="flex items-center justify-between">
+                          <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
+                            <span className="w-2 h-2 rounded-full bg-sky-500" />
+                            Before Entry (Setup &amp; Context)
+                          </span>
+                          {images.length > 1 && (
+                            <Select
+                              value={activeBefore?.id}
+                              onValueChange={(val) => setSelectedBeforeMediaId(val)}
+                            >
+                              <SelectTrigger className="h-7 text-xs w-[180px]">
+                                <SelectValue placeholder="Select screenshot" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {images.map((im: any, idx: number) => (
+                                  <SelectItem key={im.id} value={im.id} className="text-xs">
+                                    {im.caption || `Screenshot ${idx + 1}`} ({im.stage || "unspecified"})
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          )}
+                        </div>
+                        <div className="rounded-xl border border-border overflow-hidden bg-muted aspect-video relative group">
+                          {activeBefore ? (
+                            <>
+                              <img
+                                src={activeBefore.url || `/api/media/file?token=placeholder`}
+                                alt={activeBefore.caption || "Before Entry"}
+                                className="w-full h-full object-cover"
+                              />
+                              <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
+                                <Button
+                                  size="sm"
+                                  variant="secondary"
+                                  className="h-8 text-xs gap-1"
+                                  onClick={() => {
+                                    const imgIdx = images.findIndex((im: any) => im.id === activeBefore.id);
+                                    if (imgIdx >= 0) {
+                                      setViewerIndex(imgIdx);
+                                      setViewerOpen(true);
+                                    }
+                                  }}
+                                >
+                                  <Edit className="h-3.5 w-3.5" /> Annotate / Markup
+                                </Button>
+                              </div>
+                            </>
+                          ) : (
+                            <div className="w-full h-full flex items-center justify-center text-xs text-muted-foreground">
+                              No before-entry screenshot selected.
+                            </div>
+                          )}
+                        </div>
+                        {activeBefore?.caption && (
+                          <p className="text-xs text-muted-foreground italic px-1">{activeBefore.caption}</p>
+                        )}
+                      </div>
+
+                      {/* Right: After Execution */}
+                      <div className="space-y-2">
+                        <div className="flex items-center justify-between">
+                          <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
+                            <span className="w-2 h-2 rounded-full bg-emerald-500" />
+                            After Execution (Exit &amp; Outcome)
+                          </span>
+                          {images.length > 1 && (
+                            <Select
+                              value={activeAfter?.id}
+                              onValueChange={(val) => setSelectedAfterMediaId(val)}
+                            >
+                              <SelectTrigger className="h-7 text-xs w-[180px]">
+                                <SelectValue placeholder="Select screenshot" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {images.map((im: any, idx: number) => (
+                                  <SelectItem key={im.id} value={im.id} className="text-xs">
+                                    {im.caption || `Screenshot ${idx + 1}`} ({im.stage || "unspecified"})
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          )}
+                        </div>
+                        <div className="rounded-xl border border-border overflow-hidden bg-muted aspect-video relative group">
+                          {activeAfter ? (
+                            <>
+                              <img
+                                src={activeAfter.url || `/api/media/file?token=placeholder`}
+                                alt={activeAfter.caption || "After Execution"}
+                                className="w-full h-full object-cover"
+                              />
+                              <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
+                                <Button
+                                  size="sm"
+                                  variant="secondary"
+                                  className="h-8 text-xs gap-1"
+                                  onClick={() => {
+                                    const imgIdx = images.findIndex((im: any) => im.id === activeAfter.id);
+                                    if (imgIdx >= 0) {
+                                      setViewerIndex(imgIdx);
+                                      setViewerOpen(true);
+                                    }
+                                  }}
+                                >
+                                  <Edit className="h-3.5 w-3.5" /> Annotate / Markup
+                                </Button>
+                              </div>
+                            </>
+                          ) : (
+                            <div className="w-full h-full flex items-center justify-center text-xs text-muted-foreground">
+                              No after-execution screenshot selected.
+                            </div>
+                          )}
+                        </div>
+                        {activeAfter?.caption && (
+                          <p className="text-xs text-muted-foreground italic px-1">{activeAfter.caption}</p>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                );
+              })()
+            ) : evidenceViewMode === "stage" ? (
+              /* Group by Trade Lifecycle Stage */
+              (() => {
+                const STAGES = [
+                  { id: "before_entry", title: "1. Before Entry / HTF Context", desc: "Higher timeframe bias and pre-entry environment" },
+                  { id: "setup", title: "2. Setup & Liquidity", desc: "Liquidity sweeps, market structure & key levels" },
+                  { id: "entry", title: "3. Execution / Trigger", desc: "Lower timeframe execution candle & order fill" },
+                  { id: "during_trade", title: "4. Trade Management", desc: "Trade development, partials & trailing stops" },
+                  { id: "exit", title: "5. Exit / Target Hit", desc: "Final closure, stop out or take profit reached" },
+                  { id: "review", title: "6. Post-Trade Review", desc: "Lessons learned, markup and retrospective" },
+                ];
+
+                return (
+                  <div className="space-y-6">
+                    {STAGES.map((st) => {
+                      const stageMedia = evidenceMedia.filter((m: any) => m.stage === st.id);
+                      if (stageMedia.length === 0) return null;
+
+                      return (
+                        <div key={st.id} className="space-y-2">
+                          <div className="flex items-center justify-between border-b border-border/60 pb-1">
+                            <div>
+                              <h4 className="text-xs font-semibold uppercase tracking-wider text-foreground">{st.title}</h4>
+                              <p className="text-[11px] text-muted-foreground">{st.desc}</p>
+                            </div>
+                            <Badge variant="outline" className="text-[10px]">{stageMedia.length}</Badge>
+                          </div>
+                          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3 pt-1">
+                            {stageMedia.map((m: any) => {
+                              const isVideo = m.kind === "video";
+                              return (
+                                <div key={m.id} className="group relative rounded-lg border border-border overflow-hidden bg-card">
+                                  <button
+                                    onClick={() => {
+                                      if (isVideo) return;
+                                      const imgIdx = images.findIndex((im: any) => im.id === m.id);
+                                      if (imgIdx >= 0) {
+                                        setViewerIndex(imgIdx);
+                                        setViewerOpen(true);
+                                      }
+                                    }}
+                                    className="aspect-video w-full overflow-hidden bg-muted text-left block relative"
+                                  >
+                                    {m.timeframe && (
+                                      <Badge variant="secondary" className="absolute top-1 right-1 z-10 text-[9px] py-0 px-1 opacity-90 backdrop-blur-sm">
+                                        {getTimeframeLabel(m.timeframe)}
+                                      </Badge>
+                                    )}
+                                    {isVideo && m.url ? (
+                                      <video src={m.url} className="w-full h-full object-cover" preload="metadata" controls />
+                                    ) : (
+                                      <img src={m.url || `/api/media/file?token=placeholder`} alt={m.caption || "Evidence"} className="w-full h-full object-cover" />
+                                    )}
+                                  </button>
+                                  <div className="p-2 space-y-1">
+                                    <div className="flex items-center justify-between gap-1">
+                                      <p className="text-xs font-medium truncate flex-1">{m.caption || "No caption"}</p>
+                                      <DropdownMenu>
+                                        <DropdownMenuTrigger asChild>
+                                          <button className="p-1 rounded hover:bg-muted text-muted-foreground hover:text-foreground">
+                                            <MoreHorizontal className="h-3 w-3" />
+                                          </button>
+                                        </DropdownMenuTrigger>
+                                        <DropdownMenuContent align="end" className="text-xs">
+                                          <DropdownMenuItem
+                                            onClick={() => setEditingMedia({ id: m.id, stage: m.stage || "setup", caption: m.caption || "" })}
+                                          >
+                                            <Edit className="h-3.5 w-3.5 mr-1.5" /> Edit Stage &amp; Caption
+                                          </DropdownMenuItem>
+                                          <DropdownMenuSeparator />
+                                          <DropdownMenuItem
+                                            onClick={() => handleDeleteMedia(m.id)}
+                                            className="text-destructive focus:text-destructive"
+                                          >
+                                            <Trash2 className="h-3.5 w-3.5 mr-1.5" /> Delete Screenshot
+                                          </DropdownMenuItem>
+                                        </DropdownMenuContent>
+                                      </DropdownMenu>
+                                    </div>
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      );
+                    })}
+
+                    {/* Unclassified stage media */}
+                    {(() => {
+                      const unclassified = evidenceMedia.filter((m: any) => !m.stage || !STAGES.some((s) => s.id === m.stage));
+                      if (unclassified.length === 0) return null;
+                      return (
+                        <div className="space-y-2">
+                          <div className="flex items-center justify-between border-b border-border/60 pb-1">
+                            <div>
+                              <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">General / Unclassified</h4>
+                              <p className="text-[11px] text-muted-foreground">Evidence not assigned to a specific execution stage</p>
+                            </div>
+                            <Badge variant="outline" className="text-[10px]">{unclassified.length}</Badge>
+                          </div>
+                          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3 pt-1">
+                            {unclassified.map((m: any) => {
+                              const isVideo = m.kind === "video";
+                              return (
+                                <div key={m.id} className="group relative rounded-lg border border-border overflow-hidden bg-card">
+                                  <button
+                                    onClick={() => {
+                                      if (isVideo) return;
+                                      const imgIdx = images.findIndex((im: any) => im.id === m.id);
+                                      if (imgIdx >= 0) {
+                                        setViewerIndex(imgIdx);
+                                        setViewerOpen(true);
+                                      }
+                                    }}
+                                    className="aspect-video w-full overflow-hidden bg-muted text-left block relative"
+                                  >
+                                    {m.timeframe && (
+                                      <Badge variant="secondary" className="absolute top-1 right-1 z-10 text-[9px] py-0 px-1 opacity-90 backdrop-blur-sm">
+                                        {getTimeframeLabel(m.timeframe)}
+                                      </Badge>
+                                    )}
+                                    {isVideo && m.url ? (
+                                      <video src={m.url} className="w-full h-full object-cover" preload="metadata" controls />
+                                    ) : (
+                                      <img src={m.url || `/api/media/file?token=placeholder`} alt={m.caption || "Evidence"} className="w-full h-full object-cover" />
+                                    )}
+                                  </button>
+                                  <div className="p-2 space-y-1">
+                                    <div className="flex items-center justify-between gap-1">
+                                      <p className="text-xs font-medium truncate flex-1">{m.caption || "No caption"}</p>
+                                      <DropdownMenu>
+                                        <DropdownMenuTrigger asChild>
+                                          <button className="p-1 rounded hover:bg-muted text-muted-foreground hover:text-foreground">
+                                            <MoreHorizontal className="h-3 w-3" />
+                                          </button>
+                                        </DropdownMenuTrigger>
+                                        <DropdownMenuContent align="end" className="text-xs">
+                                          <DropdownMenuItem
+                                            onClick={() => setEditingMedia({ id: m.id, stage: m.stage || "setup", caption: m.caption || "" })}
+                                          >
+                                            <Edit className="h-3.5 w-3.5 mr-1.5" /> Edit Stage &amp; Caption
+                                          </DropdownMenuItem>
+                                          <DropdownMenuSeparator />
+                                          <DropdownMenuItem
+                                            onClick={() => handleDeleteMedia(m.id)}
+                                            className="text-destructive focus:text-destructive"
+                                          >
+                                            <Trash2 className="h-3.5 w-3.5 mr-1.5" /> Delete Screenshot
+                                          </DropdownMenuItem>
+                                        </DropdownMenuContent>
+                                      </DropdownMenu>
+                                    </div>
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      );
+                    })()}
+                  </div>
+                );
+              })()
             ) : (
+              /* Timeframe Grouping (Original Timeline) */
               <div className="space-y-6">
                 {TIMEFRAME_GROUPS.map((group) => {
                   const groupMedia = evidenceMedia.filter((m: any) => getTimeframeGroup(m.timeframe) === group);
@@ -1160,11 +1647,11 @@ export function TradeDetailView({ tradeId, onBack }: { tradeId?: string; onBack?
                   return (
                     <div key={group} className="space-y-3">
                       <h4 className="text-sm font-medium text-muted-foreground">{group}</h4>
-                      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2">
+                      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
                         {groupMedia.map((m: any) => {
                           const isVideo = m.kind === "video";
                           return (
-                            <div key={m.id}>
+                            <div key={m.id} className="group relative rounded-lg border border-border overflow-hidden bg-card">
                               <button
                                 onClick={() => {
                                   if (isVideo) return;
@@ -1174,11 +1661,16 @@ export function TradeDetailView({ tradeId, onBack }: { tradeId?: string; onBack?
                                     setViewerOpen(true);
                                   }
                                 }}
-                                className="aspect-video rounded-md border border-border overflow-hidden bg-muted hover:opacity-80 transition-opacity text-left w-full relative"
+                                className="aspect-video rounded-t-lg border-b border-border overflow-hidden bg-muted hover:opacity-80 transition-opacity text-left w-full relative block"
                               >
                                 {m.timeframe && (
                                   <Badge variant="secondary" className="absolute top-1 right-1 z-10 text-[10px] py-0 px-1.5 opacity-80 backdrop-blur-sm">
                                     {getTimeframeLabel(m.timeframe)}
+                                  </Badge>
+                                )}
+                                {m.stage && (
+                                  <Badge variant="outline" className="absolute bottom-1 left-1 z-10 text-[9px] py-0 px-1 bg-card/80 backdrop-blur-sm uppercase">
+                                    {m.stage.replace(/_/g, " ")}
                                   </Badge>
                                 )}
                                 {isVideo && m.url ? (
@@ -1187,9 +1679,30 @@ export function TradeDetailView({ tradeId, onBack }: { tradeId?: string; onBack?
                                   <img src={m.url || `/api/media/file?token=placeholder`} alt={m.caption || "Evidence"} className="w-full h-full object-cover" />
                                 )}
                               </button>
-                              {m.caption && (
-                                <p className="text-xs text-muted-foreground mt-1 line-clamp-2">{m.caption}</p>
-                              )}
+                              <div className="p-2 flex items-center justify-between gap-1">
+                                <p className="text-xs text-muted-foreground truncate flex-1">{m.caption || "No caption"}</p>
+                                <DropdownMenu>
+                                  <DropdownMenuTrigger asChild>
+                                    <button className="p-1 rounded hover:bg-muted text-muted-foreground hover:text-foreground">
+                                      <MoreHorizontal className="h-3 w-3" />
+                                    </button>
+                                  </DropdownMenuTrigger>
+                                  <DropdownMenuContent align="end" className="text-xs">
+                                    <DropdownMenuItem
+                                      onClick={() => setEditingMedia({ id: m.id, stage: m.stage || "setup", caption: m.caption || "" })}
+                                    >
+                                      <Edit className="h-3.5 w-3.5 mr-1.5" /> Edit Details
+                                    </DropdownMenuItem>
+                                    <DropdownMenuSeparator />
+                                    <DropdownMenuItem
+                                      onClick={() => handleDeleteMedia(m.id)}
+                                      className="text-destructive focus:text-destructive"
+                                    >
+                                      <Trash2 className="h-3.5 w-3.5 mr-1.5" /> Delete Screenshot
+                                    </DropdownMenuItem>
+                                  </DropdownMenuContent>
+                                </DropdownMenu>
+                              </div>
                             </div>
                           );
                         })}
@@ -1197,19 +1710,19 @@ export function TradeDetailView({ tradeId, onBack }: { tradeId?: string; onBack?
                     </div>
                   );
                 })}
-                
-                {/* Media without a timeframe or unknown timeframe */}
+
+                {/* Media without a timeframe */}
                 {(() => {
                   const otherMedia = evidenceMedia.filter((m: any) => !getTimeframeGroup(m.timeframe));
                   if (otherMedia.length === 0) return null;
                   return (
                     <div className="space-y-3">
                       <h4 className="text-sm font-medium text-muted-foreground">Other / Unspecified</h4>
-                      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2">
+                      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
                         {otherMedia.map((m: any) => {
                           const isVideo = m.kind === "video";
                           return (
-                            <div key={m.id}>
+                            <div key={m.id} className="group relative rounded-lg border border-border overflow-hidden bg-card">
                               <button
                                 onClick={() => {
                                   if (isVideo) return;
@@ -1219,7 +1732,7 @@ export function TradeDetailView({ tradeId, onBack }: { tradeId?: string; onBack?
                                     setViewerOpen(true);
                                   }
                                 }}
-                                className="aspect-video rounded-md border border-border overflow-hidden bg-muted hover:opacity-80 transition-opacity text-left w-full"
+                                className="aspect-video rounded-t-lg border-b border-border overflow-hidden bg-muted hover:opacity-80 transition-opacity text-left w-full block"
                               >
                                 {isVideo && m.url ? (
                                   <video src={m.url} className="w-full h-full object-cover" preload="metadata" controls />
@@ -1227,9 +1740,30 @@ export function TradeDetailView({ tradeId, onBack }: { tradeId?: string; onBack?
                                   <img src={m.url || `/api/media/file?token=placeholder`} alt={m.caption || "Evidence"} className="w-full h-full object-cover" />
                                 )}
                               </button>
-                              {m.caption && (
-                                <p className="text-xs text-muted-foreground mt-1 line-clamp-2">{m.caption}</p>
-                              )}
+                              <div className="p-2 flex items-center justify-between gap-1">
+                                <p className="text-xs text-muted-foreground truncate flex-1">{m.caption || "No caption"}</p>
+                                <DropdownMenu>
+                                  <DropdownMenuTrigger asChild>
+                                    <button className="p-1 rounded hover:bg-muted text-muted-foreground hover:text-foreground">
+                                      <MoreHorizontal className="h-3 w-3" />
+                                    </button>
+                                  </DropdownMenuTrigger>
+                                  <DropdownMenuContent align="end" className="text-xs">
+                                    <DropdownMenuItem
+                                      onClick={() => setEditingMedia({ id: m.id, stage: m.stage || "setup", caption: m.caption || "" })}
+                                    >
+                                      <Edit className="h-3.5 w-3.5 mr-1.5" /> Edit Details
+                                    </DropdownMenuItem>
+                                    <DropdownMenuSeparator />
+                                    <DropdownMenuItem
+                                      onClick={() => handleDeleteMedia(m.id)}
+                                      className="text-destructive focus:text-destructive"
+                                    >
+                                      <Trash2 className="h-3.5 w-3.5 mr-1.5" /> Delete Screenshot
+                                    </DropdownMenuItem>
+                                  </DropdownMenuContent>
+                                </DropdownMenu>
+                              </div>
                             </div>
                           );
                         })}
@@ -1240,6 +1774,63 @@ export function TradeDetailView({ tradeId, onBack }: { tradeId?: string; onBack?
               </div>
             )}
           </Card>
+
+          {/* Edit Screenshot Details Dialog */}
+          {editingMedia && (
+            <Dialog open={true} onOpenChange={(open) => !open && setEditingMedia(null)}>
+              <DialogContent className="max-w-md">
+                <DialogHeader>
+                  <DialogTitle className="text-base">Edit Evidence Metadata</DialogTitle>
+                  <DialogDescription className="text-xs">
+                    Assign this screenshot to an execution stage and add a descriptive caption.
+                  </DialogDescription>
+                </DialogHeader>
+                <div className="space-y-4 py-2">
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-medium text-foreground">Trade Lifecycle Stage</label>
+                    <Select
+                      value={editingMedia.stage}
+                      onValueChange={(val) => setEditingMedia((prev) => prev ? { ...prev, stage: val } : null)}
+                    >
+                      <SelectTrigger className="h-9 text-xs">
+                        <SelectValue placeholder="Select stage" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="before_entry" className="text-xs">1. Before Entry / HTF Context</SelectItem>
+                        <SelectItem value="setup" className="text-xs">2. Setup &amp; Liquidity Sweeps</SelectItem>
+                        <SelectItem value="entry" className="text-xs">3. Execution / Trigger Candle</SelectItem>
+                        <SelectItem value="during_trade" className="text-xs">4. Trade Management / Partials</SelectItem>
+                        <SelectItem value="exit" className="text-xs">5. Exit / Target Hit / Stop</SelectItem>
+                        <SelectItem value="review" className="text-xs">6. Post-Trade Review &amp; Lessons</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-medium text-foreground">Caption / Description</label>
+                    <textarea
+                      rows={3}
+                      value={editingMedia.caption}
+                      onChange={(e) => setEditingMedia((prev) => prev ? { ...prev, caption: e.target.value } : null)}
+                      placeholder="e.g. 15m bullish order block tapped with liquidity sweep..."
+                      className="w-full text-xs rounded-md border border-border bg-background p-2.5 focus:outline-none focus:ring-1 focus:ring-ring"
+                    />
+                  </div>
+                </div>
+                <div className="flex justify-end gap-2 pt-2">
+                  <Button variant="outline" size="sm" onClick={() => setEditingMedia(null)}>
+                    Cancel
+                  </Button>
+                  <Button
+                    size="sm"
+                    disabled={savingMediaMeta}
+                    onClick={() => handleUpdateMediaStageCaption(editingMedia.id, editingMedia.stage, editingMedia.caption)}
+                  >
+                    {savingMediaMeta ? "Saving..." : "Save Details"}
+                  </Button>
+                </div>
+              </DialogContent>
+            </Dialog>
+          )}
         </TabsContent>
       </Tabs>
 

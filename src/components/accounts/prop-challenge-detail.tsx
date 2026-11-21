@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { notifyOptimisticFailure } from "@/lib/optimistic";
 import {
@@ -75,6 +75,11 @@ import {
   type RuleStatus,
   type RuleCategory,
 } from "@/lib/prop-lifecycle-engine";
+import {
+  calculateConsistencyProjection,
+  evaluateRuleAlerts,
+  createDefaultPropMetrics,
+} from "@/lib/prop-simulator-engine";
 
 interface PropChallengeDetailProps {
   challengeId: string;
@@ -142,6 +147,34 @@ function RuleSimulatorWidget({
       isNewTradingDay: isNewDay,
     }
   );
+
+  const config = {
+    challengeId: lifecycle.challengeId || "challenge",
+    name: activePhase.name || "Phase",
+    propFirm: lifecycle.propFirm || "Firm",
+    startingBalanceCents: lifecycle.startingBalanceCents || 10000000,
+    currentBalanceCents: lifecycle.currentBalanceCents || 10000000,
+    currency,
+    dailyLossLimitCents: activePhase.dailyLossLimitCents ?? null,
+    maxDrawdownLimitCents: (activePhase as any).maxDrawdownLimitCents ?? activePhase.maxDrawdownCents ?? null,
+    drawdownType: (activePhase.drawdownType as "static" | "trailing") || "static",
+    profitTargetCents: activePhase.profitTargetCents ?? null,
+    minTradingDays: activePhase.minTradingDays ?? 4,
+    consistencyThresholdPct: (activePhase as any).consistencyThresholdPct ?? lifecycle.consistencyThresholdPct ?? 40,
+    weekendHoldingAllowed: true,
+    newsTradingAllowed: true,
+    startDate: new Date().toISOString(),
+  };
+
+  const metrics = createDefaultPropMetrics({
+    startingBalanceCents: lifecycle.startingBalanceCents || 10000000,
+    currentBalanceCents: lifecycle.currentBalanceCents || 10000000,
+    netProfitCents: lifecycle.netProfitCents || 0,
+    bestDayProfitCents: lifecycle.bestDayProfitCents || (lifecycle.bestDayPctOfTotal ? Math.round(((lifecycle.netProfitCents || 0) * lifecycle.bestDayPctOfTotal) / 100) : 0),
+    consistencyThresholdPct: (activePhase as any).consistencyThresholdPct ?? lifecycle.consistencyThresholdPct ?? 40,
+  });
+
+  const consistency = calculateConsistencyProjection(metrics, config);
 
   return (
     <Card className="border-primary/25 bg-card/60 shadow-xs">
@@ -294,6 +327,72 @@ function RuleSimulatorWidget({
             </div>
           </div>
         </div>
+
+        {/* Consistency Projection Section (Feature 25) */}
+        {consistency && consistency.thresholdPct && (
+          <div className="pt-3 border-t border-border/60 space-y-2">
+            <div className="flex items-center justify-between">
+              <span className="font-semibold text-foreground flex items-center gap-1.5">
+                <Scale className="h-3.5 w-3.5 text-primary" />
+                Consistency Projection ({consistency.thresholdPct}% Limit)
+              </span>
+              <Badge
+                variant="outline"
+                className={cn(
+                  "text-[10px] font-mono uppercase font-bold px-2 py-0.5",
+                  consistency.complianceStatus === "Compliant"
+                    ? "bg-profit/15 text-profit border-profit/30"
+                    : consistency.complianceStatus === "At Risk"
+                      ? "bg-amber-500/15 text-amber-600 border-amber-500/30"
+                      : consistency.complianceStatus === "Breached"
+                        ? "bg-loss/15 text-loss border-loss/30"
+                        : "bg-muted text-muted-foreground border-border/60"
+                )}
+              >
+                {consistency.complianceStatus}
+              </Badge>
+            </div>
+
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 text-xs">
+              <div className="p-2 rounded bg-muted/30 border border-border/40">
+                <div className="text-[10px] text-muted-foreground uppercase font-mono">Current Concentration</div>
+                <div className="font-mono font-semibold text-foreground">
+                  {consistency.currentConsistencyPct !== null ? `${consistency.currentConsistencyPct}%` : "—"}
+                  <span className="text-[10px] text-muted-foreground font-normal"> / {consistency.thresholdPct}% max</span>
+                </div>
+              </div>
+
+              <div className="p-2 rounded bg-muted/30 border border-border/40">
+                <div className="text-[10px] text-muted-foreground uppercase font-mono">Highest Day P&amp;L</div>
+                <div className="font-mono font-semibold text-foreground">
+                  {formatCents(consistency.bestDayProfitCents, currency)}
+                </div>
+              </div>
+
+              <div className="p-2 rounded bg-muted/30 border border-border/40 col-span-2 sm:col-span-1">
+                <div className="text-[10px] text-muted-foreground uppercase font-mono">Required Dilution Profit</div>
+                <div className={cn(
+                  "font-mono font-semibold",
+                  consistency.additionalDilutionProfitRequiredCents > 0
+                    ? "text-amber-500"
+                    : consistency.complianceStatus === "Compliant"
+                      ? "text-profit"
+                      : "text-muted-foreground"
+                )}>
+                  {consistency.additionalDilutionProfitRequiredCents > 0
+                    ? `+${formatCents(consistency.additionalDilutionProfitRequiredCents, currency)} needed`
+                    : consistency.complianceStatus === "Compliant"
+                      ? "0.00 (Fully Compliant)"
+                      : "—"}
+                </div>
+              </div>
+            </div>
+
+            <p className="text-[11px] text-muted-foreground italic">
+              {consistency.formulaDescription}
+            </p>
+          </div>
+        )}
       </CardContent>
     </Card>
   );
@@ -338,6 +437,7 @@ export function PropChallengeDetail({ challengeId, onBack }: PropChallengeDetail
 
   // Trade History filter
   const [tradeFilter, setTradeFilter] = useState<"all" | "win" | "loss">("all");
+  const [dismissedAlertKeys, setDismissedAlertKeys] = useState<string[]>([]);
 
   // Fetch challenge details
   const { data: challenge, isLoading, isError, refetch } = useQuery({
@@ -429,6 +529,35 @@ export function PropChallengeDetail({ challengeId, onBack }: PropChallengeDetail
       queryClient.invalidateQueries({ queryKey: ["prop-challenges"] });
     },
   });
+
+  // Rule Alerts Evaluation (Feature 73)
+  const activeAlerts = useMemo(() => {
+    if (!challenge) return [];
+    const lc = challenge.lifecycle || {};
+    const ap: PropPhaseConfig = challenge.activePhase || lc.activePhase || {};
+    const metrics = createDefaultPropMetrics({
+      startingBalanceCents: challenge.startingBalanceCents || 10000000,
+      currentBalanceCents: lc.currentBalanceCents || challenge.startingBalanceCents || 10000000,
+      netProfitCents: lc.netProfitCents || 0,
+      profitTargetCents: ap.profitTargetCents ?? null,
+      profitTargetReached: Boolean(lc.profitTargetReached),
+      todayLossCents: lc.todayLossCents || 0,
+      dailyLossLimitCents: lc.dailyLossLimitCents || ap.dailyLossLimitCents || null,
+      remainingDailyLossCents: lc.remainingDailyLossCents ?? null,
+      dailyLossUsedPct: lc.dailyLossUsedPct ?? null,
+      dailyLossBreached: Boolean(lc.dailyLossBreached),
+      currentDrawdownCents: lc.currentDrawdownCents || 0,
+      maxDrawdownLimitCents: lc.maxDrawdownLimitCents || (ap as any).maxDrawdownLimitCents || ap.maxDrawdownCents || null,
+      remainingDrawdownCents: lc.remainingDrawdownCents ?? null,
+      drawdownUsedPct: lc.drawdownUsedPct ?? null,
+      drawdownBreached: Boolean(lc.drawdownBreached),
+      consistencyThresholdPct: (ap as any).consistencyThresholdPct ?? null,
+      bestDayPctOfTotal: lc.bestDayPctOfTotal ?? null,
+    });
+
+    const allAlerts = evaluateRuleAlerts(challenge.id, metrics);
+    return allAlerts.filter((a) => !dismissedAlertKeys.includes(a.dedupKey));
+  }, [challenge, dismissedAlertKeys]);
 
   if (isLoading) {
     return (
@@ -612,6 +741,55 @@ export function PropChallengeDetail({ challengeId, onBack }: PropChallengeDetail
         </div>
       </div>
 
+      {/* Rule Alerts Banner (Feature 73) */}
+      {activeAlerts.length > 0 && (
+        <div className="space-y-2">
+          {activeAlerts.map((alert) => (
+            <div
+              key={alert.dedupKey}
+              className={cn(
+                "flex items-start justify-between gap-3 p-3.5 rounded-xl border text-xs shadow-xs",
+                alert.severity === "critical"
+                  ? "bg-loss/10 border-loss/30 text-loss"
+                  : alert.severity === "warning"
+                    ? "bg-amber-500/10 border-amber-500/30 text-amber-600 dark:text-amber-400"
+                    : "bg-profit/10 border-profit/30 text-profit"
+              )}
+            >
+              <div className="flex items-start gap-2.5">
+                {alert.severity === "critical" ? (
+                  <AlertOctagon className="h-4 w-4 shrink-0 mt-0.5" />
+                ) : alert.severity === "warning" ? (
+                  <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5" />
+                ) : (
+                  <CheckCircle2 className="h-4 w-4 shrink-0 mt-0.5" />
+                )}
+                <div className="space-y-0.5">
+                  <div className="font-semibold text-foreground flex items-center gap-2">
+                    <span>{alert.title}</span>
+                    <Badge variant="outline" className="text-[10px] uppercase font-mono px-1.5 py-0">
+                      {alert.category.replace("_", " ")}
+                    </Badge>
+                  </div>
+                  <p className="text-muted-foreground">{alert.message}</p>
+                  <p className="text-[11px] font-medium pt-0.5">
+                    <strong>Recommended Action:</strong> {alert.recommendedAction}
+                  </p>
+                </div>
+              </div>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setDismissedAlertKeys((prev) => [...prev, alert.dedupKey])}
+                className="h-7 px-2 text-xs text-muted-foreground hover:text-foreground shrink-0 cursor-pointer"
+              >
+                Dismiss
+              </Button>
+            </div>
+          ))}
+        </div>
+      )}
+
       {/* Main Challenge Hero Banner */}
       <div className="rounded-2xl border border-border bg-card p-5 md:p-6 space-y-5 shadow-sm relative overflow-hidden">
         <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
@@ -629,10 +807,10 @@ export function PropChallengeDetail({ challengeId, onBack }: PropChallengeDetail
                   isFunded
                     ? "bg-profit/15 text-profit border-profit/30"
                     : isPassed
-                    ? "bg-profit/15 text-profit border-profit/30"
-                    : isBreached || isFailed
-                    ? "bg-loss/15 text-loss border-loss/30"
-                    : "bg-primary/10 text-primary border-primary/20"
+                      ? "bg-profit/15 text-profit border-profit/30"
+                      : isBreached || isFailed
+                        ? "bg-loss/15 text-loss border-loss/30"
+                        : "bg-primary/10 text-primary border-primary/20"
                 )}
               >
                 {lifecycle.status?.replace("_", " ")}
@@ -659,8 +837,8 @@ export function PropChallengeDetail({ challengeId, onBack }: PropChallengeDetail
                     isCurrent
                       ? "bg-card text-foreground shadow-xs border border-border font-semibold"
                       : isCompleted
-                      ? "text-profit hover:bg-card/50"
-                      : "text-muted-foreground/70"
+                        ? "text-profit hover:bg-card/50"
+                        : "text-muted-foreground/70"
                   )}
                 >
                   <span className="font-mono text-[10px] opacity-70">{idx + 1}.</span>
@@ -745,8 +923,8 @@ export function PropChallengeDetail({ challengeId, onBack }: PropChallengeDetail
                 lifecycle.netProfitCents > 0
                   ? "text-profit"
                   : lifecycle.netProfitCents < 0
-                  ? "text-loss"
-                  : "text-foreground"
+                    ? "text-loss"
+                    : "text-foreground"
               )}
             >
               {isPrivate ? "••••••" : formatSignedCents(lifecycle.netProfitCents, currency).text}
@@ -867,8 +1045,8 @@ export function PropChallengeDetail({ challengeId, onBack }: PropChallengeDetail
                     (lifecycle.dailyLossUsedPct || 0) >= 90
                       ? "[&>div]:bg-loss"
                       : (lifecycle.dailyLossUsedPct || 0) >= 75
-                      ? "[&>div]:bg-amber-500"
-                      : ""
+                        ? "[&>div]:bg-amber-500"
+                        : ""
                   )}
                 />
                 <div className="flex justify-between items-center text-xs text-muted-foreground pt-1">
@@ -907,8 +1085,8 @@ export function PropChallengeDetail({ challengeId, onBack }: PropChallengeDetail
                     (lifecycle.drawdownUsedPct || 0) >= 90
                       ? "[&>div]:bg-loss"
                       : (lifecycle.drawdownUsedPct || 0) >= 75
-                      ? "[&>div]:bg-amber-500"
-                      : ""
+                        ? "[&>div]:bg-amber-500"
+                        : ""
                   )}
                 />
                 <div className="flex justify-between items-center text-xs text-muted-foreground pt-1">
@@ -1543,8 +1721,8 @@ export function PropChallengeDetail({ challengeId, onBack }: PropChallengeDetail
                         {isFundedPhase
                           ? `Live funded capital instance · ${phase.activationDate ? `Activated: ${new Date(phase.activationDate).toLocaleDateString()}` : "Active"}`
                           : snapshot
-                          ? `Completed phase · ${snapshot.tradeCount} historical trades logged`
-                          : "Active evaluation stage"}
+                            ? `Completed phase · ${snapshot.tradeCount} historical trades logged`
+                            : "Active evaluation stage"}
                       </div>
                       <Button
                         size="sm"

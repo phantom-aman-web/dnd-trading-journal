@@ -9,6 +9,11 @@ import { computeChecklistAdherence, type TradeChecklistRecord } from "@/lib/chec
 import { evaluateDataQuality, type ScannableTradeRecord } from "@/lib/data-quality-engine";
 import { computeDrawdownAnalytics } from "@/lib/drawdown-analytics-engine";
 import { isSyntheticSampleTrade } from "@/lib/prop-firm-engine";
+import {
+  computeProcessOutcomeMatrix,
+  computeBehavioralAnalytics,
+  type TradeBehaviorRow,
+} from "@/lib/behavioral-engine";
 
 function safeParseArr(json: string | null): string[] {
   if (!json) return [];
@@ -465,6 +470,44 @@ export async function GET(req: NextRequest) {
       isMulti,
     );
     return send(report);
+  }
+  if (dimension === "process-matrix") {
+    const behaviorRows: TradeBehaviorRow[] = trades.map((t) => ({
+      id: t.id,
+      instrumentSymbol: t.instrumentSymbol,
+      direction: t.direction as "long" | "short",
+      entryTime: t.entryTime ? t.entryTime.toISOString() : null,
+      exitTime: t.exitTime ? t.exitTime.toISOString() : null,
+      status: (["win", "loss", "breakeven"].includes(t.status) ? t.status : "open") as any,
+      netPnlCents: t.netPnlCents,
+      actualR: t.actualR ? parseFloat(t.actualR) : null,
+      plannedRiskCents: t.plannedRiskAmountCents,
+      plannedRiskPct: t.plannedRiskPct ? parseFloat(t.plannedRiskPct) : null,
+      session: t.session,
+      processCompliant: !(safeParseArr(t.behaviorFlagsJson).length > 0),
+      behaviorFlags: safeParseArr(t.behaviorFlagsJson),
+      notes: t.notes,
+    }));
+    return send(computeProcessOutcomeMatrix(behaviorRows));
+  }
+  if (dimension === "behavioral") {
+    const behaviorRows: TradeBehaviorRow[] = trades.map((t) => ({
+      id: t.id,
+      instrumentSymbol: t.instrumentSymbol,
+      direction: t.direction as "long" | "short",
+      entryTime: t.entryTime ? t.entryTime.toISOString() : null,
+      exitTime: t.exitTime ? t.exitTime.toISOString() : null,
+      status: (["win", "loss", "breakeven"].includes(t.status) ? t.status : "open") as any,
+      netPnlCents: t.netPnlCents,
+      actualR: t.actualR ? parseFloat(t.actualR) : null,
+      plannedRiskCents: t.plannedRiskAmountCents,
+      plannedRiskPct: t.plannedRiskPct ? parseFloat(t.plannedRiskPct) : null,
+      session: t.session,
+      processCompliant: !(safeParseArr(t.behaviorFlagsJson).length > 0),
+      behaviorFlags: safeParseArr(t.behaviorFlagsJson),
+      notes: t.notes,
+    }));
+    return send(computeBehavioralAnalytics(behaviorRows));
   }
   return send({ aggregate: computeAggregateMetrics(rows, startingBalanceCents) });
 }

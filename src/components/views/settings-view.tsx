@@ -82,6 +82,7 @@ import {
   ArrowLeft,
   ChevronRight,
   Send,
+  Download,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { FieldLabel } from "@/components/common/field-label";
@@ -139,7 +140,7 @@ async function fetchMeta() {
 
 export function SettingsView() {
   const qc = useQueryClient();
-  const { params } = useNav();
+  const { params, navigate } = useNav();
   const initialTab =
     params.tab === "appearance" || params.tab === "preferences" || !params.tab
       ? "preferences"
@@ -878,6 +879,74 @@ export function SettingsView() {
                 <Save className="h-4 w-4" /> Save Trading
               </Button>
             </div>
+
+            {/* Data Portability & Connected Integrations (Feature 95) */}
+            <SettingsCard>
+              <SettingsSectionHeading>Data Portability &amp; Connected Integrations</SettingsSectionHeading>
+              <p className="text-xs text-muted-foreground mt-1">
+                Export your full trading journal archive, or manage external read-only authorizations.
+              </p>
+              <div className="mt-5 space-y-4">
+                <div className="flex flex-col sm:flex-row gap-3">
+                  <Button
+                    variant="outline"
+                    onClick={() => window.open("/api/exports?format=json&type=all", "_blank")}
+                    className="border-input hover:bg-muted text-xs h-9 gap-1.5"
+                  >
+                    <Download className="h-3.5 w-3.5" /> Download Personal Data Archive (JSON)
+                  </Button>
+                  <Button
+                    variant="outline"
+                    onClick={() => window.open("/api/exports?format=csv&type=trades", "_blank")}
+                    className="border-input hover:bg-muted text-xs h-9 gap-1.5"
+                  >
+                    <Download className="h-3.5 w-3.5" /> Export Trade Log (CSV)
+                  </Button>
+                </div>
+
+                <div className="pt-3 border-t border-border/50 space-y-2 text-xs">
+                  <span className="font-semibold text-foreground block">Connected Integrations</span>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div className="p-3 rounded-lg bg-muted/30 border border-border/50 flex items-center justify-between">
+                      <div className="space-y-0.5">
+                        <div className="font-semibold text-foreground flex items-center gap-1.5">
+                          <Send className="h-3.5 w-3.5 text-sky-500" /> Telegram Bot
+                        </div>
+                        <div className="text-[11px] text-muted-foreground">Automated publishing &amp; notifications</div>
+                      </div>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => {
+                          setActiveTab("telegram");
+                          setMobileTab("telegram");
+                        }}
+                        className="text-xs text-primary h-7"
+                      >
+                        Manage
+                      </Button>
+                    </div>
+
+                    <div className="p-3 rounded-lg bg-muted/30 border border-border/50 flex items-center justify-between">
+                      <div className="space-y-0.5">
+                        <div className="font-semibold text-foreground flex items-center gap-1.5">
+                          <Shield className="h-3.5 w-3.5 text-emerald-500" /> Read-Only Broker Sync
+                        </div>
+                        <div className="text-[11px] text-muted-foreground">MT4/MT5 read-only trade ingestion</div>
+                      </div>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => navigate("accounts")}
+                        className="text-xs text-primary h-7"
+                      >
+                        Accounts
+                      </Button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </SettingsCard>
 
             {/* Account & Session */}
             <SettingsCard>

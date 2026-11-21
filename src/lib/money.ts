@@ -81,7 +81,7 @@ export function formatPct(decimal: Decimal | number | null | undefined, dp = 2):
 }
 
 /** Format an R multiple. Returns "N/A" when undefined. */
-export function formatR(r: Decimal | null | undefined, dp = 2): string {
+export function formatR(r: Decimal | number | null | undefined, dp = 2): string {
   if (r == null) return "N/A";
   const n = dToNumber(r);
   if (!Number.isFinite(n)) return "N/A";

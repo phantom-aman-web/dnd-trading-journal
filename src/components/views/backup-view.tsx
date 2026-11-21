@@ -192,6 +192,8 @@ export function BackupView() {
     rowCount: number;
     headers: string[];
     sampleRows: Record<string, string>[];
+    sheetNames?: string[];
+    activeSheet?: string;
   } | null>(null);
   const [selectedBrokerPreset, setSelectedBrokerPreset] = useState<string>("auto");
   const [selectedBrokerTimezoneOffset, setSelectedBrokerTimezoneOffset] = useState<number | undefined>(2);
@@ -360,25 +362,39 @@ export function BackupView() {
     }
   }
 
-  // --- CSV Import with Column Mapping & Duplicate Detection ----------------
+  // --- CSV / XLSX Import with Column Mapping & Duplicate Detection ----------------
   async function handleSelectCsv(file: File) {
     setCsvUploading(true);
     setValidationResult(null);
     setCsvImportResult(null);
     try {
-      const content = await file.text();
+      let content = "";
+      const lower = file.name.toLowerCase();
+      if (lower.endsWith(".xlsx") || lower.endsWith(".xls")) {
+        const arrayBuffer = await file.arrayBuffer();
+        const bytes = new Uint8Array(arrayBuffer);
+        let binary = "";
+        const len = bytes.byteLength;
+        for (let i = 0; i < len; i++) {
+          binary += String.fromCharCode(bytes[i]);
+        }
+        content = btoa(binary);
+      } else {
+        content = await file.text();
+      }
+
       const res = await fetch("/api/imports", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           filename: file.name,
-          source: "csv",
+          source: lower.endsWith(".xlsx") || lower.endsWith(".xls") ? "xlsx" : "csv",
           content,
         }),
       });
       const data = await res.json();
       if (!res.ok) {
-        toast.error(data?.error ?? "Failed to upload CSV file.");
+        toast.error(data?.error ?? "Failed to upload import file.");
         return;
       }
       let summary: any = {};
@@ -391,6 +407,8 @@ export function BackupView() {
         rowCount: data.rowCount,
         headers,
         sampleRows,
+        sheetNames: summary.sheetNames,
+        activeSheet: summary.activeSheet,
       });
 
       // Auto-detect broker preset
@@ -757,9 +775,9 @@ export function BackupView() {
             </div>
             <div className="min-w-0 flex-1 space-y-4">
               <div>
-                <SectionHeading>Import Broker Trades (CSV)</SectionHeading>
+                <SectionHeading>Import Broker Trades (CSV / XLSX / MetaTrader)</SectionHeading>
                 <p className="text-sm text-muted-foreground mt-1">
-                  Upload CSV trade histories from MetaTrader (MT4/MT5), cTrader, NinjaTrader, TradeLocker, or Interactive Brokers. Pre-fills standard column mappings and prevents duplicate entries.
+                  Upload CSV, XLSX workbooks, TSV, HTML statements from MetaTrader (MT4/MT5), cTrader, NinjaTrader, TradeLocker, or Interactive Brokers. Pre-fills standard column mappings and prevents duplicate entries.
                 </p>
               </div>
 
@@ -767,7 +785,7 @@ export function BackupView() {
               <input
                 ref={csvInputRef}
                 type="file"
-                accept=".csv,text/csv"
+                accept=".csv,.xlsx,.xls,.tsv,.htm,.html,.json,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel"
                 className="sr-only"
                 onChange={(e) => {
                   const f = e.target.files?.[0];
@@ -788,7 +806,7 @@ export function BackupView() {
                     ) : (
                       <Upload className="h-4 w-4" />
                     )}
-                    Select Broker CSV File
+                    Select Broker Import File (CSV / XLSX)
                   </Button>
                 </div>
               ) : (
@@ -796,7 +814,12 @@ export function BackupView() {
                   {/* File status */}
                   <div className="flex items-center justify-between text-xs font-mono">
                     <span className="font-semibold text-foreground">{activeImport.filename}</span>
-                    <span className="text-muted-foreground">{activeImport.rowCount} rows detected</span>
+                    <div className="flex items-center gap-2">
+                      {activeImport.sheetNames && activeImport.sheetNames.length > 1 && (
+                        <span className="text-primary font-sans font-medium">Sheet: {activeImport.activeSheet || activeImport.sheetNames[0]}</span>
+                      )}
+                      <span className="text-muted-foreground">{activeImport.rowCount} rows detected</span>
+                    </div>
                   </div>
 
                   {/* Broker Preset, Server Timezone & Target Account Selectors */}

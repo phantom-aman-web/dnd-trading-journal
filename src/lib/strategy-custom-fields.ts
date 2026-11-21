@@ -8,9 +8,11 @@ export type CustomFieldType =
   | "text"
   | "textarea"
   | "number"
+  | "decimal"
   | "boolean"
   | "select"
   | "multiselect"
+  | "tags"
   | "date";
 
 export interface StrategyCustomField {
@@ -172,5 +174,142 @@ export function serializeRulesWithFields(
     items: rules, // Dual-key for backwards compatibility with all extractChecklist variants
     customFields: customFields ?? [],
   });
+}
+
+/**
+ * Validates a single custom field value based on its type definition and constraints.
+ */
+export function validateCustomFieldValue(
+  field: StrategyCustomField,
+  val: any
+): { valid: boolean; error?: string } {
+  if (field.required) {
+    if (
+      val === undefined ||
+      val === null ||
+      val === "" ||
+      (Array.isArray(val) && val.length === 0)
+    ) {
+      return { valid: false, error: `${field.name} is required.` };
+    }
+  }
+
+  if (val === undefined || val === null || val === "") {
+    return { valid: true };
+  }
+
+  switch (field.type) {
+    case "number": {
+      const num = Number(val);
+      if (isNaN(num)) {
+        return { valid: false, error: `${field.name} must be a valid number.` };
+      }
+      return { valid: true };
+    }
+    case "decimal": {
+      const dec = parseFloat(String(val).replace(/,/g, "."));
+      if (isNaN(dec)) {
+        return { valid: false, error: `${field.name} must be a valid decimal number.` };
+      }
+      return { valid: true };
+    }
+    case "boolean": {
+      if (typeof val !== "boolean") {
+        return { valid: false, error: `${field.name} must be true or false.` };
+      }
+      return { valid: true };
+    }
+    case "select": {
+      if (field.options && field.options.length > 0 && !field.options.includes(String(val))) {
+        return { valid: false, error: `${field.name} must be one of the configured options.` };
+      }
+      return { valid: true };
+    }
+    case "multiselect":
+    case "tags": {
+      if (!Array.isArray(val)) {
+        return { valid: false, error: `${field.name} must be an array of values.` };
+      }
+      return { valid: true };
+    }
+    case "date": {
+      const d = new Date(val);
+      if (isNaN(d.getTime())) {
+        return { valid: false, error: `${field.name} must be a valid date.` };
+      }
+      return { valid: true };
+    }
+    case "text":
+    case "textarea": {
+      if (typeof val !== "string" && typeof val !== "number") {
+        return { valid: false, error: `${field.name} must be text.` };
+      }
+      return { valid: true };
+    }
+    default:
+      return { valid: true };
+  }
+}
+
+/**
+ * Extracts and merges active strategy fields with any historical custom field values
+ * preserved in trade records, ensuring renamed or disabled fields are never lost.
+ */
+export function extractAllCustomFieldsForDisplay(
+  activeFields: StrategyCustomField[],
+  storedRecord?: Record<string, any> | null
+): Array<{ id: string; name: string; type: CustomFieldType; value: any; isHistorical?: boolean }> {
+  const result: Array<{ id: string; name: string; type: CustomFieldType; value: any; isHistorical?: boolean }> = [];
+  const handledIds = new Set<string>();
+
+  // 1. Process active strategy fields
+  for (const f of activeFields) {
+    handledIds.add(f.id);
+    const val = storedRecord?.[f.id];
+    if (val !== undefined && val !== null && val !== "") {
+      result.push({
+        id: f.id,
+        name: f.name,
+        type: f.type,
+        value: val,
+        isHistorical: false,
+      });
+    }
+  }
+
+  // 2. Discover any historical custom fields saved on this trade that no longer exist in the active strategy definition
+  if (storedRecord && typeof storedRecord === "object") {
+    for (const [key, val] of Object.entries(storedRecord)) {
+      if (!handledIds.has(key) && val !== undefined && val !== null && val !== "") {
+        result.push({
+          id: key,
+          name: key.replace(/([A-Z])/g, " $1").replace(/^./, (str) => str.toUpperCase()),
+          type: Array.isArray(val) ? "tags" : typeof val === "boolean" ? "boolean" : "text",
+          value: val,
+          isHistorical: true,
+        });
+      }
+    }
+  }
+
+  return result;
+}
+
+/**
+ * Validates a map of custom field values against a strategy's field definitions.
+ */
+export function validateStrategyCustomFields(
+  fields: StrategyCustomField[],
+  values: Record<string, any>
+): { valid: boolean; errors: Record<string, string> } {
+  const errors: Record<string, string> = {};
+  for (const field of fields) {
+    if (field.enabled === false) continue;
+    const res = validateCustomFieldValue(field, values?.[field.id]);
+    if (!res.valid && res.error) {
+      errors[field.id] = res.error;
+    }
+  }
+  return { valid: Object.keys(errors).length === 0, errors };
 }
 

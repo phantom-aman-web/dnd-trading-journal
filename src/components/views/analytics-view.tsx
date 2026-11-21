@@ -64,6 +64,9 @@ import { DrawdownAnalyticsTab } from "@/components/analytics/drawdown-analytics-
 import { DataQualityTab } from "@/components/analytics/data-quality-tab";
 import { MetricDefinitionsModal } from "@/components/analytics/metric-definitions-modal";
 import { SharedFilterBar, type AnalyticsFilterState } from "@/components/analytics/shared-filter-bar";
+import { ProcessOutcomeTab } from "@/components/analytics/process-outcome-tab";
+import { BehavioralAnalyticsTab } from "@/components/analytics/behavioral-analytics-tab";
+import { ReportBuilderTab } from "@/components/analytics/report-builder-tab";
 
 export type TabKey =
   | "overall"
@@ -74,7 +77,10 @@ export type TabKey =
   | "checklist"
   | "violations"
   | "sessions"
-  | "dataQuality";
+  | "dataQuality"
+  | "processMatrix"
+  | "behavioral"
+  | "reports";
 
 export interface AnalyticsSectionDef {
   key: TabKey;
@@ -97,6 +103,7 @@ export const ANALYTICS_CATEGORIES: AnalyticsCategoryDef[] = [
       { key: "overall", label: "Overall Metrics", icon: BarChart3, desc: "P&L, win rate, profit factor, expectancy" },
       { key: "instruments", label: "By Instrument", icon: Compass, desc: "Asset class and symbol breakdown" },
       { key: "setup", label: "By Setup & Strategy", icon: Target, desc: "Playbook and strategy edge analysis" },
+      { key: "reports", label: "Report Builder", icon: BookOpen, desc: "Custom dossier generator and PDF/CSV export" },
     ],
   },
   {
@@ -116,8 +123,10 @@ export const ANALYTICS_CATEGORIES: AnalyticsCategoryDef[] = [
   },
   {
     id: "quality",
-    label: "Process & Quality",
+    label: "Process & Discipline",
     sections: [
+      { key: "processMatrix", label: "Process vs Outcome", icon: ShieldCheck, desc: "2x2 disciplined vs lucky execution matrix" },
+      { key: "behavioral", label: "Behavioral Analytics", icon: Activity, desc: "Streak reaction, risk consistency, and tilt telemetry" },
       { key: "checklist", label: "Checklist Adherence", icon: CheckCircle2, desc: "Rule adherence and plan execution rate" },
       { key: "violations", label: "Rule Violations", icon: AlertTriangle, desc: "Discipline mistakes and behavioral impact" },
       { key: "dataQuality", label: "Data Quality", icon: ShieldCheck, desc: "Journal completeness and integrity audit" },
@@ -140,6 +149,9 @@ const TAB_DIMENSION: Record<TabKey, string> = {
   violations: "behavior",
   sessions: "session",
   dataQuality: "data-quality",
+  processMatrix: "process-matrix",
+  behavioral: "behavioral",
+  reports: "overview",
 };
 
 interface AnalyticsFetchFilters {
@@ -287,11 +299,28 @@ export function AnalyticsView() {
   });
 
   // Sessions tab also needs the time dimension (weekday + hour).
-  const needsTime = tab === "sessions";
+  const needsTime = tab === "sessions" || tab === "reports";
   const { data: timeData, isLoading: timeLoading } = useQuery({
     queryKey: ["analytics", "time", queryFilters],
     queryFn: () => fetchAnalytics("time", queryFilters),
     enabled: needsTime,
+  });
+
+  const isReportsTab = tab === "reports";
+  const { data: reportInstruments } = useQuery({
+    queryKey: ["analytics", "instrument", queryFilters],
+    queryFn: () => fetchAnalytics("instrument", queryFilters),
+    enabled: isReportsTab,
+  });
+  const { data: reportMatrix } = useQuery({
+    queryKey: ["analytics", "process-matrix", queryFilters],
+    queryFn: () => fetchAnalytics("process-matrix", queryFilters),
+    enabled: isReportsTab,
+  });
+  const { data: reportBehavioral } = useQuery({
+    queryKey: ["analytics", "behavioral", queryFilters],
+    queryFn: () => fetchAnalytics("behavioral", queryFilters),
+    enabled: isReportsTab,
   });
 
   const loading = isLoading || (needsTime && timeLoading);
@@ -571,6 +600,42 @@ export function AnalyticsView() {
               <DataQualityTab
                 data={data as any}
                 onFixTrade={(tradeId) => navigate("tradeDetail", { id: tradeId })}
+              />
+            )}
+          </TabsContent>
+
+          <TabsContent value="processMatrix" className="mt-6 focus-visible:outline-none">
+            {loading || tab !== "processMatrix" ? (
+              <AnalyticsSkeleton />
+            ) : (
+              <ProcessOutcomeTab data={data as any} isLoading={loading} />
+            )}
+          </TabsContent>
+
+          <TabsContent value="behavioral" className="mt-6 focus-visible:outline-none">
+            {loading || tab !== "behavioral" ? (
+              <AnalyticsSkeleton />
+            ) : (
+              <BehavioralAnalyticsTab data={data as any} isLoading={loading} />
+            )}
+          </TabsContent>
+
+          <TabsContent value="reports" className="mt-6 focus-visible:outline-none">
+            {loading || tab !== "reports" ? (
+              <AnalyticsSkeleton />
+            ) : (
+              <ReportBuilderTab
+                overviewData={data}
+                instrumentData={reportInstruments}
+                sessionData={timeData}
+                matrixData={reportMatrix}
+                behavioralData={reportBehavioral}
+                filterState={{
+                  accountId: filters.accountId,
+                  from: queryFilters.from,
+                  to: queryFilters.to,
+                }}
+                isLoading={loading}
               />
             )}
           </TabsContent>

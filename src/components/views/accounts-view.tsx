@@ -34,6 +34,7 @@ import {
   optimisticUpdate,
   optimisticDelete,
   reconcileTempId,
+  rollbackOptimisticInsert,
   notifyOptimisticFailure,
 } from "@/lib/optimistic";
 
@@ -664,9 +665,6 @@ export function AccountsView() {
         }}
         account={editing}
         onSaved={() => {
-          qc.invalidateQueries({ queryKey: ["accounts"] });
-          qc.invalidateQueries({ queryKey: ["trades"] });
-          qc.invalidateQueries({ queryKey: ["prop-challenges"] });
           setDialogOpen(false);
           setEditing(null);
         }}
@@ -819,12 +817,12 @@ function AccountDialog({
     };
 
     if (isEdit) {
-      qc.setQueryData(["accounts", user?.id], (old: any) =>
+      qc.setQueriesData({ queryKey: ["accounts"] }, (old: any) =>
         optimisticUpdate(old, account!.id, optimisticAccount)
       );
       toast.success("Account updated.");
     } else {
-      qc.setQueryData(["accounts", user?.id], (old: any) =>
+      qc.setQueriesData({ queryKey: ["accounts"] }, (old: any) =>
         optimisticInsert(old, optimisticAccount)
       );
       toast.success("Account created.");
@@ -832,39 +830,47 @@ function AccountDialog({
 
     onSaved();
 
-    try {
-      const res = isEdit
-        ? await fetch(`/api/accounts/${account!.id}`, {
-            method: "PATCH",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(payload),
-          })
-        : await fetch("/api/accounts", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(payload),
-          });
+    (async () => {
+      try {
+        const res = isEdit
+          ? await fetch(`/api/accounts/${account!.id}`, {
+              method: "PATCH",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify(payload),
+            })
+          : await fetch("/api/accounts", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify(payload),
+            });
 
-      if (!res.ok) {
-        const d = await res.json().catch(() => null);
-        throw new Error(d?.error ?? `Failed to ${isEdit ? "update" : "create"} account.`);
-      }
+        if (!res.ok) {
+          const d = await res.json().catch(() => null);
+          throw new Error(d?.error ?? `Failed to ${isEdit ? "update" : "create"} account.`);
+        }
 
-      const serverData = await res.json();
-      if (!isEdit && serverData?.id) {
-        qc.setQueryData(["accounts", user?.id], (old: any) =>
-          reconcileTempId(old, tempId, serverData)
-        );
+        const serverData = await res.json();
+        if (!isEdit && serverData?.id) {
+          qc.setQueriesData({ queryKey: ["accounts"] }, (old: any) =>
+            reconcileTempId(old, tempId, serverData)
+          );
+        }
+        await Promise.all([
+          qc.invalidateQueries({ queryKey: ["accounts"] }),
+          qc.invalidateQueries({ queryKey: ["trades"] }),
+          qc.invalidateQueries({ queryKey: ["prop-challenges"] }),
+        ]);
+      } catch (err: any) {
+        if (!isEdit) {
+          rollbackOptimisticInsert(qc, ["accounts"], tempId);
+        } else if (prevAccounts) {
+          qc.setQueriesData({ queryKey: ["accounts"] }, prevAccounts);
+        }
+        notifyOptimisticFailure(err, `Failed to ${isEdit ? "update" : "create"} account.`);
+      } finally {
+        setLoading(false);
       }
-      await qc.invalidateQueries({ queryKey: ["accounts"] });
-    } catch (err: any) {
-      if (prevAccounts) {
-        qc.setQueryData(["accounts", user?.id], prevAccounts);
-      }
-      notifyOptimisticFailure(err, `Failed to ${isEdit ? "update" : "create"} account.`);
-    } finally {
-      setLoading(false);
-    }
+    })();
   }
 
   return (

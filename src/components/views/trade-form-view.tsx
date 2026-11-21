@@ -1532,90 +1532,23 @@ export function TradeFormView() {
         isDraft: asDraft,
       };
 
-      // 1. Delete any media explicitly removed by the user during this session
-      if (deletedMediaIds.length > 0) {
-        await Promise.allSettled(
-          deletedMediaIds.map((delId) =>
-            fetch(`/api/media/${delId}`, { method: "DELETE" })
-          )
-        );
-      }
+      // Collect media IDs to pass directly to trade creation/update
+      const mediaIds = (form.uploadedMedia || [])
+        .filter((m: any) => m.id && m.status !== "failed")
+        .map((m: any) => m.id);
 
-      // 2. Wait up to 30 seconds for any still-uploading media to complete
-      if (form.uploadedMedia?.length > 0) {
-        const deadline = Date.now() + 30_000;
-        while (Date.now() < deadline) {
-          const stillUploading = form.uploadedMedia.some(
-            (m: any) => m.status === "uploading",
-          );
-          if (!stillUploading) break;
-          await new Promise((r) => setTimeout(r, 500));
-        }
-      }
+      const payloadWithMedia = {
+        ...payload,
+        mediaIds,
+      };
 
-      // 3. When editing, update/attach media before or alongside the trade update
-      if (editingId && form.uploadedMedia?.length > 0) {
-        for (const m of form.uploadedMedia) {
-          if (m.id && m.status !== "uploading" && m.status !== "failed") {
-            const patchBody: any = {};
-            if (!m.tradeId || m.tradeId !== editingId) {
-              patchBody.tradeId = editingId;
-            }
-            if (m.caption !== undefined && m.caption !== null) patchBody.caption = m.caption;
-            if (m.timeframe) patchBody.timeframe = m.timeframe;
-            if (Object.keys(patchBody).length > 0) {
-              await fetch(`/api/media/${m.id}`, {
-                method: "PATCH",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify(patchBody),
-              }).catch(() => {});
-            }
-
-            if (Array.isArray(m.annotations) && m.annotations.length > 0) {
-              await fetch(`/api/media/${m.id}`, {
-                method: "PUT",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                  action: "setAnnotations",
-                  annotations: m.annotations.map((a: ImageAnnotation) => ({
-                    kind: a.kind,
-                    payload: {
-                      x1: a.x1,
-                      y1: a.y1,
-                      x2: a.x2,
-                      y2: a.y2,
-                      text: a.text,
-                      color: a.color,
-                    },
-                  })),
-                }),
-              }).catch(() => {});
-            }
-          }
-        }
-      }
-
-      // 4. Save the trade data (with offline & optimistic update support)
-      if (typeof window !== "undefined" && !navigator.onLine && !editingId) {
-        try {
-          const { offlineSyncEngine } = await import("@/lib/offline-sync-engine");
-          await offlineSyncEngine.queueCreateTrade(payload);
-          toast.success("Saved offline. Trade will sync automatically when back online.");
-          qc.invalidateQueries({ queryKey: ["trades"] });
-          setSaving(false);
-          navigate("tradesLog");
-          return;
-        } catch (offErr) {
-          console.error("Offline queue failed", offErr);
-        }
-      }
-
+      // 1. Generate temp ID and apply optimistic cache update immediately
       const tempId = !editingId ? generateTempId("trade") : null;
       const prevTradeDetail = editingId ? qc.getQueryData(["trade", editingId]) : null;
 
       if (!editingId && tempId) {
         const optimisticTrade = {
-          ...payload,
+          ...payloadWithMedia,
           id: tempId,
           userId: meta?.user?.id || "local",
           status: asDraft ? "draft" : payload.status || "open",
@@ -1626,126 +1559,139 @@ export function TradeFormView() {
         qc.setQueriesData({ queryKey: ["trades"] }, (old: any) => optimisticInsert(old, optimisticTrade));
         qc.setQueriesData({ queryKey: ["trades-log"] }, (old: any) => optimisticInsert(old, optimisticTrade));
       } else if (editingId) {
-        qc.setQueriesData({ queryKey: ["trades"] }, (old: any) => optimisticUpdate(old, editingId, payload));
-        qc.setQueriesData({ queryKey: ["trades-log"] }, (old: any) => optimisticUpdate(old, editingId, payload));
-        qc.setQueryData(["trade", editingId], (old: any) => (old ? { ...old, ...payload } : old));
+        qc.setQueriesData({ queryKey: ["trades"] }, (old: any) => optimisticUpdate(old, editingId, payloadWithMedia));
+        qc.setQueriesData({ queryKey: ["trades-log"] }, (old: any) => optimisticUpdate(old, editingId, payloadWithMedia));
+        qc.setQueryData(["trade", editingId], (old: any) => (old ? { ...old, ...payloadWithMedia } : old));
       }
 
-      const url = editingId ? `/api/trades/${editingId}` : "/api/trades";
-      const method = editingId ? "PATCH" : "POST";
-      let res: Response;
+      // 2. Snapshot current draft for rollback if network fails
+      const draftKey = getDraftKey(meta?.user?.id, editingId);
+      const draftSnapshot = localStorage.getItem(draftKey);
       try {
-        res = await fetch(url, {
-          method,
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(payload),
-        });
-      } catch (netErr) {
-        if (!editingId) {
-          const { offlineSyncEngine } = await import("@/lib/offline-sync-engine");
-          await offlineSyncEngine.queueCreateTrade(payload);
-          toast.success("Connection lost. Trade saved offline and queued for sync.");
-          qc.invalidateQueries({ queryKey: ["trades"] });
-          setSaving(false);
-          navigate("tradesLog");
-          return;
-        }
-        if (tempId) {
-          rollbackOptimisticInsert(qc, ["trades"], tempId);
-          rollbackOptimisticInsert(qc, ["trades-log"], tempId);
-        } else if (editingId && prevTradeDetail) {
-          qc.setQueryData(["trade", editingId], prevTradeDetail);
-        }
-        throw netErr;
-      }
-      const data = await res.json();
-      if (!res.ok) {
-        if (tempId) {
-          rollbackOptimisticInsert(qc, ["trades"], tempId);
-          rollbackOptimisticInsert(qc, ["trades-log"], tempId);
-        } else if (editingId && prevTradeDetail) {
-          qc.setQueryData(["trade", editingId], prevTradeDetail);
-        }
-        notifyOptimisticFailure(data?.error ?? "Failed to save trade.");
-        setSaving(false);
-        return;
-      }
-
-      if (tempId && data?.id) {
-        qc.setQueriesData({ queryKey: ["trades"] }, (old: any) => reconcileTempId(old, tempId, data.id, data));
-        qc.setQueriesData({ queryKey: ["trades-log"] }, (old: any) => reconcileTempId(old, tempId, data.id, data));
-      }
-
-      // 5. If creating a new trade, link newly uploaded media to the created trade
-      if (!editingId && data?.id && form.uploadedMedia?.length > 0) {
-        for (const m of form.uploadedMedia) {
-          if (m.id && m.status !== "uploading" && m.status !== "failed") {
-            const patchBody: any = { tradeId: data.id };
-            if (m.caption !== undefined && m.caption !== null) patchBody.caption = m.caption;
-            if (m.timeframe) patchBody.timeframe = m.timeframe;
-            await fetch(`/api/media/${m.id}`, {
-              method: "PATCH",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify(patchBody),
-            }).catch(() => {});
-
-            if (Array.isArray(m.annotations) && m.annotations.length > 0) {
-              await fetch(`/api/media/${m.id}`, {
-                method: "PUT",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                  action: "setAnnotations",
-                  annotations: m.annotations.map((a: ImageAnnotation) => ({
-                    kind: a.kind,
-                    payload: {
-                      x1: a.x1,
-                      y1: a.y1,
-                      x2: a.x2,
-                      y2: a.y2,
-                      text: a.text,
-                      color: a.color,
-                    },
-                  })),
-                }),
-              }).catch(() => {});
-            }
-          }
-        }
-      }
-
-      // If some uploads are STILL in-flight after the 30s wait, notify the user.
-      const stillUploading = form.uploadedMedia?.some(
-        (m: any) => m.status === "uploading",
-      );
-      if (stillUploading) {
-        toast.info("Some media is still uploading and will be attached when complete.");
-      }
-
-      setDeletedMediaIds([]);
-      toast.success(asDraft ? "Draft saved." : "Trade saved.");
-      try {
-        const key = getDraftKey(meta?.user?.id, editingId);
-        localStorage.removeItem(key);
+        localStorage.removeItem(draftKey);
         const legacyUserKey = `${DRAFT_KEY_PREFIX}-${meta?.user?.id || "local"}`;
         localStorage.removeItem(legacyUserKey);
         localStorage.removeItem("dnd-trade-draft-5step");
       } catch {}
-      const targetId = editingId || data?.id;
-      await Promise.all([
-        qc.invalidateQueries({ queryKey: ["trade", targetId] }),
-        qc.invalidateQueries({ queryKey: ["trade"] }),
-        qc.invalidateQueries({ queryKey: ["trades"] }),
-        qc.invalidateQueries({ queryKey: ["dashboard"] }),
-        qc.invalidateQueries({ queryKey: ["analytics"] }),
-        qc.invalidateQueries({ queryKey: ["calendar"] }),
-        qc.invalidateQueries({ queryKey: ["prop-challenges"] }),
-        qc.invalidateQueries({ queryKey: ["me"] }),
-      ]);
+
+      // 3. Immediate feedback and instant navigation — zero waiting for the user!
+      toast.success(asDraft ? "Draft saved." : "Trade saved.");
+      setDeletedMediaIds([]);
+      setSaving(false);
+
       if (editingId) {
         navigate("tradeDetail", { id: editingId });
       } else {
         navigate("tradesLog");
       }
+
+      // 4. Background Server Synchronization (Asynchronous, Non-blocking)
+      (async () => {
+        try {
+          // Offline handling
+          if (typeof window !== "undefined" && !navigator.onLine && !editingId) {
+            const { offlineSyncEngine } = await import("@/lib/offline-sync-engine");
+            await offlineSyncEngine.queueCreateTrade(payloadWithMedia);
+            return;
+          }
+
+          // Delete media explicitly removed by user
+          if (deletedMediaIds.length > 0) {
+            Promise.allSettled(
+              deletedMediaIds.map((delId) => fetch(`/api/media/${delId}`, { method: "DELETE" }))
+            ).catch(() => {});
+          }
+
+          const url = editingId ? `/api/trades/${editingId}` : "/api/trades";
+          const method = editingId ? "PATCH" : "POST";
+          const res = await fetch(url, {
+            method,
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(payloadWithMedia),
+          });
+
+          if (!res.ok) {
+            const data = await res.json().catch(() => ({}));
+            throw new Error(data?.error ?? "Failed to save trade to server.");
+          }
+
+          const data = await res.json();
+
+          // Reconcile temporary ID with server ID
+          if (tempId && data?.id) {
+            qc.setQueriesData({ queryKey: ["trades"] }, (old: any) => reconcileTempId(old, tempId, data.id, data));
+            qc.setQueriesData({ queryKey: ["trades-log"] }, (old: any) => reconcileTempId(old, tempId, data.id, data));
+          }
+
+          // Link to Watchlist Outcome setup if originated from Watchlist conversion
+          if (params?.watchlistId && data?.id) {
+            fetch(`/api/watchlist-outcomes/${params.watchlistId}`, {
+              method: "PATCH",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ convertedTradeId: data.id, status: "triggered" }),
+            }).catch(() => {});
+          }
+
+          // Sync any media captions or annotations in background
+          if (form.uploadedMedia?.length > 0) {
+            const targetTradeId = editingId || data?.id;
+            Promise.allSettled(
+              form.uploadedMedia
+                .filter((m: any) => m.id && m.status !== "failed")
+                .map(async (m: any) => {
+                  const patchBody: any = { tradeId: targetTradeId };
+                  if (m.caption !== undefined && m.caption !== null) patchBody.caption = m.caption;
+                  if (m.timeframe) patchBody.timeframe = m.timeframe;
+                  await fetch(`/api/media/${m.id}`, {
+                    method: "PATCH",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify(patchBody),
+                  }).catch(() => {});
+
+                  if (Array.isArray(m.annotations) && m.annotations.length > 0) {
+                    await fetch(`/api/media/${m.id}`, {
+                      method: "PUT",
+                      headers: { "Content-Type": "application/json" },
+                      body: JSON.stringify({
+                        action: "setAnnotations",
+                        annotations: m.annotations.map((a: ImageAnnotation) => ({
+                          kind: a.kind,
+                          payload: { x1: a.x1, y1: a.y1, x2: a.x2, y2: a.y2, text: a.text, color: a.color },
+                        })),
+                      }),
+                    }).catch(() => {});
+                  }
+                })
+            ).catch(() => {});
+          }
+
+          // Silent background cache invalidations
+          const targetId = editingId || data?.id;
+          await Promise.all([
+            qc.invalidateQueries({ queryKey: ["trade", targetId] }),
+            qc.invalidateQueries({ queryKey: ["trade"] }),
+            qc.invalidateQueries({ queryKey: ["trades"] }),
+            qc.invalidateQueries({ queryKey: ["dashboard"] }),
+            qc.invalidateQueries({ queryKey: ["analytics"] }),
+            qc.invalidateQueries({ queryKey: ["calendar"] }),
+            qc.invalidateQueries({ queryKey: ["prop-challenges"] }),
+            qc.invalidateQueries({ queryKey: ["me"] }),
+          ]);
+        } catch (bgErr: any) {
+          // Rollback on failure
+          if (tempId) {
+            rollbackOptimisticInsert(qc, ["trades"], tempId);
+            rollbackOptimisticInsert(qc, ["trades-log"], tempId);
+          } else if (editingId && prevTradeDetail) {
+            qc.setQueryData(["trade", editingId], prevTradeDetail);
+          }
+          // Restore draft so the user can re-open without losing inputs
+          if (draftSnapshot) {
+            try { localStorage.setItem(draftKey, draftSnapshot); } catch {}
+          }
+          notifyOptimisticFailure(bgErr?.message ?? "Network error — trade failed to sync to server.");
+        }
+      })();
     } catch (err: any) {
       toast.error(err?.message ?? "Network error — please check your connection and try again.");
       setSaving(false);
@@ -2908,9 +2854,9 @@ export function TradeFormView() {
                         );
                       }
 
-                      if (field.type === "multiselect") {
+                      if (field.type === "multiselect" || field.type === "tags") {
                         const opts = field.options && field.options.length > 0 ? field.options : [];
-                        const currentArr = Array.isArray(val) ? val : [];
+                        const currentArr = Array.isArray(val) ? val : (typeof val === "string" && val.length > 0 ? val.split(",").map((s: string) => s.trim()) : []);
                         const toggleOption = (opt: string) => {
                           const exists = currentArr.includes(opt);
                           const next = exists ? currentArr.filter((x: string) => x !== opt) : [...currentArr, opt];
@@ -2922,26 +2868,38 @@ export function TradeFormView() {
                               {field.name}
                               {field.required && <span className="text-destructive">*</span>}
                             </Label>
-                            <div className="flex flex-wrap gap-1.5">
-                              {opts.map((opt) => {
-                                const active = currentArr.includes(opt);
-                                return (
-                                  <button
-                                    key={opt}
-                                    type="button"
-                                    onClick={() => toggleOption(opt)}
-                                    className={cn(
-                                      "px-2 py-0.5 rounded text-xs border transition-colors",
-                                      active
-                                        ? "bg-primary text-primary-foreground border-primary"
-                                        : "border-border hover:bg-muted text-muted-foreground",
-                                    )}
-                                  >
-                                    {opt}
-                                  </button>
-                                );
-                              })}
-                            </div>
+                            {opts.length > 0 ? (
+                              <div className="flex flex-wrap gap-1.5">
+                                {opts.map((opt) => {
+                                  const active = currentArr.includes(opt);
+                                  return (
+                                    <button
+                                      key={opt}
+                                      type="button"
+                                      onClick={() => toggleOption(opt)}
+                                      className={cn(
+                                        "px-2 py-0.5 rounded text-xs border transition-colors",
+                                        active
+                                          ? "bg-primary text-primary-foreground border-primary"
+                                          : "border-border hover:bg-muted text-muted-foreground",
+                                      )}
+                                    >
+                                      {opt}
+                                    </button>
+                                  );
+                                })}
+                              </div>
+                            ) : (
+                              <Input
+                                value={currentArr.join(", ")}
+                                onChange={(e) => {
+                                  const tokens = e.target.value.split(",").map((s) => s.trim()).filter(Boolean);
+                                  updateVal(tokens);
+                                }}
+                                placeholder="Enter comma-separated tags..."
+                                className="h-8 text-xs"
+                              />
+                            )}
                             {field.description && (
                               <p className="text-[10px] text-muted-foreground">{field.description}</p>
                             )}
@@ -2999,9 +2957,10 @@ export function TradeFormView() {
                             {field.required && <span className="text-destructive">*</span>}
                           </Label>
                           <Input
-                            type={field.type === "number" ? "number" : field.type === "date" ? "date" : "text"}
+                            type={field.type === "number" || field.type === "decimal" ? "number" : field.type === "date" ? "date" : "text"}
+                            step={field.type === "decimal" ? "any" : undefined}
                             value={val ?? ""}
-                            onChange={(e) => updateVal(field.type === "number" ? Number(e.target.value) : e.target.value)}
+                            onChange={(e) => updateVal(field.type === "number" || field.type === "decimal" ? (e.target.value === "" ? "" : Number(e.target.value)) : e.target.value)}
                             placeholder={`Enter ${field.name.toLowerCase()}...`}
                             className="h-8 text-xs"
                           />
@@ -3350,11 +3309,87 @@ export function TradeFormView() {
                       );
                     }
 
+                    if (field.type === "textarea") {
+                      return (
+                        <div key={field.id} className="space-y-2 sm:col-span-2">
+                          <Label className="text-xs">{field.name}</Label>
+                          <Textarea
+                            value={val}
+                            onChange={(e) => updateVal(e.target.value)}
+                            placeholder={field.description || `Enter ${field.name}`}
+                            className="min-h-[72px] text-xs resize-y"
+                          />
+                        </div>
+                      );
+                    }
+
+                    if (field.type === "boolean") {
+                      return (
+                        <div key={field.id} className="flex items-center justify-between rounded-lg border border-border p-3">
+                          <div className="space-y-0.5">
+                            <Label className="text-xs cursor-pointer">{field.name}</Label>
+                            {field.description && <p className="text-[11px] text-muted-foreground">{field.description}</p>}
+                          </div>
+                          <Switch
+                            checked={Boolean(val)}
+                            onCheckedChange={(checked) => updateVal(checked)}
+                          />
+                        </div>
+                      );
+                    }
+
+                    if (field.type === "date") {
+                      return (
+                        <div key={field.id} className="space-y-2">
+                          <Label className="text-xs">{field.name}</Label>
+                          <Input
+                            type="date"
+                            value={val ? String(val).split("T")[0] : ""}
+                            onChange={(e) => updateVal(e.target.value)}
+                            className="h-9 text-xs font-mono"
+                          />
+                        </div>
+                      );
+                    }
+
+                    if (field.type === "multiselect" || field.type === "tags") {
+                      const selectedArr: string[] = Array.isArray(val) ? val : [];
+                      const availableOpts = field.options && field.options.length > 0
+                        ? field.options
+                        : ["Setup", "Confirmation", "Trigger", "Invalidation"];
+                      return (
+                        <div key={field.id} className="space-y-2 sm:col-span-2">
+                          <Label className="text-xs">{field.name}</Label>
+                          <div className="flex flex-wrap gap-1.5 p-2 rounded-lg border border-border bg-muted/20">
+                            {availableOpts.map((opt) => {
+                              const isSelected = selectedArr.includes(opt);
+                              return (
+                                <Badge
+                                  key={opt}
+                                  variant={isSelected ? "default" : "outline"}
+                                  className="cursor-pointer text-[11px] py-0.5 px-2 transition-all hover:opacity-80"
+                                  onClick={() => {
+                                    const next = isSelected
+                                      ? selectedArr.filter((item) => item !== opt)
+                                      : [...selectedArr, opt];
+                                    updateVal(next);
+                                  }}
+                                >
+                                  {opt}
+                                </Badge>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      );
+                    }
+
                     return (
                       <div key={field.id} className="space-y-2">
                         <Label className="text-xs">{field.name}</Label>
                         <Input
-                          type={field.type === "number" ? "number" : "text"}
+                          type={field.type === "number" || field.type === "decimal" ? "number" : "text"}
+                          step={field.type === "decimal" ? "any" : undefined}
                           value={val}
                           onChange={(e) => updateVal(e.target.value)}
                           placeholder={field.description || `Enter ${field.name}`}

@@ -37,6 +37,7 @@ import {
   optimisticUpdate,
   optimisticDelete,
   reconcileTempId,
+  rollbackOptimisticInsert,
   notifyOptimisticFailure,
 } from "@/lib/optimistic";
 
@@ -182,7 +183,9 @@ export function PlaybooksView() {
         <SetupDialog
           open={editing.open && !editing.id}
           onOpenChange={(o) => setEditing({ open: o })}
-          onSaved={() => qc.invalidateQueries({ queryKey: ["strategies"] })}
+          onSaved={() => {
+            setEditing({ open: false });
+          }}
         />
       </div>
 
@@ -510,140 +513,139 @@ function SetupDialog({ open, onOpenChange, strategyId, onSaved }: SetupDialogPro
       }))
       .filter((it) => it.title.length > 0);
 
-    setLoading(true);
     const prevStrategies = qc.getQueryData(["strategies"]);
     const prevDetail = strategyId ? qc.getQueryData(["strategy", strategyId]) : null;
 
-    try {
-      if (isEdit && strategyId) {
-        const latestLabel = latest?.versionLabel ?? "1.0";
-        const [maj, min] = latestLabel.split(".");
-        const nextLabel = `${maj}.${Number(min ?? 0) + 1}`;
+    if (isEdit && strategyId) {
+      const latestLabel = latest?.versionLabel ?? "1.0";
+      const [maj, min] = latestLabel.split(".");
+      const nextLabel = `${maj}.${Number(min ?? 0) + 1}`;
 
-        // Optimistic update
-        qc.setQueryData(["strategies"], (old: any) =>
-          optimisticUpdate(old, strategyId, {
-            name: name.trim(),
-            description: description.trim() || null,
-            market,
-            rules: cleanItems,
-            updatedAt: new Date().toISOString(),
-          })
-        );
-        qc.setQueryData(["strategy", strategyId], (old: any) => {
-          if (!old) return old;
-          return {
-            ...old,
-            name: name.trim(),
-            description: description.trim() || null,
-            market,
-            rules: cleanItems,
-            updatedAt: new Date().toISOString(),
-          };
-        });
-
-        toast.success(
-          !isUpgrade
-            ? `Saved changes to current version v${latestLabel}.`
-            : `Upgraded setup to version v${nextLabel} (v${latestLabel} preserved).`
-        );
-        onSaved();
-
-        if (!isUpgrade) {
-          // Save in-place to current version
-          const patchRes = await fetch(`/api/strategies/${strategyId}`, {
-            method: "PATCH",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              name: name.trim(),
-              market,
-              description: description.trim() || null,
-              updateCurrentVersion: true,
-              rules: cleanItems,
-              changeReason: "Updated checklist in place",
-              changeSummary: `Saved checklist edits to v${latestLabel}`,
-            }),
-          });
-          if (!patchRes.ok) {
-            throw new Error("Failed to update setup.");
-          }
-        } else {
-          // Upgrade to next version
-          const patchRes = await fetch(`/api/strategies/${strategyId}`, {
-            method: "PATCH",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              name: name.trim(),
-              market,
-              description: description.trim() || null,
-            }),
-          });
-          if (!patchRes.ok) {
-            throw new Error("Failed to update setup metadata.");
-          }
-          const versionRes = await fetch(`/api/strategies/${strategyId}`, {
-            method: "PUT",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              versionLabel: nextLabel,
-              changeReason: "Updated checklist",
-              changeSummary: "Edited setup checklist from the Setups view.",
-              rules: cleanItems,
-            }),
-          });
-          if (!versionRes.ok) {
-            throw new Error("Failed to save checklist version.");
-          }
-        }
-
-        qc.invalidateQueries({ queryKey: ["strategies"] });
-        qc.invalidateQueries({ queryKey: ["strategy", strategyId] });
-      } else {
-        // Create new strategy with temporary ID
-        const tempId = generateTempId("strategy");
-        const optimisticItem: any = {
-          id: tempId,
+      // Optimistic update
+      qc.setQueriesData({ queryKey: ["strategies"] }, (old: any) =>
+        optimisticUpdate(old, strategyId, {
           name: name.trim(),
           description: description.trim() || null,
           market,
           rules: cleanItems,
-          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        })
+      );
+      qc.setQueryData(["strategy", strategyId], (old: any) => {
+        if (!old) return old;
+        return {
+          ...old,
+          name: name.trim(),
+          description: description.trim() || null,
+          market,
+          rules: cleanItems,
           updatedAt: new Date().toISOString(),
         };
+      });
 
-        qc.setQueryData(["strategies"], (old: any) =>
-          optimisticInsert(old, optimisticItem)
-        );
-        toast.success("Setup created.");
-        onSaved();
+      toast.success(
+        !isUpgrade
+          ? `Saved changes to current version v${latestLabel}.`
+          : `Upgraded setup to version v${nextLabel} (v${latestLabel} preserved).`
+      );
+      onSaved();
+      onOpenChange(false);
 
-        const res = await fetch("/api/strategies", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            name: name.trim(),
-            description: description.trim() || undefined,
-            market,
-            rules: cleanItems,
-          }),
-        });
-        if (!res.ok) {
-          throw new Error("Failed to create setup.");
+      (async () => {
+        try {
+          if (!isUpgrade) {
+            const patchRes = await fetch(`/api/strategies/${strategyId}`, {
+              method: "PATCH",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                name: name.trim(),
+                market,
+                description: description.trim() || null,
+                updateCurrentVersion: true,
+                rules: cleanItems,
+                changeReason: "Updated checklist in place",
+                changeSummary: `Saved checklist edits to v${latestLabel}`,
+              }),
+            });
+            if (!patchRes.ok) throw new Error("Failed to update setup.");
+          } else {
+            const patchRes = await fetch(`/api/strategies/${strategyId}`, {
+              method: "PATCH",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                name: name.trim(),
+                market,
+                description: description.trim() || null,
+              }),
+            });
+            if (!patchRes.ok) throw new Error("Failed to update setup metadata.");
+
+            const versionRes = await fetch(`/api/strategies/${strategyId}`, {
+              method: "PUT",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                versionLabel: nextLabel,
+                changeReason: "Updated checklist",
+                changeSummary: "Edited setup checklist from the Setups view.",
+                rules: cleanItems,
+              }),
+            });
+            if (!versionRes.ok) throw new Error("Failed to save checklist version.");
+          }
+
+          qc.invalidateQueries({ queryKey: ["strategies"] });
+          qc.invalidateQueries({ queryKey: ["strategy", strategyId] });
+        } catch (err: any) {
+          if (prevStrategies) qc.setQueriesData({ queryKey: ["strategies"] }, prevStrategies);
+          if (prevDetail) qc.setQueryData(["strategy", strategyId], prevDetail);
+          notifyOptimisticFailure(err, "Failed to update setup.");
         }
-        const data = await res.json();
-        if (data?.id) {
-          qc.setQueryData(["strategies"], (old: any) =>
-            reconcileTempId(old, tempId, data)
-          );
+      })();
+    } else {
+      // Create new strategy with temporary ID
+      const tempId = generateTempId("strategy");
+      const optimisticItem: any = {
+        id: tempId,
+        name: name.trim(),
+        description: description.trim() || null,
+        market,
+        rules: cleanItems,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      };
+
+      qc.setQueriesData({ queryKey: ["strategies"] }, (old: any) =>
+        optimisticInsert(old, optimisticItem)
+      );
+      toast.success("Setup created.");
+      onSaved();
+      onOpenChange(false);
+
+      (async () => {
+        try {
+          const res = await fetch("/api/strategies", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              name: name.trim(),
+              description: description.trim() || undefined,
+              market,
+              rules: cleanItems,
+            }),
+          });
+          if (!res.ok) throw new Error("Failed to create setup.");
+          const data = await res.json();
+          if (data?.id) {
+            qc.setQueriesData({ queryKey: ["strategies"] }, (old: any) =>
+              reconcileTempId(old, tempId, data)
+            );
+          }
+          qc.invalidateQueries({ queryKey: ["strategies"] });
+        } catch (err: any) {
+          rollbackOptimisticInsert(qc, ["strategies"], tempId);
+          notifyOptimisticFailure(err, "Failed to create setup.");
         }
-        qc.invalidateQueries({ queryKey: ["strategies"] });
-      }
-    } catch (err: any) {
-      if (prevStrategies) qc.setQueryData(["strategies"], prevStrategies);
-      if (prevDetail && strategyId) qc.setQueryData(["strategy", strategyId], prevDetail);
-      notifyOptimisticFailure(err, isEdit ? "Failed to update setup." : "Failed to create setup.");
-    } finally {
-      setLoading(false);
+      })();
     }
   }
 

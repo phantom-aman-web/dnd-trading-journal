@@ -45,6 +45,7 @@ import { formatSignedCents } from "@/lib/money";
 import { useNav } from "@/lib/nav-store";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
+import { simulateChallengeScenario, createDefaultPropMetrics } from "@/lib/prop-simulator-engine";
 
 interface TradingAccount {
   id: string;
@@ -62,6 +63,17 @@ export function RiskCalculatorView() {
     queryKey: ["accounts"],
     queryFn: async () => {
       const res = await fetch("/api/accounts", { cache: "no-store" });
+      if (!res.ok) return [];
+      const json = await res.json();
+      return Array.isArray(json) ? json : json.items ?? [];
+    },
+  });
+
+  // Fetch prop challenges to check if selected account is in an active evaluation
+  const { data: propChallenges = [] } = useQuery<any[]>({
+    queryKey: ["prop-challenges"],
+    queryFn: async () => {
+      const res = await fetch("/api/prop-challenges", { cache: "no-store" });
       if (!res.ok) return [];
       const json = await res.json();
       return Array.isArray(json) ? json : json.items ?? [];
@@ -289,6 +301,70 @@ export function RiskCalculatorView() {
     spreadPoints,
     commissionPerUnit,
   ]);
+
+  const linkedChallenge = useMemo(() => {
+    if (!selectedAccountId) return null;
+    return propChallenges.find(
+      (c: any) => c.linkedAccountId === selectedAccountId || c.accountId === selectedAccountId || c.id === selectedAccountId
+    );
+  }, [propChallenges, selectedAccountId]);
+
+  const propBreachSimulation = useMemo(() => {
+    if (!linkedChallenge || !calculation) return null;
+    const proposedRiskCents = Math.round(calculation.totalRiskAccountDollars * 100);
+    const activePhase = linkedChallenge.activePhase || linkedChallenge.lifecycle?.activePhase || {};
+    const baseMetrics = createDefaultPropMetrics({
+      startingBalanceCents: linkedChallenge.startingBalanceCents || 10000000,
+      currentBalanceCents: linkedChallenge.currentBalanceCents || linkedChallenge.startingBalanceCents || 10000000,
+      netProfitCents: linkedChallenge.netProfitCents || ((linkedChallenge.currentBalanceCents || 10000000) - (linkedChallenge.startingBalanceCents || 10000000)),
+      profitTargetCents: activePhase.profitTargetCents ?? null,
+      profitTargetProgressPct: linkedChallenge.profitTargetProgressPct ?? null,
+      profitTargetReached: Boolean(linkedChallenge.profitTargetReached),
+      remainingProfitTargetCents: activePhase.profitTargetCents ? Math.max(0, activePhase.profitTargetCents - (linkedChallenge.netProfitCents || 0)) : null,
+      tradeCount: linkedChallenge.tradesCount || 0,
+      dailyLossLimitCents: activePhase.dailyLossLimitCents ?? null,
+      todayPnlCents: linkedChallenge.todayPnlCents || 0,
+      todayLossCents: linkedChallenge.todayLossCents || 0,
+      remainingDailyLossCents: activePhase.dailyLossLimitCents ? Math.max(0, activePhase.dailyLossLimitCents - (linkedChallenge.todayLossCents || 0)) : null,
+      dailyLossUsedPct: activePhase.dailyLossLimitCents ? Math.round(((linkedChallenge.todayLossCents || 0) / activePhase.dailyLossLimitCents) * 100) : null,
+      dailyLossBreached: Boolean(linkedChallenge.dailyLossBreached),
+      maxDrawdownLimitCents: activePhase.maxDrawdownLimitCents ?? null,
+      drawdownType: (activePhase.drawdownType as "static" | "trailing") || "static",
+      currentDrawdownCents: linkedChallenge.currentDrawdownCents || 0,
+      remainingDrawdownCents: activePhase.maxDrawdownLimitCents ? Math.max(0, activePhase.maxDrawdownLimitCents - (linkedChallenge.currentDrawdownCents || 0)) : null,
+      drawdownUsedPct: activePhase.maxDrawdownLimitCents ? Math.round(((linkedChallenge.currentDrawdownCents || 0) / activePhase.maxDrawdownLimitCents) * 100) : null,
+      drawdownBreached: Boolean(linkedChallenge.drawdownBreached),
+      highWaterMarkCents: linkedChallenge.highWaterMarkCents || linkedChallenge.startingBalanceCents || 10000000,
+      tradingDaysCount: linkedChallenge.tradingDaysCount || 0,
+      minTradingDays: activePhase.minTradingDays ?? 4,
+      minDaysMet: Boolean(linkedChallenge.minDaysMet),
+      consistencyThresholdPct: activePhase.consistencyThresholdPct ?? null,
+    });
+
+    const config = {
+      challengeId: linkedChallenge.id,
+      name: linkedChallenge.name,
+      propFirm: linkedChallenge.propFirm,
+      startingBalanceCents: baseMetrics.startingBalanceCents,
+      currentBalanceCents: baseMetrics.currentBalanceCents,
+      currency: linkedChallenge.currency || "USD",
+      dailyLossLimitCents: activePhase.dailyLossLimitCents ?? null,
+      maxDrawdownLimitCents: activePhase.maxDrawdownLimitCents ?? null,
+      drawdownType: baseMetrics.drawdownType,
+      profitTargetCents: activePhase.profitTargetCents ?? null,
+      minTradingDays: activePhase.minTradingDays ?? 4,
+      consistencyThresholdPct: activePhase.consistencyThresholdPct ?? null,
+      weekendHoldingAllowed: true,
+      newsTradingAllowed: true,
+      startDate: linkedChallenge.startDate || new Date().toISOString(),
+    };
+
+    return simulateChallengeScenario(baseMetrics, config, {
+      outcomeType: "loss",
+      proposedRiskCents,
+      netPnlCents: -proposedRiskCents,
+    });
+  }, [linkedChallenge, calculation]);
 
   // Quick preset instruments spanning all 5 market categories
   const popularSymbols = ["EURUSD", "GBPUSD", "USDJPY", "XAUUSD", "XAGUSD", "NAS100", "US30", "NQ", "ES", "BTCUSD"];
@@ -1054,6 +1130,58 @@ export function RiskCalculatorView() {
                     </span>
                   </div>
                 </div>
+
+                {/* Prop Challenge Breach Guard (Features 24 & 32) */}
+                {propBreachSimulation && (
+                  <div className={cn(
+                    "p-3 rounded-lg border space-y-2 text-xs",
+                    propBreachSimulation.overallStatus === "Passed"
+                      ? "bg-profit/5 border-profit/25 text-foreground"
+                      : propBreachSimulation.overallStatus === "At Risk"
+                      ? "bg-amber-500/10 border-amber-500/30 text-foreground"
+                      : "bg-loss/10 border-loss/30 text-loss"
+                  )}>
+                    <div className="flex items-center justify-between font-semibold">
+                      <div className="flex items-center gap-1.5">
+                        <ShieldAlert className="h-4 w-4 shrink-0 text-primary" />
+                        <span>Prop Challenge Guard ({linkedChallenge.propFirm})</span>
+                      </div>
+                      <span className={cn(
+                        "text-[10px] font-mono font-bold uppercase px-2 py-0.5 rounded-full border",
+                        propBreachSimulation.overallStatus === "Passed"
+                          ? "bg-profit/15 text-profit border-profit/30"
+                          : propBreachSimulation.overallStatus === "At Risk"
+                          ? "bg-amber-500/15 text-amber-600 border-amber-500/30"
+                          : "bg-loss/15 text-loss border-loss/30"
+                      )}>
+                        {propBreachSimulation.overallStatus}
+                      </span>
+                    </div>
+
+                    <div className="text-[11px] text-muted-foreground leading-relaxed">
+                      {propBreachSimulation.overallReason}
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-2 pt-1 border-t border-border/50 text-[11px]">
+                      <div>
+                        <div className="text-[10px] uppercase font-mono text-muted-foreground">Daily Loss Buffer</div>
+                        <div className="font-mono font-semibold">
+                          {propBreachSimulation.dailyLossImpact.remainingCents !== null
+                            ? `$${(propBreachSimulation.dailyLossImpact.remainingCents / 100).toFixed(2)} (${propBreachSimulation.dailyLossImpact.usedPct ?? 0}% used)`
+                            : "No limit"}
+                        </div>
+                      </div>
+                      <div>
+                        <div className="text-[10px] uppercase font-mono text-muted-foreground">Max DD Buffer</div>
+                        <div className="font-mono font-semibold">
+                          {propBreachSimulation.maxDrawdownImpact.remainingCents !== null
+                            ? `$${(propBreachSimulation.maxDrawdownImpact.remainingCents / 100).toFixed(2)} (${propBreachSimulation.maxDrawdownImpact.usedPct ?? 0}% used)`
+                            : "No limit"}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
 
                 {/* 1-Click Transfer Button */}
                 <Button

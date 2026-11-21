@@ -10,6 +10,7 @@ import {
   parseCsvMoneyCents,
   parseCsvDateTime,
 } from "@/lib/broker-csv-presets";
+import { classifyDuplicateTrade } from "@/lib/import-parser";
 
 // Get import preview and row statuses
 export async function GET(_req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
@@ -67,8 +68,24 @@ export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: strin
     const account = await resolveTargetAccount(body.accountId);
     const brokerUtcOffset = typeof body.brokerUtcOffset === "number" ? body.brokerUtcOffset : undefined;
 
+    // Load recent user trades for duplicate detection
+    const existingTrades = await db.trade.findMany({
+      where: { userId: user.id },
+      select: {
+        id: true,
+        instrumentSymbol: true,
+        direction: true,
+        entryPriceAvg: true,
+        entryTime: true,
+        netPnlCents: true,
+        notes: true,
+      },
+      take: 2000,
+      orderBy: { createdAt: "desc" },
+    });
+
     const issues: string[] = [];
-    let valid = 0, duplicates = 0;
+    let valid = 0, duplicates = 0, possibleDuplicates = 0, conflicts = 0;
 
     for (const row of importRecord.rows) {
       const raw = JSON.parse(row.rawJson);
@@ -83,29 +100,49 @@ export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: strin
       if (mapped.targetPrice) mapped.targetPrice = normalizeCsvDecimal(mapped.targetPrice);
       if (mapped.quantity) mapped.quantity = normalizeCsvDecimal(mapped.quantity);
 
+      // Extract broker ticket/order identifier
+      const externalTicketId = mapped.externalTicketId || mapped.ticket || mapped.orderId || raw["Ticket"] || raw["Order ID"] || raw["Position Id"] || raw["Position ID"] || raw["Trade number"] || null;
+      if (externalTicketId) mapped.externalTicketId = externalTicketId;
+
       // Basic validation
       const rowIssues: string[] = [];
       if (!mapped.instrumentSymbol) rowIssues.push("Missing instrument");
       if (!mapped.direction) rowIssues.push("Missing direction");
       if (!mapped.entryPrice || isNaN(parseFloat(mapped.entryPrice))) rowIssues.push("Missing or invalid entry price");
 
-      // Duplicate detection (spec section 87)
+      // Advanced duplicate detection (exact, likely, conflict, new)
       const entryTime = parseCsvDateTime(mapped.entryTime, brokerUtcOffset);
-      let isDup = false;
-      if (entryTime && !isNaN(entryTime.getTime()) && mapped.instrumentSymbol) {
-        const existing = await db.trade.findFirst({
-          where: {
-            userId: user.id,
-            instrumentSymbol: mapped.instrumentSymbol,
-            entryTime: { gte: new Date(entryTime.getTime() - 60_000), lte: new Date(entryTime.getTime() + 60_000) },
-          },
-        });
-        if (existing) isDup = true;
-      }
+      const dupCheck = classifyDuplicateTrade(
+        {
+          externalTicketId,
+          instrumentSymbol: mapped.instrumentSymbol,
+          direction: mapped.direction,
+          entryPrice: mapped.entryPrice,
+          entryTime,
+        },
+        existingTrades
+      );
+
       let status: string;
-      if (isDup) { status = "duplicate"; duplicates++; }
-      else if (rowIssues.length > 0) { status = "invalid"; issues.push(`Row ${row.rowIndex + 1}: ${rowIssues.join(", ")}`); }
-      else { status = "valid"; valid++; }
+      if (rowIssues.length > 0) {
+        status = "invalid";
+        issues.push(`Row ${row.rowIndex + 1}: ${rowIssues.join(", ")}`);
+      } else if (dupCheck.status === "exact_duplicate") {
+        status = "duplicate";
+        duplicates++;
+        rowIssues.push(dupCheck.reason || "Exact duplicate trade");
+      } else if (dupCheck.status === "possible_duplicate") {
+        status = "possible_duplicate";
+        possibleDuplicates++;
+        rowIssues.push(dupCheck.reason || "Likely duplicate trade");
+      } else if (dupCheck.status === "conflict") {
+        status = "conflict";
+        conflicts++;
+        rowIssues.push(dupCheck.reason || "Ticket ID conflict with differing parameters");
+      } else {
+        status = "valid";
+        valid++;
+      }
 
       await db.importRow.update({
         where: { id: row.id },
@@ -121,13 +158,41 @@ export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: strin
           valid,
           invalid: issues.length,
           duplicates,
+          possibleDuplicates,
+          conflicts,
           issues: issues.slice(0, 20),
           accountId: account.id,
           brokerUtcOffset,
         }),
       },
     });
-    return ok({ valid, invalid: issues.length, duplicates, issues: issues.slice(0, 20) });
+    return ok({ valid, invalid: issues.length, duplicates, possibleDuplicates, conflicts, issues: issues.slice(0, 20) });
+  }
+
+  // Quarantine correction: update individual row fields without re-uploading
+  if (body.action === "updateRow") {
+    const { rowId, updatedFields } = body;
+    const row = await db.importRow.findFirst({ where: { id: rowId, importId: id } });
+    if (!row) return notFound("Import row not found");
+
+    const currentMapped = JSON.parse(row.mappedJson || "{}");
+    const nextMapped = { ...currentMapped, ...updatedFields };
+
+    const rowIssues: string[] = [];
+    if (!nextMapped.instrumentSymbol) rowIssues.push("Missing instrument");
+    if (!nextMapped.direction) rowIssues.push("Missing direction");
+    if (!nextMapped.entryPrice || isNaN(parseFloat(nextMapped.entryPrice))) rowIssues.push("Missing or invalid entry price");
+
+    const nextStatus = rowIssues.length > 0 ? "invalid" : "valid";
+    await db.importRow.update({
+      where: { id: rowId },
+      data: {
+        mappedJson: JSON.stringify(nextMapped),
+        status: nextStatus,
+        issues: rowIssues.join("; ") || null,
+      },
+    });
+    return ok({ success: true, status: nextStatus, issues: rowIssues });
   }
 
   if (body.action === "confirm") {
@@ -142,7 +207,8 @@ export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: strin
         }
       } catch {}
     }
-    const rows = await db.importRow.findMany({ where: { importId: id, status: "valid" } });
+    const statusesToImport = body.includePossibleDuplicates === true ? ["valid", "possible_duplicate"] : ["valid"];
+    const rows = await db.importRow.findMany({ where: { importId: id, status: { in: statusesToImport } } });
 
     const createdTradeIds: string[] = [];
     const imported = await db.$transaction(async (tx) => {
@@ -209,6 +275,8 @@ export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: strin
           }
         }
 
+        const externalTicketRef = mapped.externalTicketId ? `Broker Ticket #${mapped.externalTicketId}` : undefined;
+
         const newTrade = await tx.trade.create({
           data: {
             userId: user.id,
@@ -234,6 +302,7 @@ export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: strin
             actualR: calc.actualR,
             entryTime: parsedEntryTime,
             exitTime: parsedExitTime,
+            notes: externalTicketRef,
             executions: {
               create: [
                 {
@@ -241,12 +310,14 @@ export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: strin
                   price: String(entryPrice),
                   quantity: String(quantity),
                   timestamp: parsedEntryTime || new Date(),
+                  notes: externalTicketRef,
                 },
                 ...(exitPrice ? [{
                   kind: "exit",
                   price: String(exitPrice),
                   quantity: String(quantity),
                   timestamp: parsedExitTime || new Date(),
+                  notes: externalTicketRef,
                 }] : []),
               ],
             },
@@ -259,6 +330,15 @@ export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: strin
       return count;
     }, { timeout: 60000 });
 
+    const reconciliation = {
+      totalRows: importRecord.rows.length,
+      imported,
+      skippedExactDuplicates: importRecord.rows.filter((r) => r.status === "duplicate").length,
+      skippedPossibleDuplicates: body.includePossibleDuplicates === true ? 0 : importRecord.rows.filter((r) => r.status === "possible_duplicate").length,
+      rejectedInvalid: importRecord.rows.filter((r) => r.status === "invalid").length,
+      conflicts: importRecord.rows.filter((r) => r.status === "conflict").length,
+    };
+
     await db.import.update({
       where: { id },
       data: {
@@ -267,11 +347,12 @@ export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: strin
           imported,
           tradeIds: createdTradeIds,
           importedAt: new Date().toISOString(),
+          reconciliation,
         }),
       },
     });
-    await audit("import.completed", "import", id, { imported, tradeCount: createdTradeIds.length });
-    return ok({ imported, tradeIds: createdTradeIds });
+    await audit("import.completed", "import", id, { imported, tradeCount: createdTradeIds.length, reconciliation });
+    return ok({ imported, tradeIds: createdTradeIds, reconciliation });
   }
 
   if (body.action === "rollback") {

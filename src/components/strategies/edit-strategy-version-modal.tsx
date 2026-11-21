@@ -34,6 +34,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { toast } from "sonner";
+import { optimisticUpdate, notifyOptimisticFailure } from "@/lib/optimistic";
 import {
   extractCustomFields,
   type StrategyCustomField,
@@ -209,80 +210,111 @@ export function EditStrategyVersionModal({
       }))
       .filter((f) => f.name.length > 0);
 
-    setIsSubmitting(true);
-    try {
-      if (!isUpgrade) {
-        // Save in-place to current version without bumping version number
-        const patchRes = await fetch(`/api/strategies/${strategy.id}`, {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            name: name.trim(),
-            market,
-            description: description.trim() || null,
-            updateCurrentVersion: true,
-            expectedVersionId: latestVersion?.id,
-            expectedUpdatedAt: (latestVersion as any)?.createdAt ? new Date((latestVersion as any).createdAt).toISOString() : undefined,
-            rules: cleanRules,
-            customFields: cleanCustomFields,
-            changeReason: changeReason.trim() || "Updated current version",
-            changeSummary: changeSummary.trim() || `Saved in-place edits to v${latestLabel}`,
-          }),
-        });
+    const prevStrategies = qc.getQueryData(["strategies"]);
+    const prevDetail = qc.getQueryData(["strategy", strategy.id]);
 
-        if (!patchRes.ok) {
-          const err = await patchRes.json().catch(() => null);
-          throw new Error(err?.error || "Failed to update strategy");
+    // Apply optimistic updates immediately
+    qc.setQueriesData({ queryKey: ["strategies"] }, (old: any) =>
+      optimisticUpdate(old, strategy.id, {
+        name: name.trim(),
+        market,
+        description: description.trim() || null,
+        rules: cleanRules,
+        updatedAt: new Date().toISOString(),
+      })
+    );
+
+    qc.setQueryData(["strategy", strategy.id], (old: any) => {
+      if (!old) return old;
+      return {
+        ...old,
+        name: name.trim(),
+        market,
+        description: description.trim() || null,
+        rules: cleanRules,
+        updatedAt: new Date().toISOString(),
+      };
+    });
+
+    toast.success(
+      !isUpgrade
+        ? `Saved changes to current version v${latestLabel}`
+        : `Created version v${versionLabel.trim()} (v${latestLabel} preserved)`
+    );
+
+    // Instant dialog dismissal — no waiting for user!
+    onSaved();
+    onOpenChange(false);
+
+    // Background server synchronization
+    (async () => {
+      try {
+        if (!isUpgrade) {
+          const patchRes = await fetch(`/api/strategies/${strategy.id}`, {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              name: name.trim(),
+              market,
+              description: description.trim() || null,
+              updateCurrentVersion: true,
+              expectedVersionId: latestVersion?.id,
+              expectedUpdatedAt: (latestVersion as any)?.createdAt
+                ? new Date((latestVersion as any).createdAt).toISOString()
+                : undefined,
+              rules: cleanRules,
+              customFields: cleanCustomFields,
+              changeReason: changeReason.trim() || "Updated current version",
+              changeSummary: changeSummary.trim() || `Saved in-place edits to v${latestLabel}`,
+            }),
+          });
+
+          if (!patchRes.ok) {
+            const err = await patchRes.json().catch(() => null);
+            throw new Error(err?.error || "Failed to update strategy");
+          }
+        } else {
+          const patchRes = await fetch(`/api/strategies/${strategy.id}`, {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              name: name.trim(),
+              market,
+              description: description.trim() || null,
+            }),
+          });
+
+          if (!patchRes.ok) {
+            const err = await patchRes.json().catch(() => null);
+            throw new Error(err?.error || "Failed to update strategy metadata");
+          }
+
+          const putRes = await fetch(`/api/strategies/${strategy.id}`, {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              versionLabel: versionLabel.trim(),
+              changeReason: changeReason.trim() || "Strategy update",
+              changeSummary: changeSummary.trim() || `Created version ${versionLabel.trim()}`,
+              rules: cleanRules,
+              customFields: cleanCustomFields,
+            }),
+          });
+
+          if (!putRes.ok) {
+            const err = await putRes.json().catch(() => null);
+            throw new Error(err?.error || "Failed to create strategy version");
+          }
         }
 
-        toast.success(`Saved changes to current version v${latestLabel}`);
-      } else {
-        // 1. Update Strategy metadata (name, market, description)
-        const patchRes = await fetch(`/api/strategies/${strategy.id}`, {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            name: name.trim(),
-            market,
-            description: description.trim() || null,
-          }),
-        });
-
-        if (!patchRes.ok) {
-          const err = await patchRes.json().catch(() => null);
-          throw new Error(err?.error || "Failed to update strategy metadata");
-        }
-
-        // 2. Create new immutable version record (PUT)
-        const putRes = await fetch(`/api/strategies/${strategy.id}`, {
-          method: "PUT",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            versionLabel: versionLabel.trim(),
-            changeReason: changeReason.trim() || "Strategy update",
-            changeSummary: changeSummary.trim() || `Created version ${versionLabel.trim()}`,
-            rules: cleanRules,
-            customFields: cleanCustomFields,
-          }),
-        });
-
-        if (!putRes.ok) {
-          const err = await putRes.json().catch(() => null);
-          throw new Error(err?.error || "Failed to create strategy version");
-        }
-
-        toast.success(`Created version v${versionLabel.trim()} (v${latestLabel} preserved)`);
+        qc.invalidateQueries({ queryKey: ["strategies"] });
+        qc.invalidateQueries({ queryKey: ["strategy", strategy.id] });
+      } catch (e: any) {
+        if (prevStrategies) qc.setQueriesData({ queryKey: ["strategies"] }, prevStrategies);
+        if (prevDetail) qc.setQueryData(["strategy", strategy.id], prevDetail);
+        notifyOptimisticFailure(e, "Failed to save strategy version to server.");
       }
-
-      await qc.invalidateQueries({ queryKey: ["strategies"] });
-      await qc.invalidateQueries({ queryKey: ["strategy", strategy.id] });
-      onSaved();
-      onOpenChange(false);
-    } catch (e: any) {
-      toast.error(e.message || "Failed to save strategy");
-    } finally {
-      setIsSubmitting(false);
-    }
+    })();
   }
 
   return (
@@ -561,9 +593,11 @@ export function EditStrategyVersionModal({
                             <SelectItem value="text">Short Text</SelectItem>
                             <SelectItem value="textarea">Long Text / Notes</SelectItem>
                             <SelectItem value="number">Numeric Value</SelectItem>
+                            <SelectItem value="decimal">Decimal Value</SelectItem>
                             <SelectItem value="boolean">Toggle / Checkbox</SelectItem>
                             <SelectItem value="select">Single Select (Dropdown)</SelectItem>
                             <SelectItem value="multiselect">Multi-Select (Chips)</SelectItem>
+                            <SelectItem value="tags">Tags / Labels</SelectItem>
                             <SelectItem value="date">Date</SelectItem>
                           </SelectContent>
                         </Select>

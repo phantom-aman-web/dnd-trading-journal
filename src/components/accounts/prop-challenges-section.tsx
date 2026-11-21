@@ -172,27 +172,60 @@ export function PropChallengesSection({ accounts: rawAccounts, hideHeader = fals
     },
     onMutate: async (payload: any) => {
       await queryClient.cancelQueries({ queryKey: ["prop-challenges"] });
-      const previous = queryClient.getQueryData(["prop-challenges"]);
+      const previous = queryClient.getQueriesData({ queryKey: ["prop-challenges"] });
 
       const tempId = generateTempId("challenge");
+      const selectedAccount = accounts.find((a: any) => a.id === payload.accountId);
       const optimisticItem = {
         id: tempId,
         name: payload.name || "New Challenge",
         propFirm: payload.propFirm || "Custom",
-        stepType: payload.stepType || "two_step",
-        currentPhase: payload.currentPhase || "phase_1",
+        stepType: payload.stepType || payload.accountModel || "two_step",
+        stage: payload.stage || "phase1",
         status: "active",
-        startingBalanceCents: payload.startingBalanceCents || 1000000,
-        currentBalanceCents: payload.startingBalanceCents || 1000000,
+        startingBalanceCents: payload.startingBalanceCents || 10000000,
+        currentBalanceCents: payload.startingBalanceCents || 10000000,
         profitTargetCents: payload.profitTargetCents || null,
         maxDrawdownCents: payload.maxDrawdownCents || null,
         dailyLossLimitCents: payload.dailyLossLimitCents || null,
+        drawdownType: payload.drawdownType || "static",
+        minTradingDays: payload.minTradingDays ?? 4,
+        maxTradingDays: null,
+        resetTimezone: payload.resetTimezone || "America/New_York",
+        resetHour: payload.resetHour ?? 17,
+        startDate: new Date().toISOString(),
+        notes: null,
+        account: {
+          id: selectedAccount?.id || payload.accountId || "acc-1",
+          name: selectedAccount?.name || "Account",
+          currency: selectedAccount?.currency || "USD",
+        },
+        metrics: {
+          status: "safe",
+          currentBalanceCents: payload.startingBalanceCents || 10000000,
+          currentEquityCents: payload.startingBalanceCents || 10000000,
+          startingBalanceCents: payload.startingBalanceCents || 10000000,
+          targetCents: payload.profitTargetCents || 1000000,
+          currentProfitCents: 0,
+          profitProgressPct: 0,
+          dailyLossRemainingCents: payload.dailyLossLimitCents || 500000,
+          maxDrawdownRemainingCents: payload.maxDrawdownCents || 1000000,
+          tradingDays: 0,
+          tradingDaysRemaining: payload.minTradingDays ?? 4,
+          dailyLossBreached: false,
+          maxDrawdownBreached: false,
+          targetReached: false,
+        },
+        meta: {
+          accountModel: payload.accountModel,
+          accountCostCents: payload.accountCostCents,
+        },
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
         ...payload,
       };
 
-      queryClient.setQueryData(["prop-challenges"], (old: any) =>
+      queryClient.setQueriesData({ queryKey: ["prop-challenges"] }, (old: any) =>
         optimisticInsert(old, optimisticItem)
       );
 
@@ -204,14 +237,17 @@ export function PropChallengesSection({ accounts: rawAccounts, hideHeader = fals
     },
     onError: (err: any, _vars: any, context: any) => {
       if (context?.previous) {
-        queryClient.setQueryData(["prop-challenges"], context.previous);
+        for (const [key, oldData] of context.previous) {
+          queryClient.setQueryData(key, oldData);
+        }
       }
       notifyOptimisticFailure(err, "Failed to create challenge.");
     },
     onSuccess: (data: any, _vars: any, context: any) => {
-      if (context?.tempId && data?.id) {
-        queryClient.setQueryData(["prop-challenges"], (old: any) =>
-          reconcileTempId(old, context.tempId, data)
+      const canonicalRecord = data?.item || data?.challenge || data;
+      if (context?.tempId && canonicalRecord?.id) {
+        queryClient.setQueriesData({ queryKey: ["prop-challenges"] }, (old: any) =>
+          reconcileTempId(old, context.tempId, canonicalRecord)
         );
       }
     },
@@ -235,9 +271,9 @@ export function PropChallengesSection({ accounts: rawAccounts, hideHeader = fals
     },
     onMutate: async ({ id, payload }: { id: string; payload: any }) => {
       await queryClient.cancelQueries({ queryKey: ["prop-challenges"] });
-      const previous = queryClient.getQueryData(["prop-challenges"]);
+      const previous = queryClient.getQueriesData({ queryKey: ["prop-challenges"] });
 
-      queryClient.setQueryData(["prop-challenges"], (old: any) =>
+      queryClient.setQueriesData({ queryKey: ["prop-challenges"] }, (old: any) =>
         optimisticUpdate(old, id, (item: any) => ({
           ...item,
           ...payload,
@@ -253,7 +289,9 @@ export function PropChallengesSection({ accounts: rawAccounts, hideHeader = fals
     },
     onError: (err: any, _vars: any, context: any) => {
       if (context?.previous) {
-        queryClient.setQueryData(["prop-challenges"], context.previous);
+        for (const [key, oldData] of context.previous) {
+          queryClient.setQueryData(key, oldData);
+        }
       }
       notifyOptimisticFailure(err, "Failed to update challenge.");
     },
@@ -270,9 +308,9 @@ export function PropChallengesSection({ accounts: rawAccounts, hideHeader = fals
     },
     onMutate: async (id: string) => {
       await queryClient.cancelQueries({ queryKey: ["prop-challenges"] });
-      const previous = queryClient.getQueryData(["prop-challenges"]);
+      const previous = queryClient.getQueriesData({ queryKey: ["prop-challenges"] });
 
-      queryClient.setQueryData(["prop-challenges"], (old: any) =>
+      queryClient.setQueriesData({ queryKey: ["prop-challenges"] }, (old: any) =>
         optimisticDelete(old, id)
       );
 
@@ -282,7 +320,9 @@ export function PropChallengesSection({ accounts: rawAccounts, hideHeader = fals
     },
     onError: (err: any, _vars: any, context: any) => {
       if (context?.previous) {
-        queryClient.setQueryData(["prop-challenges"], context.previous);
+        for (const [key, oldData] of context.previous) {
+          queryClient.setQueryData(key, oldData);
+        }
       }
       notifyOptimisticFailure(err, "Failed to delete challenge.");
     },

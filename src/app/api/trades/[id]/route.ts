@@ -18,6 +18,7 @@ import { buildSignedUrl } from "@/lib/storage";
 import { audit } from "@/lib/audit";
 import { invalidateCache, getCached, setCached } from "@/lib/server-cache";
 import { queueTradeClosure } from "@/lib/telegram/delivery-engine";
+import { triggerChallengeRuleAlertsForAccount } from "@/lib/prop-simulator-engine";
 
 export async function GET(_req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
   let user;
@@ -383,6 +384,18 @@ export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: strin
     invalidateCache(`analytics:${user.id}`);
     invalidateCache(`trade:${user.id}:${id}`);
 
+    // Attach any newly attached media before Telegram event hooks
+    if (Array.isArray(body.mediaIds) && body.mediaIds.length > 0) {
+      try {
+        await db.tradeMedia.updateMany({
+          where: { id: { in: body.mediaIds }, userId: user.id },
+          data: { tradeId: id },
+        });
+      } catch (mediaErr) {
+        console.warn("Non-fatal: Failed to link mediaIds to trade:", mediaErr);
+      }
+    }
+
     // Telegram Trade Closure Update Hook (Spec Part 4.5)
     // Non-fatal: failures never roll back or disrupt trade update.
     if (trade.status === "open" && updated.status !== "open") {
@@ -394,6 +407,13 @@ export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: strin
       } catch (telegramErr) {
         console.warn("Non-fatal: Telegram trade closure queue failed:", telegramErr);
       }
+    }
+
+    // Rule Alerts Hook (Feature 73)
+    // Non-fatal: triggers evaluation of linked prop challenge rules on trade updates/closures.
+    const targetAccountId = updated.accountId || trade.accountId;
+    if (targetAccountId) {
+      triggerChallengeRuleAlertsForAccount(user.id, targetAccountId).catch(() => {});
     }
 
     return ok(updated);

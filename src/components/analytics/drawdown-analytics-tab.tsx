@@ -69,6 +69,18 @@ interface DrawdownAnalyticsTabProps {
 export function DrawdownAnalyticsTab({ data }: DrawdownAnalyticsTabProps) {
   const curve: any[] = data?.curve ?? data?.estimatedBalanceCurve ?? [];
 
+  const chartData = useMemo(() => {
+    return curve.map((pt, idx) => ({
+      idx: idx + 1,
+      date: new Date(pt.date).toLocaleDateString(undefined, { month: "short", day: "numeric" }),
+      balanceDollars: pt.balanceCents / 100,
+      peakDollars: pt.peakBalanceCents / 100,
+      drawdownPct: -Math.abs(pt.drawdownPct),
+      symbol: pt.symbol,
+      pnlDollars: pt.netPnlCents / 100,
+    }));
+  }, [curve]);
+
   if (!data || curve.length === 0) {
     return (
       <Card className="p-10 text-center border-border">
@@ -90,18 +102,6 @@ export function DrawdownAnalyticsTab({ data }: DrawdownAnalyticsTabProps) {
     : (data?.losingStreaks?.avgConsecutiveLosses ?? 0);
   const avgRecovery = data?.averageDrawdownRecoveryTrades ?? data?.recoveryTrades?.avgTradesToRecover ?? 0;
   const longestRecovery = data?.maxDrawdownDurationTrades ?? data?.recoveryTrades?.longestRecoveryTrades ?? 0;
-
-  const chartData = useMemo(() => {
-    return curve.map((pt, idx) => ({
-      idx: idx + 1,
-      date: new Date(pt.date).toLocaleDateString(undefined, { month: "short", day: "numeric" }),
-      balanceDollars: pt.balanceCents / 100,
-      peakDollars: pt.peakBalanceCents / 100,
-      drawdownPct: -Math.abs(pt.drawdownPct),
-      symbol: pt.symbol,
-      pnlDollars: pt.netPnlCents / 100,
-    }));
-  }, [curve]);
 
   return (
     <div className="space-y-6">

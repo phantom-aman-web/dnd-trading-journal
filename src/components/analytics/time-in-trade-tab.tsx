@@ -32,6 +32,15 @@ interface TimeInTradeTabProps {
 export function TimeInTradeTab({ data }: TimeInTradeTabProps) {
   const buckets = Array.isArray(data?.buckets) ? data.buckets : [];
 
+  const chartData = useMemo(() => {
+    return buckets.map((b) => ({
+      name: b.label.split("(")[0].trim(),
+      trades: b.tradesCount,
+      pnlDollars: b.netPnlCents / 100,
+      winRate: b.winRatePct ?? 0,
+    }));
+  }, [buckets]);
+
   if (!data || !data.totalClosedAnalyzed || buckets.length === 0) {
     return (
       <Card className="p-10 text-center border-border">
@@ -43,15 +52,6 @@ export function TimeInTradeTab({ data }: TimeInTradeTabProps) {
       </Card>
     );
   }
-
-  const chartData = useMemo(() => {
-    return buckets.map((b) => ({
-      name: b.label.split("(")[0].trim(),
-      trades: b.tradesCount,
-      pnlDollars: b.netPnlCents / 100,
-      winRate: b.winRatePct ?? 0,
-    }));
-  }, [buckets]);
 
   return (
     <div className="space-y-6">

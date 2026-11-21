@@ -6,6 +6,7 @@
 
 import { db } from "@/lib/db";
 import crypto from "crypto";
+import fs from "fs";
 import { decryptBotToken } from "./encryption";
 import {
   sendMessage,
@@ -366,7 +367,9 @@ async function executeSingleJob(jobId: string): Promise<void> {
         include: {
           account: true,
           strategy: true,
-          media: true,
+          media: {
+            orderBy: { createdAt: "asc" },
+          },
         },
       },
       task: true,
@@ -459,12 +462,33 @@ async function executeSingleJob(jobId: string): Promise<void> {
         const msg = await sendMessage(botToken, job.channelId, messageText);
         sentMessageIds = [msg.message_id];
       } else {
-        // Fetch media buffers (never exposed over public URLs)
+        // Fetch media buffers (supports Supabase storage, local disk, and URLs)
         const mediaBuffers: Array<{ buffer: Buffer; filename: string }> = [];
+        const seenStored = new Set<string>();
+
         for (const m of eligibleMedia) {
+          if (!m.storedPath || seenStored.has(m.storedPath)) continue;
+          seenStored.add(m.storedPath);
+
           try {
-            const buf = await readStored(m.storedPath);
-            mediaBuffers.push({ buffer: buf, filename: m.filename });
+            let buf: Buffer | null = null;
+            if (m.storedPath.startsWith("http://") || m.storedPath.startsWith("https://")) {
+              const res = await fetch(m.storedPath);
+              if (res.ok) {
+                buf = Buffer.from(await res.arrayBuffer());
+              }
+            } else if (typeof fs !== "undefined" && fs.existsSync(m.storedPath)) {
+              buf = await fs.promises.readFile(m.storedPath);
+            } else {
+              buf = await readStored(m.storedPath);
+            }
+
+            if (buf && buf.length > 0) {
+              mediaBuffers.push({
+                buffer: buf,
+                filename: m.filename || `screenshot_${mediaBuffers.length + 1}.png`,
+              });
+            }
           } catch (storageErr) {
             console.warn(`Could not read stored screenshot ${m.storedPath}:`, storageErr);
           }
@@ -549,11 +573,34 @@ async function executeSingleJob(jobId: string): Promise<void> {
               sentMessageIds.push(textMsg.message_id);
             }
           } catch (albumErr) {
-            console.warn("Album media dispatch encountered an error:", albumErr);
+            console.warn("Album media dispatch encountered an error, falling back to sequential delivery:", albumErr);
             if (sentMessageIds.length === 0) {
-              // Failed before anything was sent: fallback to pure text
-              const textMsg = await sendMessage(botToken, job.channelId, messageText);
-              sentMessageIds = [textMsg.message_id];
+              try {
+                // Sequential photo delivery fallback
+                for (let i = 0; i < mediaBuffers.length; i++) {
+                  const item = mediaBuffers[i];
+                  const replyToId = sentMessageIds.length > 0 ? sentMessageIds[0] : undefined;
+                  const caption = i === 0 && messageText.length <= 1024 ? messageText : undefined;
+                  const photoMsg = await sendPhoto(botToken, job.channelId, item.buffer, item.filename, {
+                    caption,
+                    parse_mode: "HTML",
+                    reply_to_message_id: replyToId,
+                  });
+                  sentMessageIds.push(photoMsg.message_id);
+                }
+                if (messageText.length > 1024 && sentMessageIds.length > 0) {
+                  const textMsg = await sendMessage(botToken, job.channelId, messageText, {
+                    reply_to_message_id: sentMessageIds[0],
+                  });
+                  sentMessageIds.push(textMsg.message_id);
+                }
+              } catch (fallbackErr) {
+                console.warn("Sequential photo fallback also failed, falling back to text:", fallbackErr);
+                if (sentMessageIds.length === 0) {
+                  const textMsg = await sendMessage(botToken, job.channelId, messageText);
+                  sentMessageIds = [textMsg.message_id];
+                }
+              }
             } else if (messageText.length > 1024) {
               // Try to ensure companion text was sent
               try {
@@ -599,18 +646,42 @@ async function executeSingleJob(jobId: string): Promise<void> {
       }
 
       const trade = job.trade;
+      const pubSettings = integration.publishingSettings;
+      const templateOpts: TemplateConfigOptions = {
+        templateType: (pubSettings?.templateType as any) || "standard",
+        customTemplateJson: pubSettings?.customTemplateJson,
+        includeScreenshots: pubSettings?.includeScreenshots ?? true,
+        includeTags: pubSettings?.includeTags ?? true,
+        includeDescription: pubSettings?.includeDescription ?? true,
+        includeRisk: pubSettings?.includeRisk ?? true,
+        includePerformance: pubSettings?.includePerformance ?? true,
+        includeAccountName: pubSettings?.includeAccountName ?? false,
+      };
+
       const tradeInput: FormatterTradeInput = {
         instrumentSymbol: trade.instrumentSymbol,
         direction: trade.direction,
         status: trade.status,
+        market: trade.market,
+        session: trade.session,
+        timeframe: (trade as any).timeframe,
         exitPriceAvg: trade.exitPriceAvg,
         actualR: trade.actualR,
         netPnlCents: trade.netPnlCents,
+        grossPnlCents: trade.grossPnlCents,
+        feesCents: trade.feesCents,
+        positionSize: trade.positionSize,
+        accountName: trade.account?.name,
         accountCurrency: trade.account?.currency,
+        strategyName: trade.strategy?.name,
+        setupGrade: trade.setupGrade,
+        setupScore: trade.setupScore,
         lessons: trade.lessons || trade.notes,
+        notes: trade.notes,
+        tags: trade.tagsJson ? JSON.parse(trade.tagsJson) : [],
       };
 
-      const closureText = formatTradeClosureUpdateMessage(tradeInput);
+      const closureText = formatTradeClosureUpdateMessage(tradeInput, templateOpts);
       const msg = await sendMessage(botToken, job.channelId, closureText, {
         reply_to_message_id: replyToMessageId,
       });

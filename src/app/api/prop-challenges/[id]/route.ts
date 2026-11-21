@@ -6,6 +6,7 @@ import {
   evaluatePropChallenge,
   type TradeForChallenge,
 } from "@/lib/prop-firm-engine";
+import { evaluateRuleAlerts, persistRuleAlerts } from "@/lib/prop-simulator-engine";
 import {
   parsePropLifecycleMetadata,
   serializePropLifecycleMetadata,
@@ -145,6 +146,12 @@ export async function GET(
       where: { id: challenge.id },
       data: { status: nextStatus },
     }).catch(() => null);
+  }
+
+  // Automatic Rule Alert Evaluation & Notification Persistence (Feature 73)
+  const alerts = evaluateRuleAlerts(challenge.id, metrics);
+  if (alerts.length > 0) {
+    persistRuleAlerts(user.id, challenge.id, alerts).catch(() => {});
   }
 
   return ok({
